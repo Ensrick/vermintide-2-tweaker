@@ -2,6 +2,8 @@
 -- The orchestrator-side parser turns the OUT lines into per-check results.
 return {
 	issue = 0,
+	arena = "keep",
+	class = "R",
 	timeout = 240,
 	run = function(T)
 		local names = T.commands("")

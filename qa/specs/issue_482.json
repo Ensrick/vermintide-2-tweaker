@@ -1,0 +1,38 @@
+{
+  "schema": 1,
+  "issue": 482,
+  "class": "R",
+  "status": "draft",
+  "vp": null,
+  "arena": "unknown",
+  "mods": [
+    {
+      "dir": "character_weapon_variants",
+      "min_version": "0.1.570-dev",
+      "settings": null
+    }
+  ],
+  "cases": [
+    {
+      "script": "",
+      "steps": [
+        "1. Refresh both mods, launch the game, and confirm both exact build banners in the newest log.",
+        "2. On Kruber, craft an **Imperial Longsword and Shield** at the Athanor and keep that exact crafted item.",
+        "3. Compare the crafted item with an uncrafted **Imperial Longsword and Shield** in the inventory character preview and local third person. Check model, scale, rotation, and where the hand sits on the grip.",
+        "4. Swap to another weapon and back, enter a mission, respawn or cross a mission transition, return to the Keep, and inspect the same crafted item again.",
+        "5. Restart the game, re-equip the retained crafted item without recrafting it, and inspect it once more in the inventory character preview and local third person.",
+        "6. Run `/cwv_regression_test`, exit normally, and attach the newest log."
+      ],
+      "assertions": [
+        "The exact crafted **Imperial Longsword and Shield** always has the same canonical model and transform as the uncrafted control on every tested owner-side surface and after every lifecycle transition. It never falls back to donor/base proportions. The regression suite reports `issue482_crafted_uuid_transform_consumers: PASS` and `cwv_key_resolution_uuid_safe: PASS`.",
+        "Craft Imperial Longsword and Shield; read local scale, position, rotation of owner 3P and preview units; assert equal to the uncrafted seed after swap and transition."
+      ],
+      "pass_closes": true
+    }
+  ],
+  "source": {
+    "card_comment_id": 5358962705,
+    "card_date": "2026-08-20T16:46:32Z",
+    "ledger": "D1_ledger.tsv"
+  }
+}

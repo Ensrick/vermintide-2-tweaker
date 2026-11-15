@@ -1,0 +1,37 @@
+{
+  "schema": 1,
+  "issue": 316,
+  "class": "R",
+  "status": "draft",
+  "vp": null,
+  "arena": "unknown",
+  "mods": [
+    {
+      "dir": "weapon_tweaker",
+      "min_version": "0.12.343-beta",
+      "settings": null
+    }
+  ],
+  "cases": [
+    {
+      "script": "",
+      "steps": [
+        "1. Enable only **Tweaker: Weapons**, fully restart the game, and confirm the exact load banner above in the newest console log.",
+        "2. As **Mercenary**, equip the **Empire Longbow**, hold aim, and press **Weapon Special** repeatedly. Confirm the camera cycles between the Longbow's two authored zoom levels.",
+        "3. Repeat with **Bounty Hunter** and confirm the same two-level zoom cycle.",
+        "4. Repeat with **Huntsman** as the unchanged native control, then equip an unrelated bow on Mercenary and confirm it does not gain the Longbow's extra zoom cycle.",
+        "5. Run `/wt_regression_test` and keep the newest console log."
+      ],
+      "assertions": [
+        "Mercenary and Bounty Hunter can cycle only the Empire Longbow's authored zoom levels; Huntsman remains vanilla; the unrelated bow gains nothing. `/wt_regression_test` reports PASS for `issue316_empire_longbow_cross_career_variable_zoom` and `issue316_kruber_longbow_zoom_contract`. This is first-person owner-camera behavior; third-person animation and co-op observation are outside this test.",
+        "Mercenary with es_longbow: enter aim, trigger weapon special, assert status-extension zoom state cycles the authored thresholds; Huntsman and another bow unchanged."
+      ],
+      "pass_closes": true
+    }
+  ],
+  "source": {
+    "card_comment_id": 5285938760,
+    "card_date": "2026-08-13T20:20:39Z",
+    "ledger": "D2_ledger.tsv"
+  }
+}

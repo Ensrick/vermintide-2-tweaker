@@ -1,0 +1,37 @@
+{
+  "schema": 1,
+  "issue": 699,
+  "class": "R",
+  "status": "draft",
+  "vp": null,
+  "arena": "unknown",
+  "mods": [
+    {
+      "dir": "career_tweaker",
+      "min_version": "0.4.34-beta",
+      "settings": null
+    }
+  ],
+  "cases": [
+    {
+      "script": "",
+      "steps": [
+        "1. As Foot Knight, switch on the **Foot Knight** reworks and enter a mission.",
+        "2. Confirm the always-active **Uninterruptible Heavy Attacks** effect and the passive dodge penalty from **Rock of Reikland: Shield Offense** show no borrowed **Numb to Pain** icon on the buff bar.",
+        "3. Equip a shield melee weapon with the Rock of Reikland talent selected, and separately a qualifying great weapon with the That's Bloody Teamwork! talent, activating each conditional bonus in turn and watching the buff bar.",
+        "4. Trigger **Final March** if practical and watch its timed icon appear and expire.",
+        "5. Run `/crt_regression_test` and keep the newest log."
+      ],
+      "assertions": [
+        "exactly three states show icons - the conditional Rock of Reikland shield power bonus, the conditional That's Bloody Teamwork! great-weapon power bonus, and the timed Final March buff - and each shows its intended Foot Knight art; the bookkeeping states that only cancel or offset native passives stay iconless by design and no permanent state borrows Numb to Pain art; `/crt_regression_test` reports `PASS: issue699_foot_knight_icon_census` with no new failures. If an icon is wrong, missing on one of the three, or present on a bookkeeping state, attach the log containing the bounded `[crt:699] icon active=true ...` rows, which record the expected icon, the resolved icon, the atlas, and whether a Numb to Pain collision was detected.",
+        "issue699_foot_knight_icon_census PASS; in mission read BuffUI widgets: exactly three conditional states carry icons with expected atlas keys, bookkeeping buffs have none."
+      ],
+      "pass_closes": true
+    }
+  ],
+  "source": {
+    "card_comment_id": 5165094511,
+    "card_date": "2026-08-03T10:17:01Z",
+    "ledger": "D4_ledger.tsv"
+  }
+}

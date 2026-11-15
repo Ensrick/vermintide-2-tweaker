@@ -1,0 +1,122 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "qa/specs/spec.schema.json",
+  "title": "Verification spec for one issue",
+  "description": "Editor schema for qa/specs/issue_<issue>.json. qa/check_verify_specs.ps1 is the gate; it also checks the file name, the inventory and file existence.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "issue", "class", "status", "vp", "arena"],
+  "properties": {
+    "schema": { "const": 1 },
+    "issue": { "type": "integer", "minimum": 1 },
+    "class": { "enum": ["U", "S", "R", "V", "C", "X"] },
+    "status": { "enum": ["draft", "ready"] },
+    "vp": {
+      "oneOf": [
+        { "type": "null" },
+        { "type": "string", "pattern": "^VP-[A-Z0-9]+-[0-9]{2}$" }
+      ]
+    },
+    "arena": {
+      "type": "string",
+      "pattern": "^(none|boot|keep|deus|coop|unknown|mission:[A-Za-z0-9_]+)$"
+    },
+    "mods": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["dir"],
+        "properties": {
+          "dir": { "type": "string", "minLength": 1 },
+          "min_version": { "type": ["string", "null"] },
+          "settings": { "type": ["object", "null"] }
+        }
+      }
+    },
+    "boots": { "type": "integer", "minimum": 0 },
+    "depends_on": {
+      "type": "array",
+      "items": { "type": "string", "pattern": "^WP-[A-Z0-9]+-[0-9]{2}$" }
+    },
+    "setup": { "type": "string" },
+    "cases": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["script", "steps", "assertions", "pass_closes"],
+        "properties": {
+          "script": { "type": "string" },
+          "steps": { "type": "array", "items": { "type": "string" } },
+          "assertions": { "type": "array", "items": { "type": "string" } },
+          "pass_closes": { "type": "boolean" }
+        }
+      }
+    },
+    "offline": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["class", "command", "expect"],
+        "properties": {
+          "class": { "enum": ["U", "S"] },
+          "command": { "type": "string" },
+          "expect": { "type": "string" }
+        }
+      }
+    },
+    "rt_checks": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["mod", "check", "behavioural"],
+        "properties": {
+          "mod": { "type": "string", "minLength": 1 },
+          "check": { "type": "string", "minLength": 1 },
+          "behavioural": { "type": "boolean" }
+        }
+      }
+    },
+    "left_for_humans": { "type": "array", "items": { "type": "string" } },
+    "on_fail": { "type": "string" },
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["card_comment_id", "card_date", "ledger"],
+      "properties": {
+        "card_comment_id": { "type": ["integer", "string", "null"] },
+        "card_date": { "type": ["string", "null"] },
+        "ledger": { "type": ["string", "null"] }
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "class": { "enum": ["R", "V", "C"] } } },
+      "then": { "required": ["mods"], "properties": { "mods": { "minItems": 1 } } }
+    },
+    {
+      "if": { "properties": { "class": { "enum": ["R", "C"] } } },
+      "then": { "required": ["cases"], "properties": { "cases": { "minItems": 1 } } }
+    },
+    {
+      "if": { "properties": { "class": { "enum": ["U", "S"] } } },
+      "then": { "required": ["offline"], "properties": { "offline": { "minItems": 1 } } }
+    },
+    {
+      "if": { "properties": { "class": { "enum": ["V", "C"] } } },
+      "then": { "required": ["left_for_humans"], "properties": { "left_for_humans": { "minItems": 1 } } }
+    },
+    {
+      "if": { "properties": { "arena": { "const": "none" } } },
+      "then": { "properties": { "class": { "enum": ["U", "S", "X"] } } }
+    },
+    {
+      "if": { "properties": { "status": { "const": "ready" } } },
+      "then": { "properties": { "arena": { "not": { "const": "unknown" } } } }
+    }
+  ]
+}

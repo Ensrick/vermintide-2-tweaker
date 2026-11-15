@@ -1,0 +1,42 @@
+{
+  "schema": 1,
+  "issue": 774,
+  "class": "R",
+  "status": "draft",
+  "vp": null,
+  "arena": "unknown",
+  "mods": [
+    {
+      "dir": "character_weapon_variants",
+      "min_version": "0.1.570-dev",
+      "settings": null
+    },
+    {
+      "dir": "gui_tweaker_dev",
+      "min_version": "",
+      "settings": null
+    }
+  ],
+  "cases": [
+    {
+      "script": "",
+      "steps": [
+        "1. Enable **Character Weapon Variants** and **Tweaker: GUI Dev**. Equip **Kruber's Greatsword** and confirm its **Combat Style** control changes style once in the Keep.",
+        "2. Start a solo Adventure mission and open **Equipment** through Tweaker: GUI.",
+        "3. Select **Kruber's Greatsword**, click **Combat Style** while idle, close Equipment, and confirm the style changed and the weapon remains usable.",
+        "4. Start a normal weapon attack, immediately reopen Equipment, and click **Combat Style** while that ordinary attack is still active. Close Equipment and confirm the style changed and the weapon remains usable.",
+        "5. Run `/cwv_regression_test`. If any step fails, exit and attach the newest full log."
+      ],
+      "assertions": [
+        "Both mission changes complete. The ordinary weapon action in step 4 is interrupted once, one style change is saved for that exact item, and the weapon is rebuilt once. A career ability or failed interruption remains fail-closed without saving or rebuilding. The regression suite reports `PASS: issue774_mission_combat_style_interruption`.",
+        "Harness: in mission start a weapon action, call the style transaction; assert stop_action once, style saved, weapon rebuilt once; career action rejected; issue774_* PASS."
+      ],
+      "pass_closes": true
+    }
+  ],
+  "source": {
+    "card_comment_id": 5749451671,
+    "card_date": "2026-09-20T11:15:55Z",
+    "ledger": "D5_ledger.tsv"
+  }
+}

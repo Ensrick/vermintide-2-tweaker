@@ -1,0 +1,38 @@
+{
+  "schema": 1,
+  "issue": 252,
+  "class": "R",
+  "status": "draft",
+  "vp": null,
+  "arena": "unknown",
+  "mods": [
+    {
+      "dir": "chaos_wastes_tweaker_dev",
+      "min_version": "0.7.354-beta",
+      "settings": null
+    }
+  ],
+  "cases": [
+    {
+      "script": "",
+      "steps": [
+        "1. Open **Tweaker: Chaos Wastes > Shrines, Altars and Chests > Altar Reroll Options**. Leave **Enable altar reuse settings** on and set **Weapon upgrade altar: max uses per altar** to at least `2`.",
+        "2. Enter a Chaos Wastes mission with enough Pilgrim's Coin for two uses. Use a **Weapon Upgrade Altar** once so the equipped weapon matches the altar's offered rarity while another use remains.",
+        "3. Target that same altar again. Confirm the prompt is exactly **Reroll this weapon?** and fits without clipping or overflow.",
+        "4. Accept. Confirm the rarity stays the same, the properties/trait reroll is performed, and one use plus the displayed coin cost are consumed.",
+        "5. Exhaust the altar, then test an unaffordable interaction at another usable altar. Both genuine failures must retain their normal rejection feedback.",
+        "6. After targeting the reused altar, run `/verify_ct_altar_reroll`, then `/ct_regression_test`. Keep the prompt/cost/use readback, exit normally, and attach the newest complete log. Include the rendered prompt if it differs or clips."
+      ],
+      "assertions": [
+        "A valid same-rarity reuse is presented and executed as a reroll; it does not raise rarity or show the red same-rarity rejection. Genuine exhausted/unaffordable states remain failures, and there are no regression failures. `ct_altar_prompt_readback_252` and its command deliberately report SKIP for live proof: their scalar receipt is historical, not a retained UI or purchase result. The rendered prompt, clipping, reward, debit/use and rejection controls above must still be observed in the mission.",
+        "Target a re-armed same-tier altar; read interaction widget: reward_info_text equals the prompt, disabled_text empty; measured text width within widget width."
+      ],
+      "pass_closes": true
+    }
+  ],
+  "source": {
+    "card_comment_id": 6693545931,
+    "card_date": "2026-11-06T19:29:12Z",
+    "ledger": "D3_ledger.tsv"
+  }
+}

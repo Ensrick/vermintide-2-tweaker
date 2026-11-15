@@ -1,0 +1,36 @@
+{
+  "schema": 1,
+  "issue": 488,
+  "class": "R",
+  "status": "draft",
+  "vp": null,
+  "arena": "unknown",
+  "mods": [
+    {
+      "dir": "general_tweaker_dev",
+      "min_version": "0.2.279-dev",
+      "settings": null
+    }
+  ],
+  "cases": [
+    {
+      "script": "",
+      "steps": [
+        "1. Enable Bot Behavior Improvements and its hazard-resistance option, then expose a bot to several consecutive gas hits.",
+        "2. Keep that bot clear of gas for more than two seconds, expose it again, and repeat both steps with warpfire.",
+        "3. Separately place a shield-using bot under Ratling Gunner fire and retain the resulting host log and its bounded `[gt:488]` rows.",
+        "4. Run `/gt_regression_test` and exit normally."
+      ],
+      "assertions": [
+        "Gas and warpfire each ramp through five resistance stacks independently, and the first hit after more than two seconds clear is unmitigated. The Ratling encounter records a bounded observation without changing bot behavior. The complete regression report finishes with every expected check passing and no failures.",
+        "Harness: apply six gas then six warpfire hits to a bot, read mitigation receipts 0/20/40/60/80/100 percent per hazard, reset after 2 s clear."
+      ],
+      "pass_closes": true
+    }
+  ],
+  "source": {
+    "card_comment_id": 5162503234,
+    "card_date": "2026-08-03T05:05:11Z",
+    "ledger": "D5_ledger.tsv"
+  }
+}

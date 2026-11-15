@@ -1,0 +1,42 @@
+{
+  "schema": 1,
+  "issue": 389,
+  "class": "R",
+  "status": "draft",
+  "vp": null,
+  "arena": "unknown",
+  "mods": [
+    {
+      "dir": "gui_tweaker_dev",
+      "min_version": "",
+      "settings": null
+    },
+    {
+      "dir": "gui_tweaker",
+      "min_version": "0.2.290",
+      "settings": null
+    }
+  ],
+  "cases": [
+    {
+      "script": "",
+      "steps": [
+        "1. Enable public **Tweaker: GUI** and public **Crafting in Modded**. Disable **Tweaker: GUI Dev** so only one GUI stream is active.",
+        "2. Open **Mod Tweaker > Equipment > Crafting > Base Power Level**. Type `324`; confirm it snaps to `325`.",
+        "3. Use both arrows, click several positions on the track, and drag the slider. Confirm every resulting value remains on the 25-point grid. Close and reopen Mod Tweaker and confirm the saved value is unchanged.",
+        "4. Check **Starting Coins** and **Trial Chest Cost** as existing 25-step controls, then check one unrelated whole-number slider and confirm it retains its own authored increment.",
+        "5. Run `/verify_gut_slider_step` in chat."
+      ],
+      "assertions": [
+        "Base Power Level resolves through Crafting in Modded even though it is displayed in the merged Equipment tab: typing `324` yields `325`, arrows move by exactly 25, track/drag values remain divisible by 25, and reopening preserves the chosen value. Starting Coins and Trial Chest Cost still step by 25; the unrelated numeric control is unchanged. The verification command reports `verify=PASS`, with no slider-related Script Error or callback failure.",
+        "/verify_gut_slider_step prints verify=PASS (drives the real row: 324 snaps to 325, arrows plus/minus 25); issue389_mod_tweaker_owner_aware_step PASS."
+      ],
+      "pass_closes": true
+    }
+  ],
+  "source": {
+    "card_comment_id": 5536718009,
+    "card_date": "2026-09-04T06:38:10Z",
+    "ledger": "D4_ledger.tsv"
+  }
+}

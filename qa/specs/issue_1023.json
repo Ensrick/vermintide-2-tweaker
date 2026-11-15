@@ -1,0 +1,38 @@
+{
+  "schema": 1,
+  "issue": 1023,
+  "class": "R",
+  "status": "draft",
+  "vp": null,
+  "arena": "unknown",
+  "mods": [
+    {
+      "dir": "weapon_tweaker",
+      "min_version": "0.12.344-dev",
+      "settings": null
+    }
+  ],
+  "cases": [
+    {
+      "script": "",
+      "steps": [
+        "1. Refresh **Tweaker: Weapons Dev**, launch, confirm `[wt:LOAD] v0.12.344-dev`. In a mission with any weapon wielded, open Mod Options, Tweaker: Weapons Dev, \"Dev: Weapon Hold Pose Tuner\"; enable \"Enable Hold-Pose Tuner\" and \"Enable third-person tuner\".",
+        "2. Under \"Third Person\" then \"Right hand\", set \"RH Offset X (metres)\" to a nonzero value: a single bottom-center row appears reading \"Hold Pose | Third Person | Right Hand | Pos X ...\" with your exact value at three decimals.",
+        "3. Edit \"RH Rotation yaw (deg, Euler Y)\": the row's Y rotation updates at one decimal. Edit a \"Left hand\" slider: the row flips to \"Left Hand\".",
+        "4. Enable \"Enable first-person tuner\" and edit \"1P LH Offset X (metres)\": the row flips to \"First Person | Left Hand\".",
+        "5. Turn \"Enable Hold-Pose Tuner\" OFF: the row disappears immediately; reopen the menu and confirm every slider kept its value.",
+        "6. Return to the keep without a wielded live unit: the row is absent. Run `/wt_regression_test`."
+      ],
+      "assertions": [
+        "The row exists only while master + channel + live unit all hold, always names the focused channel and hand, and its numbers match the applied pose exactly; no internal item key ever appears. `issue1023_live_hold_pose_hud` passes in the regression run.",
+        "Enable tuner in a mission, edit a slider; assert HUD row text equals the formatter output of the applied plan and row is absent with master off; issue1023 check."
+      ],
+      "pass_closes": true
+    }
+  ],
+  "source": {
+    "card_comment_id": 5306263806,
+    "card_date": "2026-08-16T07:11:07Z",
+    "ledger": "D2_ledger.tsv"
+  }
+}

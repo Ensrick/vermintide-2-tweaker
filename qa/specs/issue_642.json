@@ -1,0 +1,35 @@
+{
+  "schema": 1,
+  "issue": 642,
+  "class": "X",
+  "status": "draft",
+  "vp": null,
+  "arena": "none",
+  "mods": [
+    {
+      "dir": "weapons_of_chaos",
+      "min_version": "0.1.62-dev",
+      "settings": null
+    }
+  ],
+  "cases": [
+    {
+      "script": "",
+      "steps": [
+        "1. Confirm the exact Weapons of Chaos banner above in the newest log.",
+        "2. In the Keep, run `/woc_boss_catalog` once.",
+        "3. Exit normally and attach the newest log."
+      ],
+      "assertions": [
+        "Exactly seven bounded `[WOC:boss-catalog]` source-catalogue rows cover the grounded boss-weapon candidates, including Nurgloth's Scythe, Burblespue's Staff, Bodvarr's Axe, Skarrik's Halberd, and both Skarrik swords. Mapped source rows report success; Rasknitt remains explicitly deferred. The authored facet distinguishes compiled Skarrik resources from exported-only candidates without spawning or registering anything.",
+        "Diagnostic only: woc_boss_catalog emits seven source rows. No playable weapons exist to verify."
+      ],
+      "pass_closes": false
+    }
+  ],
+  "source": {
+    "card_comment_id": 5161338254,
+    "card_date": "2026-08-03T01:17:37Z",
+    "ledger": "D1_ledger.tsv"
+  }
+}

@@ -1,0 +1,35 @@
+{
+  "schema": 1,
+  "issue": 450,
+  "class": "R",
+  "status": "draft",
+  "vp": null,
+  "arena": "unknown",
+  "mods": [
+    {
+      "dir": "enemy_tweaker",
+      "min_version": "0.7.65-dev",
+      "settings": null
+    }
+  ],
+  "cases": [
+    {
+      "script": "",
+      "steps": [
+        "1. Enable one Boss Balance option at a time for Halescourge's half-health monster, Skarrik's ranged resistance, and Deathrattler's slower tracking.",
+        "2. Run `/verify_boss_balance` after each change and exercise the corresponding boss encounter.",
+        "3. Disable each option and repeat its command and behavior check."
+      ],
+      "assertions": [
+        "Halescourge triggers one scoped monster at half health, Skarrik takes the configured reduced ranged damage while melee is unchanged, and Deathrattler tracks more slowly. Disabling each option restores native behavior without stacking.",
+        "/verify_boss_balance per toggle; script Halescourge to 49 percent on Cataclysm: exactly one troll or spawn queued, none on death; Skarrik ranged hit x0.70."
+      ],
+      "pass_closes": true
+    }
+  ],
+  "source": {
+    "card_comment_id": 5039346692,
+    "card_date": "2026-07-21T21:44:00Z",
+    "ledger": "D3_ledger.tsv"
+  }
+}

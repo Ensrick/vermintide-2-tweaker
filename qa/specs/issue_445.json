@@ -1,0 +1,43 @@
+{
+  "schema": 1,
+  "issue": 445,
+  "class": "R",
+  "status": "draft",
+  "vp": null,
+  "arena": "unknown",
+  "mods": [
+    {
+      "dir": "weapon_tweaker",
+      "min_version": "",
+      "settings": null
+    },
+    {
+      "dir": "career_tweaker",
+      "min_version": "",
+      "settings": null
+    }
+  ],
+  "cases": [
+    {
+      "script": "",
+      "steps": [
+        "1. Enable Career Tweaker and the public Tweaker: Weapons stream, then restart.",
+        "2. In **Careers > Talent Reworks > Master Toggles**, confirm the Ensrick, Tourney Balance, and all-reworks controls are present and individual reworks carry their authored prefix.",
+        "3. Turn each career family master on in turn and confirm mutually exclusive families switch correctly.",
+        "4. Turn **Enable All Reworks** on, then turn one individual rework off; confirm the master returns to a custom/off state without changing the other choices.",
+        "5. In **Weapons > Weapon Tweaks > Master Toggles**, confirm the Ensrick master controls all 13 visible weapon tweaks and individual tweaks carry the Ensrick prefix.",
+        "6. Turn one individual weapon tweak off, then exercise the weapon master on and off; run `/crt_regression_test` and `/wt_regression_test`."
+      ],
+      "assertions": [
+        "Every visible active rework belongs to one authored family, whole-family changes are bounded, partial selections remain intact, retired Big Rebalance rows remain absent, and both regression commands finish without an error or callback storm.",
+        "Script settings: toggle each family master, assert member settings follow, exclusive families switch, partial selection sets master to custom, bounded number of setting writes."
+      ],
+      "pass_closes": true
+    }
+  ],
+  "source": {
+    "card_comment_id": 5356975768,
+    "card_date": "2026-08-20T14:04:25Z",
+    "ledger": "D2_ledger.tsv"
+  }
+}

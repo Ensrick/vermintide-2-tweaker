@@ -148,6 +148,10 @@ return function(H, repo_root)
         H.truthy(find_line(printfs, "[regression] XPASS no_longer_broken"))
         H.truthy(find_line(printfs, "[regression] XFAIL still_broken"))
         H.truthy(find_line(warnings, "FAIL regressed"))
+        -- WP-CWV-06: PASS and FAIL also reach the engine log through printf, so a rig or a
+        -- log reader gets one line per check whatever VMF's logging settings are.
+        H.truthy(find_line(printfs, "[regression] PASS healthy"))
+        H.truthy(find_line(printfs, "[regression] FAIL regressed"))
     end)
 
     H.test("CWV runner never lets an annotated defect suppress a genuine failure count", function()
@@ -184,6 +188,25 @@ return function(H, repo_root)
         H.truthy(find_line(echoes, "=== 1 passed, 1 failed, 1 xfail (known defects), 2 skipped ==="))
         H.truthy(find_line(printfs, "[regression] SKIP unarmed"))
         H.equal(find_line(warnings, "unarmed"), nil, "a skip never reaches the failure channel")
+    end)
+
+    -- WP-CWV-06: the WOC runner echoed only, so its verdicts never reached the engine log.
+    H.test("WOC runner writes one printf verdict line per check", function()
+        local block = extract_command(
+            read("weapons_of_chaos/scripts/mods/weapons_of_chaos/weapons_of_chaos.lua"),
+            "woc_regression_test")
+        local echoes, printfs = run_runner(block, {
+            { name = "healthy", fn = function() return nil end },
+            { name = "unreadable", fn = function() return "skip: source text is not readable in the shipped game" end },
+            { name = "broken", fn = function() return "reverted" end },
+        }, { chunk_name = "woc_runner" })
+        H.truthy(find_line(echoes, "PASS: healthy"))
+        H.truthy(find_line(echoes, "SKIP: unreadable"))
+        H.truthy(find_line(echoes, "FAIL: broken"))
+        H.truthy(find_line(echoes, "=== 1 passed, 1 failed, 1 skipped ==="))
+        H.truthy(find_line(printfs, "[regression] PASS healthy"))
+        H.truthy(find_line(printfs, "[regression] SKIP unreadable"))
+        H.truthy(find_line(printfs, "[regression] FAIL broken"))
     end)
 
     H.test("GT runner gives a boolean return its own BAD-SHAPE verdict", function()

@@ -1,0 +1,41 @@
+{
+  "schema": 1,
+  "issue": 1000,
+  "class": "R",
+  "status": "draft",
+  "vp": null,
+  "arena": "unknown",
+  "mods": [
+    {
+      "dir": "cosmetics_tweaker",
+      "min_version": "",
+      "settings": null
+    },
+    {
+      "dir": "modded_progression",
+      "min_version": "",
+      "settings": null
+    }
+  ],
+  "cases": [
+    {
+      "script": "",
+      "steps": [
+        "1. Refresh **Tweaker: Cosmetics** from Steam Workshop, launch Vermintide 2 into the Modded Realm, and confirm the exact build banner above in the newest console log.",
+        "2. Stay in the keep until your hero has fully loaded and the inventory opens normally, then close the inventory.",
+        "3. Run `/cos_1000_diag` once in chat and wait for the chat confirmation that the Weave frame census was written to the console log.",
+        "4. Exit the game normally and attach the newest console log."
+      ],
+      "assertions": [
+        "The log contains exactly one `[cos:1000:diag] census frames=24 inventory_atlas=<n> hud_atlas=<n> vanilla_names=<n> vanilla_descriptions=<n> unregistered_items=24 unregistered_cosmetics=24 unregistered_templates=24 unregistered_lookup=24` line for the run. The four unregistered counts must read 24 each; a lower value means a vanilla collision to report, not a pass. The inventory atlas, HUD atlas, vanilla name and vanilla description counts are the measurements this card collects, so report the printed values as they are. No Tweaker: Cosmetics script error appears. This is a census only; no Weave Season 5-10 frame is registered or selectable yet.",
+        "Feature test: 24 frame items registered and selectable, selection persists per career, network cosmetics lookup unchanged, official loadout untouched. The census itself is static."
+      ],
+      "pass_closes": true
+    }
+  ],
+  "source": {
+    "card_comment_id": 5656581715,
+    "card_date": "2026-09-13T22:25:03Z",
+    "ledger": "D2_ledger.tsv"
+  }
+}

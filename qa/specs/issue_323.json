@@ -1,0 +1,43 @@
+{
+  "schema": 1,
+  "issue": 323,
+  "class": "R",
+  "status": "draft",
+  "vp": null,
+  "arena": "unknown",
+  "mods": [
+    {
+      "dir": "chaos_wastes_tweaker_dev",
+      "min_version": "",
+      "settings": null
+    },
+    {
+      "dir": "enemy_tweaker",
+      "min_version": "",
+      "settings": null
+    }
+  ],
+  "cases": [
+    {
+      "script": "",
+      "steps": [
+        "1. In **Tweaker: Chaos Wastes**, enable **Progressive Elite Enhancements** and set **Elite Enhancement Chance per Completed Map** to 25. Begin with **Curses > Boss Grudge Marks Banlist > Ban all Boss Grudge Marks** off.",
+        "2. Start an ordinary solo pilgrimage. On map 1, confirm ordinary Chaos Warriors, Stormvermin, Bestigors, Maulers, and Plague Monks receive no additional progressive enhancement.",
+        "3. From map 2 onward, watch ordinary elites for the tougher Geheimnisnacht-style treatment plus either a shockwave on attacks or an aura preventing nearby enemies from dying while the elite lives. Specials, monsters, and horde enemies must not receive this treatment from the option.",
+        "4. Turn **Ban all Boss Grudge Marks** on before continuing into another mission. The progressive ordinary-elite treatment must still work: this master bans listed boss marks, not the separate elite-safe treatment or the elite's required native setup.",
+        "5. If the run reaches map 5, confirm newly encountered, otherwise unmarked ordinary elites receive the progressive treatment at the 25 setting. Enemies already enhanced by the game must keep their existing marks rather than gaining another set.",
+        "6. In a separate fresh run, turn **Progressive Elite Enhancements** off and confirm CT no longer adds the treatment. Keep the bounded `[ct:323] apply` rows identifying enemy, recipe, completed-map count and rate. Run `/ct_regression_test`, exit normally, and attach the newest complete log with map numbers and enemy types observed."
+      ],
+      "assertions": [
+        "No added treatment on map 1; increasing chances from map 2, reaching 100% from map 5 at the 25 setting. Only ordinary eligible elites receive one of the two supported effects. The boss-mark master must not break their native setup or suppress these separate elite-safe effects. `issue323_progressive_elite_runtime` and the full regression report pass.",
+        "Scripted run at map 2+ with chance forced to 100; spawn an elite; assert recipe applied; specials and trash none; ban-all on still applies."
+      ],
+      "pass_closes": true
+    }
+  ],
+  "source": {
+    "card_comment_id": 6693567311,
+    "card_date": "2026-11-06T19:30:21Z",
+    "ledger": "D3_ledger.tsv"
+  }
+}

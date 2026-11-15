@@ -596,6 +596,13 @@ end
 -- rarer than the top-level call count. Per PROJECT_STANDARDS § 3.6
 -- "Performance note: mod:get is cheap"; sampling is purely a log-volume
 -- concern.
+-- WP-WT-08: count an error the funnel swallowed (WT.note_swallowed is set
+-- by the entry before this module loads; nil in host harnesses).
+local function _note_anim_swallow(event, err)
+    local note = WT.note_swallowed
+    if note then note("anim_event", tostring(event) .. ": " .. tostring(err)) end
+end
+
 local _ANIM_EVENT_SAMPLE_N = 60
 local _ANIM_EVENT_SAMPLE_REMAP_N = 30
 local _anim_event_call_count = 0
@@ -836,6 +843,7 @@ mod:hook("Unit", "animation_event", function(func, unit, event_name, ...)
                     tostring(state.template), tostring(state.key), _anim_event_remap_count)
             end
             local ok, err = pcall(func, unit, target, ...)
+            if not ok then _note_anim_swallow(target, err) end
             return
         end
         -- Force-fire path for SM-corrupting events (see
@@ -862,7 +870,8 @@ mod:hook("Unit", "animation_event", function(func, unit, event_name, ...)
                 mod:info(msg)
                 mod:echo(msg)
             end
-            pcall(_original_animation_event, unit, force_target)
+            local ok, err = pcall(_original_animation_event, unit, force_target)
+            if not ok then _note_anim_swallow(force_target, err) end
             return
         end
     end
@@ -881,7 +890,8 @@ mod:hook("Unit", "animation_event", function(func, unit, event_name, ...)
                     mod:info(msg)
                     mod:echo(msg)
                 end
-                pcall(func, unit, target, ...)
+                local ok, err = pcall(func, unit, target, ...)
+                if not ok then _note_anim_swallow(target, err) end
                 return
             elseif _log_anims then
                 mod:info("  REDIR FAIL: " .. target .. " not on unit")
@@ -910,13 +920,15 @@ mod:hook("Unit", "animation_event", function(func, unit, event_name, ...)
                     mod:info(msg)
                     mod:echo(msg)
                 end
-                pcall(func, unit, career_redir.alt, ...)
+                local ok, err = pcall(func, unit, career_redir.alt, ...)
+                if not ok then _note_anim_swallow(career_redir.alt, err) end
                 return
             elseif _log_anims then
                 mod:info("  REDIR FAIL: " .. career_redir.alt .. " not on unit")
             end
         end
-        pcall(func, unit, event_name, ...)
+        local ok, err = pcall(func, unit, event_name, ...)
+        if not ok then _note_anim_swallow(event_name, err) end
         return
     end
 
@@ -927,7 +939,8 @@ mod:hook("Unit", "animation_event", function(func, unit, event_name, ...)
             return func(unit, event_name, ...)
         end
         if _safe_has_anim(unit, alt) then
-            pcall(func, unit, alt, ...)
+            local ok, err = pcall(func, unit, alt, ...)
+            if not ok then _note_anim_swallow(alt, err) end
             return
         end
     end
@@ -937,12 +950,14 @@ mod:hook("Unit", "animation_event", function(func, unit, event_name, ...)
         local target = _try_suffix_redirect(unit, event_name, career)
         if target then
             if _log_anims then mod:info("  SUFFIX -> " .. target) end
-            pcall(func, unit, target, ...)
+            local ok, err = pcall(func, unit, target, ...)
+            if not ok then _note_anim_swallow(target, err) end
             return
         end
     end
 
-    pcall(func, unit, event_name, ...)
+    local ok, err = pcall(func, unit, event_name, ...)
+    if not ok then _note_anim_swallow(event_name, err) end
 end)
 
 -- Pull item_data for the slot being wielded and copy template/key into the

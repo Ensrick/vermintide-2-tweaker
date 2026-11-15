@@ -1,0 +1,41 @@
+{
+  "schema": 1,
+  "issue": 921,
+  "class": "C",
+  "status": "draft",
+  "vp": null,
+  "arena": "unknown",
+  "mods": [
+    {
+      "dir": "crafting_in_modded_dev",
+      "min_version": "0.8.148",
+      "settings": null
+    }
+  ],
+  "cases": [
+    {
+      "script": "",
+      "steps": [
+        "1. In the Keep, equip an already-owned CIM-crafted vanilla weapon of Modded rarity and hold **Tab**. Confirm your own weapon slot uses the Modded frame.",
+        "2. Replace it in the same slot with an ordinary Common or Blacksmith weapon and hold Tab again.",
+        "3. Confirm the ordinary weapon no longer uses the Modded frame. Repeat the Modded-to-ordinary swap once.",
+        "4. Enter a Chaos Wastes mission, hold Tab, return to the Keep, and inspect the same slot again.",
+        "5. Run `/cim_regression_test` and record the visible summary, if shown."
+      ],
+      "assertions": [
+        "Your own row follows the currently equipped rarity. An ordinary replacement clears the Modded frame and it stays cleared across the Chaos Wastes transition. This is the accepted solo prerequisite only; the reported host/client convergence case still needs its later co-op phase, not a new co-op requirement now.",
+        "U: tri-state cache tests, both RPC orders; solo R: Modded to ordinary swap clears own frame across a deus transition; C: host reads remote row after client enters deus."
+      ],
+      "pass_closes": false
+    }
+  ],
+  "left_for_humans": [
+    "Your own row follows the currently equipped rarity. An ordinary replacement clears the Modded frame and it stays cleared across the Chaos Wastes transition. This is the accepted solo prerequisite only; the reported host/client convergence case still needs its later co-op phase, not a new co-op requirement now.",
+    "needs two clients"
+  ],
+  "source": {
+    "card_comment_id": 6693612582,
+    "card_date": "2026-11-06T19:32:45Z",
+    "ledger": "D4_ledger.tsv"
+  }
+}

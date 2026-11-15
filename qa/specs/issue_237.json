@@ -1,0 +1,37 @@
+{
+  "schema": 1,
+  "issue": 237,
+  "class": "R",
+  "status": "draft",
+  "vp": null,
+  "arena": "unknown",
+  "mods": [
+    {
+      "dir": "character_weapon_variants",
+      "min_version": "0.1.570-dev",
+      "settings": null
+    }
+  ],
+  "cases": [
+    {
+      "script": "",
+      "steps": [
+        "1. On Kerillian, equip **Kerillian's Sword and Shield** from Character Weapon Variants with its default appearance.",
+        "2. Open the inventory and inspect Kerillian's full character preview.",
+        "3. Close and reopen the inventory twice, then equip an ordinary vanilla weapon and return to Kerillian's Sword and Shield.",
+        "4. Apply one unlocked illusion, reopen the preview, then restore the default appearance.",
+        "5. Run `/cwv_regression_test`."
+      ],
+      "assertions": [
+        "Kerillian's inventory character preview consistently shows the elven sword-and-shield models, never Kruber's empire sword-and-shield models. Reopening the preview does not change or compound either hand, the vanilla control is untouched, the selected illusion wins only while selected, and `preview_meshswap_guards` plus `issue660_preview_descriptor_adapter_parity` pass.",
+        "Open hero preview with the item; capture spawned preview unit paths for both hands; assert they equal the CWV descriptor units across three reopen cycles."
+      ],
+      "pass_closes": true
+    }
+  ],
+  "source": {
+    "card_comment_id": 5749609107,
+    "card_date": "2026-09-20T11:49:38Z",
+    "ledger": "D1_ledger.tsv"
+  }
+}

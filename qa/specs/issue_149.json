@@ -1,0 +1,41 @@
+{
+  "schema": 1,
+  "issue": 149,
+  "class": "C",
+  "status": "draft",
+  "vp": null,
+  "arena": "unknown",
+  "mods": [
+    {
+      "dir": "cosmetics_tweaker",
+      "min_version": "0.9.230-dev",
+      "settings": null
+    }
+  ],
+  "cases": [
+    {
+      "script": "",
+      "steps": [
+        "1. Equip Kruber's Bretonnian Sword & Shield in the Keep.",
+        "2. In Tweaker: Cosmetics, select the visibly distinct Myrmidia Sun shield, then close the menu and confirm it appears on Kruber's third-person model.",
+        "3. Start an Adventure mission without reopening Tweaker: Cosmetics and inspect the shield immediately.",
+        "4. Switch to the ranged weapon and back, then return to the Keep and inspect the shield again.",
+        "5. Exit the game normally and attach the newest log."
+      ],
+      "assertions": [
+        "The Myrmidia Sun shield remains the same in the Keep, at mission start, after switching weapons, and after returning to the Keep; it never becomes the default Imperial or Bretonnian shield, and no Cosmetics error appears in the log.",
+        "Two clients: wearer saves LA shield, enter mission; each peer asserts wearer offhand unit name equals LA mesh at spawn, after swap, after Keep return."
+      ],
+      "pass_closes": false
+    }
+  ],
+  "left_for_humans": [
+    "The Myrmidia Sun shield remains the same in the Keep, at mission start, after switching weapons, and after returning to the Keep; it never becomes the default Imperial or Bretonnian shield, and no Cosmetics error appears in the log.",
+    "needs two clients"
+  ],
+  "source": {
+    "card_comment_id": 5160464585,
+    "card_date": "2026-08-02T21:39:46Z",
+    "ledger": "D2_ledger.tsv"
+  }
+}

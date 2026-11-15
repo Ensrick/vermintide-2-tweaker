@@ -1,0 +1,36 @@
+{
+  "schema": 1,
+  "issue": 471,
+  "class": "R",
+  "status": "draft",
+  "vp": null,
+  "arena": "unknown",
+  "mods": [
+    {
+      "dir": "chaos_wastes_tweaker_dev",
+      "min_version": "0.7.354-beta",
+      "settings": null
+    }
+  ],
+  "cases": [
+    {
+      "script": "",
+      "steps": [
+        "1. Open **Tweaker: Chaos Wastes > Shrines, Altars and Chests > Chest of Trials**. Set **Chest of Trials enemy multiplier** to `1.0`, then trigger and complete a Chest of Trials on a chosen difficulty.",
+        "2. Set **Chest of Trials enemy multiplier** to `3.0` and repeat on the same difficulty, using the same trial type when available. Record the trial type in each comparison rather than treating different random trials as identical.",
+        "3. Compare the ordinary enemy wave, spacing, and spawn telegraphs. Complete both trials and transition onward, checking for stranded enemies, a spawn flood, freeze, or crash.",
+        "4. After each trial wave is constructed, run `/verify_ct_trial_placement` and retain the bounded requested, native-placed, top-up, final-placed, pass and residual fields, including finder/telegraph errors. Then run `/ct_regression_test`, exit normally, and attach the newest complete log with both trial types and multipliers."
+      ],
+      "assertions": [
+        "The raised multiplier materially increases the applicable ordinary trial-enemy wave; every requested enemy is placed or a genuine engine-limit residual is explicitly accounted for by approved runtime evidence. Placement spacing and telegraphs remain valid, trial completion/transition stays normal, and non-trial mission spawns remain unchanged. `ct_trial_placement_readback_471` and its command deliberately SKIP live proof and show a historical scalar receipt. Construction counts do not prove enemies actually spawned, valid rendered telegraphs or completed trials; those mission observations remain required. A residual must be reported honestly, not relabeled a full-placement pass.",
+        "Trigger the same trial at multiplier 1.0 and 3.0; count AI units spawned for the trial; assert about 3x within engine caps; other spawns unchanged."
+      ],
+      "pass_closes": true
+    }
+  ],
+  "source": {
+    "card_comment_id": 6693591273,
+    "card_date": "2026-11-06T19:31:37Z",
+    "ledger": "D3_ledger.tsv"
+  }
+}

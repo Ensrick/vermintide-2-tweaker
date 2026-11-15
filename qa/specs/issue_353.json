@@ -1,0 +1,37 @@
+{
+  "schema": 1,
+  "issue": 353,
+  "class": "R",
+  "status": "draft",
+  "vp": null,
+  "arena": "unknown",
+  "mods": [
+    {
+      "dir": "gui_tweaker_dev",
+      "min_version": "0.2.290",
+      "settings": null
+    }
+  ],
+  "cases": [
+    {
+      "script": "",
+      "steps": [
+        "1. Save two Equipment rows on one hero with visibly different Loremaster illusions, hats, frames and poses; include differing vanilla cosmetics as controls.",
+        "2. Switch rows repeatedly and confirm each restores its complete own appearance. Recreate the inventory screen and repeat.",
+        "3. Exit normally without re-equipping the final row, relaunch and confirm both rows still restore correctly.",
+        "4. Enable **Use non-modded loadouts** and repeat row switches and a normal restart; protected gameplay gear must remain read-only while cosmetic overlays persist separately.",
+        "5. Return to the Official Realm and compare its saved loadouts with a baseline taken before the test."
+      ],
+      "assertions": [
+        "Every Loremaster and vanilla cosmetic remains row-local through switches, screen recreation and restart in both normal and protected-overlay modes. Official loadouts are unchanged.",
+        "issue353_outer_capture_transaction PASS; with LA installed equip LA hat/skin/frame/pose in two rows, switch, recreate inventory, relaunch: rows keep override_id/ItemId; official data unchanged."
+      ],
+      "pass_closes": true
+    }
+  ],
+  "source": {
+    "card_comment_id": 6591479063,
+    "card_date": "2026-11-02T23:50:16Z",
+    "ledger": "D4_ledger.tsv"
+  }
+}

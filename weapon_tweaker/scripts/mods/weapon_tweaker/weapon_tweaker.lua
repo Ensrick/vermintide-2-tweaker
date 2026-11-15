@@ -91,7 +91,7 @@ mod:info("[mem-probe] wt weapon_backend: +%.1f MB lua (NOT in the boot_lua total
 -- definitions, lifecycle stub, and dead-only formula checks were deleted under
 -- #433. Saved br_* values remain untouched and the prefix stays reserved.
 
-local MOD_VERSION = "0.12.347-beta"
+local MOD_VERSION = "0.12.348-beta"
 _MEM_PROBE_T0_WT = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 
 -- v0.12.73: source-pattern marker constant for the /wt_regression_test
@@ -260,6 +260,17 @@ _migrate_legacy_debug_setting()
 -- byte-identical. The established flat `mod._wt_*` fields (mod._wt_link_filter,
 -- mod._wt_tf_*, ...) are a SEPARATE key namespace and are untouched.
 mod._wt = mod._wt or {}
+-- WP-WT-08: errors wt swallows on vanilla paths are counted and the first
+-- three per kind printed, so a rig run can assert that none happened.
+mod._wt.swallowed = { create_equipment = 0, anim_event = 0, safe_hook = 0 }
+mod._wt.note_swallowed = function(kind, detail)
+    local counts = mod._wt.swallowed
+    local n = (counts[kind] or 0) + 1
+    counts[kind] = n
+    if n <= 3 then
+        pcall(printf, "[wt:SWALLOW] kind=%s n=%d detail=%s", tostring(kind), n, tostring(detail))
+    end
+end
 mod._wt.MOD_VERSION = MOD_VERSION
 mod._wt.is_active = function() return mod:is_enabled() == true end
 

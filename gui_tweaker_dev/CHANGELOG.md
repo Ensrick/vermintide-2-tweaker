@@ -1,5 +1,21 @@
 # Tweaker: GUI dev — Changelog
 
+## 0.2.371-dev (2026-11-15) -- Publish the loadout isolation contract for item-minting mods (WP-GUT-04)
+
+- New `mod.loadout_isolation` (contract 1) tells another mod whether a
+  loadout write in this session is captured by Tweaker: GUI instead of
+  reaching official data. `safe_to_write_loadout()` is true only in the
+  modded realm, in store or readonly mode, with both Adventure loadout
+  writers answered by the live capture hooks and the live backend mirror
+  on Adventure data. The answer is a functional probe on a throwaway table,
+  never a self-written list; any error or unknown state is false (advances
+  #402; consumer rule in docs/CROSS_MOD_ARCHITECTURE.md).
+- The two writer hooks answer the reserved probe career before touching
+  anything; real careers are unchanged. The in-game check
+  `native_loadouts_official_write_chokepoint` now runs the same probe, and
+  `issue402_isolation_contract` is new.
+- Offline unit and real-hook fixture coverage only; no in-game acceptance yet.
+
 ## 0.2.370-dev (2026-11-14) -- Keep unresolved stored gear ids at exit edges (WP-GUT-01)
 
 - The exit snapshot no longer replaces a stored gear id that does not resolve

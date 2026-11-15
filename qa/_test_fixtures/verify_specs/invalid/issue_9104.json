@@ -1,0 +1,11 @@
+{
+  "schema": 1,
+  "issue": 9104,
+  "class": "R",
+  "status": "draft",
+  "vp": null,
+  "arena": "keep",
+  "mods": [
+    { "dir": "general_tweaker_dev", "min_version": null, "settings": null }
+  ]
+}

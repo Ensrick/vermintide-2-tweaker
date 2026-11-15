@@ -1,0 +1,37 @@
+{
+  "schema": 1,
+  "issue": 1655,
+  "class": "U",
+  "status": "draft",
+  "vp": null,
+  "arena": "none",
+  "mods": [
+    {
+      "dir": "crafting_in_modded_dev",
+      "min_version": "",
+      "settings": null
+    }
+  ],
+  "cases": [
+    {
+      "script": "",
+      "steps": [],
+      "assertions": [
+        "After the decision: unit-test Browser.import_state for active versus other career and the reject message."
+      ],
+      "pass_closes": true
+    }
+  ],
+  "offline": [
+    {
+      "class": "U",
+      "command": "",
+      "expect": "After the decision: unit-test Browser.import_state for active versus other career and the reject message."
+    }
+  ],
+  "source": {
+    "card_comment_id": null,
+    "card_date": null,
+    "ledger": "D4_ledger.tsv"
+  }
+}

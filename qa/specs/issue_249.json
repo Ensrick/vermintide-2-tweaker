@@ -1,0 +1,41 @@
+{
+  "schema": 1,
+  "issue": 249,
+  "class": "C",
+  "status": "draft",
+  "vp": null,
+  "arena": "unknown",
+  "mods": [
+    {
+      "dir": "chaos_wastes_tweaker_dev",
+      "min_version": "",
+      "settings": null
+    }
+  ],
+  "cases": [
+    {
+      "script": "",
+      "steps": [
+        "1. Both players enable Numeric UI, Tweaker: GUI Dev, and Tweaker: Chaos Wastes Dev.",
+        "2. The host enables **Starting Boon: Quiver Cascade** plus enough other starting boons to make the ammo increase obvious, then starts a Chaos Wastes expedition.",
+        "3. The client equips a conventional ranged weapon and runs `/verify_boon_ammo_hud` before firing, after firing and reloading, and after collecting another boon.",
+        "4. At each sample, compare the client's own ammo display with the host's teammate-frame display for that client.",
+        "5. Transition to a second map, repeat once, run `/ct_regression_test` and `/gut_regression_test` on both peers, and attach both logs."
+      ],
+      "assertions": [
+        "The client retains the same Quiver Cascade stack count as the host after initial grant and parity restore, its maximum ammo rises above the weapon's ordinary capacity, and local and teammate displays converge on the authoritative current and maximum values. No stack vanishes on map transition or repeats without bound.",
+        "Solo covers /verify_boon_ammo_hud exact==wire and unit restore_plan. Client stack count after host grant and hot join needs two clients."
+      ],
+      "pass_closes": false
+    }
+  ],
+  "left_for_humans": [
+    "The client retains the same Quiver Cascade stack count as the host after initial grant and parity restore, its maximum ammo rises above the weapon's ordinary capacity, and local and teammate displays converge on the authoritative current and maximum values. No stack vanishes on map transition or repeats without bound.",
+    "needs two clients"
+  ],
+  "source": {
+    "card_comment_id": 5357042280,
+    "card_date": "2026-08-20T14:09:43Z",
+    "ledger": "D3_ledger.tsv"
+  }
+}

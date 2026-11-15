@@ -1,0 +1,40 @@
+{
+  "schema": 1,
+  "issue": 1567,
+  "class": "R",
+  "status": "draft",
+  "vp": null,
+  "arena": "unknown",
+  "mods": [
+    {
+      "dir": "cosmetics_tweaker",
+      "min_version": "0.9.230-dev",
+      "settings": null
+    }
+  ],
+  "cases": [
+    {
+      "script": "",
+      "steps": [
+        "1. Refresh **Tweaker: Cosmetics** from Steam Workshop, launch Vermintide 2 into the Modded Realm as Saltzpyre, and confirm the exact build banner above in the newest console log.",
+        "2. In the keep, open Mod Options, Tweaker: Cosmetics, and enable **Unlock All Weapon Illusions** and **Show Weavebound and Shyish Illusions**.",
+        "3. In the keep inventory, equip Griffon-foot Pistols, select them, and open their Illusions page from the gear icon on the equipped weapon slot.",
+        "4. Select **Shyish-Infused Griffon-Foot**, read the description shown for it on that page, and apply it. Close the page and hover the equipped Griffon-foot Pistols in the inventory to read the tooltip description.",
+        "5. Reopen the Illusions page and select each of the two **Weave-Forged Griffon-Foot** illusions in turn, reading the description of each.",
+        "6. Switch to Kruber from the hero selection, equip a Tuskgor Spear, and open its Illusions page the same way. Select **Spear & Shield Spear**, **Spear & Shield Spear (Ornate)** and **Spear & Shield Spear (Plumed)** in turn and read each description, then apply the Plumed one, close the page and hover the equipped Tuskgor Spear to read its tooltip description.",
+        "7. Run `/cos_1567_diag` once in chat and wait for the chat confirmation that the description parity census was written to the console log.",
+        "8. Run `/cos_regression_test`, then exit the game normally and attach the newest console log."
+      ],
+      "assertions": [
+        "The Shyish-Infused Griffon-Foot description reads the same text as the other Shyish-Infused illusions, \"Weaponry tainted by the Wind of Death. What can possibly go wrong?\", on the Illusions page and in the inventory tooltip, instead of a key in angle brackets. Both Weave-Forged Griffon-Foot illusions show the Weave-Forged Griffon-Foot flavor text instead of a key in angle brackets. The Spear & Shield Spear description reads exactly \"The Empire spear from Kruber's Spear and Shield, wielded two-handed without its shield. A plain state-troop haft that reaches as far as any Tuskgor Spear.\" The Ornate one reads exactly \"The ornate Empire spear from Kruber's Spear and Shield, wielded two-handed without its shield. Its gilded fittings were made for the parade ground, but the point is as keen as ever.\" The Plumed one reads exactly \"The plumed Empire spear from Kruber's Spear and Shield, wielded two-handed without its shield. The plume marks a sergeant of the state troops, a rank Kruber earned twice over.\" on the Illusions page and in the inventory tooltip. No description shows a key in angle brackets, blank text or different wording. The regression run reports `PASS: issue1567_item_description_parity`; if that check fails naming unresolved description keys, report the printed keys as they are, since they are the remaining vanilla gaps. No Tweaker: Cosmetics script error appears. The census line the parity command writes is collected as data; report its unresolved count as printed.",
+        "Assert Localize of each routed typo key and the 3 custom spear descriptions returns non-key text; description census reports zero unresolved; issue1567 check."
+      ],
+      "pass_closes": true
+    }
+  ],
+  "source": {
+    "card_comment_id": 5672832164,
+    "card_date": "2026-09-15T00:31:32Z",
+    "ledger": "D2_ledger.tsv"
+  }
+}

@@ -1,0 +1,43 @@
+{
+  "schema": 1,
+  "issue": 1141,
+  "class": "R",
+  "status": "draft",
+  "vp": null,
+  "arena": "unknown",
+  "mods": [
+    {
+      "dir": "crafting_in_modded_dev",
+      "min_version": "",
+      "settings": null
+    },
+    {
+      "dir": "character_weapon_variants",
+      "min_version": "",
+      "settings": null
+    }
+  ],
+  "cases": [
+    {
+      "script": "",
+      "steps": [
+        "1. In the Keep as Kruber, equip an already-owned Modded crafted melee weapon. Open the Athanor (default **B**), select the melee slot, and open **Temper Item**. Its bottom button must read **APPLY**.",
+        "2. Stage exactly **1 bubble of Block Cost Reduction** and press **APPLY**. It must refuse the unstorable count, explain the supported range in chat, keep the draft visible, and leave the weapon unchanged in Equipment.",
+        "3. Stage **2 bubbles of Block Cost Reduction** and press **APPLY**. Leave Temper Item and inspect the item: exactly two bubbles, no doubled nodes and no extra copy. Reopen Temper Item and confirm the same saved count.",
+        "4. Press **APPLY** again without changing the draft. It must report no staged changes and leave the item unchanged.",
+        "5. Repeat with **Attack Speed** and **Power vs Skaven** staged together, using bubble counts the button accepts. After Apply and reopen, both saved counts must exactly match the draft, not multiply.",
+        "6. Run `/cim_regression_test` and record the visible summary, if shown."
+      ],
+      "assertions": [
+        "APPLY commits no more property nodes than staged. Unstorable counts are rejected before saving; supported counts round-trip exactly. The exact-bubble check passes without a script error. Single-bubble support below the native storage floor is not promised.",
+        "Stage one Block Cost bubble and apply: rejected, item unchanged; two bubbles: property count is two after reopen; re-apply is a no-op; two properties round-trip exactly."
+      ],
+      "pass_closes": true
+    }
+  ],
+  "source": {
+    "card_comment_id": 6693616890,
+    "card_date": "2026-11-06T19:32:58Z",
+    "ledger": "D1_ledger.tsv"
+  }
+}

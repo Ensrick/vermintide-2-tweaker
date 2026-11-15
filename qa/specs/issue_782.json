@@ -1,0 +1,36 @@
+{
+  "schema": 1,
+  "issue": 782,
+  "class": "R",
+  "status": "draft",
+  "vp": null,
+  "arena": "unknown",
+  "mods": [
+    {
+      "dir": "weapons_of_chaos",
+      "min_version": "0.1.62-dev",
+      "settings": null
+    }
+  ],
+  "cases": [
+    {
+      "script": "",
+      "steps": [
+        "1. Equip **Blightreaper** and enter a mission.",
+        "2. Kill enough enemies to spawn several green Shyish spirits.",
+        "3. Move away from the kill locations and let the spirits chase and contact the wielder.",
+        "4. Repeat across several enemy groups, then exit normally and attach the newest console log."
+      ],
+      "assertions": [
+        "Spirits move and contact normally; the game remains responsive; the log contains no repeated `Vector3 expected, got userdata` or `bad argument #1 to '__add'` call stacks. If a target becomes invalid, that spirit is removed with at most the bounded cleanup diagnostic rather than producing per-frame log spam.",
+        "Spawn three spirits via the kill path, run 30 seconds; assert zero __add errors in the log and spirit positions change. Offline: resolve_position rejects non-vector lookup values."
+      ],
+      "pass_closes": true
+    }
+  ],
+  "source": {
+    "card_comment_id": 5161337243,
+    "card_date": "2026-08-03T01:17:23Z",
+    "ledger": "D1_ledger.tsv"
+  }
+}

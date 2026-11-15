@@ -1,0 +1,42 @@
+{
+  "schema": 1,
+  "issue": 105,
+  "class": "R",
+  "status": "draft",
+  "vp": null,
+  "arena": "unknown",
+  "mods": [
+    {
+      "dir": "chaos_wastes_tweaker_dev",
+      "min_version": "",
+      "settings": null
+    },
+    {
+      "dir": "weapon_tweaker",
+      "min_version": "",
+      "settings": null
+    }
+  ],
+  "cases": [
+    {
+      "script": "",
+      "steps": [
+        "1. Use Tweaker: Weapons to equip **Kerillian's Longbow** on Kruber.",
+        "2. Start a Chaos Wastes expedition and inspect the weapon before tempering.",
+        "3. Upgrade the ranged weapon once at a weapon altar.",
+        "4. Immediately inspect its first-person model, local third-person model, inventory name, and equipped ranged slot.",
+        "5. Swap away and back, run `/ct_regression_test` and `/wt_regression_test`, exit normally, and attach the newest console log."
+      ],
+      "assertions": [
+        "The run records whether the same underlying Kerillian Longbow identity survives tempering. If identity remains Kerillian's Longbow but the model changes, the evidence identifies a Tweaker: Weapons render/re-equip defect; if identity changes, it identifies the Chaos Wastes upgrade boundary. No unrelated weapon is granted and no crash occurs.",
+        "CW run script: Kruber holding we_longbow deus item, trigger altar upgrade, assert deus_item_key and item template unchanged; repeat for each rarity step."
+      ],
+      "pass_closes": true
+    }
+  ],
+  "source": {
+    "card_comment_id": 5356971340,
+    "card_date": "2026-08-20T14:04:03Z",
+    "ledger": "D2_ledger.tsv"
+  }
+}

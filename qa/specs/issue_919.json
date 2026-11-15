@@ -1,0 +1,50 @@
+{
+  "schema": 1,
+  "issue": 919,
+  "class": "U",
+  "status": "draft",
+  "vp": null,
+  "arena": "none",
+  "mods": [
+    {
+      "dir": "chaos_wastes_tweaker_dev",
+      "min_version": "",
+      "settings": null
+    },
+    {
+      "dir": "gui_tweaker_dev",
+      "min_version": "",
+      "settings": null
+    }
+  ],
+  "cases": [
+    {
+      "script": "",
+      "steps": [
+        "1. Refresh Tweaker: GUI Dev and Tweaker: Chaos Wastes Dev, open Mod Tweaker, and select the **Chaos Wastes** tab.",
+        "2. Select Profile 1. Give it distinctive **Starting Coins**, at least one **Starting Boon**, and a clear **Rotten Miasma** enabled or disabled state, then apply it.",
+        "3. Run `/ct_profile_audit`.",
+        "4. Select Profile 2, give those three settings different values, apply it, and run `/ct_profile_audit` again.",
+        "5. Switch back to Profile 1, apply it, run `/ct_profile_audit`, and then start a Chaos Wastes run from the Pilgrimage Chamber.",
+        "6. Run `/ct_regression_test` and `/gut_regression_test`, exit normally, and attach the newest console log."
+      ],
+      "assertions": [
+        "Bounded `[ct:919] seq=%d phase=%s role=%s profile=%d effective_source=%s coins_local=%s coins_effective=%s miasma_disabled_local=%s miasma_disabled_effective=%s selected_curse=\"%s\" selected_conflict=%s boon_local_count=%d boon_local=%s boon_effective_count=%d boon_effective=%s local_truncated=%d effective_truncated=%d` rows identify each profile switch, manual audit, and run setup. Profiles 1 and 2 remain distinct, returning to Profile 1 restores its values, and both regression suites pass.",
+        "Unit: category with non-rendered owned settings; capture P1, switch P2, switch back; assert every setting round-trips. Runtime: script the card and read all keys."
+      ],
+      "pass_closes": true
+    }
+  ],
+  "offline": [
+    {
+      "class": "U",
+      "command": "",
+      "expect": "Unit: category with non-rendered owned settings; capture P1, switch P2, switch back; assert every setting round-trips. Runtime: script the card and read all keys."
+    }
+  ],
+  "source": {
+    "card_comment_id": 5357990255,
+    "card_date": "2026-08-20T15:22:43Z",
+    "ledger": "D3_ledger.tsv"
+  }
+}

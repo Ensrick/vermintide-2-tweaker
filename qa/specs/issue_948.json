@@ -1,0 +1,40 @@
+{
+  "schema": 1,
+  "issue": 948,
+  "class": "R",
+  "status": "draft",
+  "vp": null,
+  "arena": "unknown",
+  "mods": [
+    {
+      "dir": "weapon_tweaker",
+      "min_version": "0.12.344-dev",
+      "settings": null
+    },
+    {
+      "dir": "character_weapon_variants",
+      "min_version": "",
+      "settings": null
+    }
+  ],
+  "cases": [
+    {
+      "script": "",
+      "steps": [
+        "1. Enable Tweaker: Weapons Dev and Career Weapon Variants.",
+        "2. Load into the Keep and run `/wt_audit_universal_compatibility` once.",
+        "3. Run `/wt_regression_test`, exit normally, and attach the newest console log."
+      ],
+      "assertions": [
+        "The audit command emits one universal census and six receiver census rows without chat spam or a crash. The universal values are `careers=20`, `base_weapons=83`, `base_cells=1660`, `cwv_active=true`, `cwv_variants=32`, `cwv_cells=640`, `missing=0`, and `duplicates=0`; all cells remain `state=U` until gameplay is tested. `issue948_universal_base_availability` passes.",
+        "Sweep 20 careers by 115 weapons: equip, wield, assert no error, career action present, every template event passes has_animation_event on the receiver unit and changes animation state."
+      ],
+      "pass_closes": true
+    }
+  ],
+  "source": {
+    "card_comment_id": 5356760010,
+    "card_date": "2026-08-20T13:46:28Z",
+    "ledger": "D1_ledger.tsv"
+  }
+}

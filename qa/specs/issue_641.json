@@ -1,0 +1,37 @@
+{
+  "schema": 1,
+  "issue": 641,
+  "class": "R",
+  "status": "draft",
+  "vp": null,
+  "arena": "unknown",
+  "mods": [
+    {
+      "dir": "cosmetics_tweaker",
+      "min_version": "0.9.230-dev",
+      "settings": null
+    }
+  ],
+  "cases": [
+    {
+      "script": "",
+      "steps": [
+        "1. Equip Kruber's Mace and Shield and open Tweaker: Cosmetics customization.",
+        "2. Select **The Blood-Bloomed Bouclier**. Confirm it appears once, then inspect its shield name, shield flavor text, and shield icon.",
+        "3. Close and reopen customization three times. Swap away and back, enter an Adventure mission, return to the Keep, and inspect the same shield presentation again.",
+        "4. Repeat once with a dual weapon whose offhand has its own name or flavor text.",
+        "5. Run `/cos_regression_test`, exit the game, and attach the newest log."
+      ],
+      "assertions": [
+        "Each independently selected shield or offhand has exactly one selectable row and keeps its own name, flavor text, and icon; the primary weapon's text and icon never replace it. The selection and presentation survive reopen, swap, and Keep to mission to Keep. `issue641_independent_offhand_names` passes and the log contains no duplicate-component failure. If this solo stage passes, peer Hold-Tab presentation can be assessed separately before any co-op label is added.",
+        "Call the live item UI-information hook for shield and dual-offhand selections; assert name, description, icon keys are component-owned; pools hold no duplicate semantic identity."
+      ],
+      "pass_closes": true
+    }
+  ],
+  "source": {
+    "card_comment_id": 5165091606,
+    "card_date": "2026-08-03T10:16:43Z",
+    "ledger": "D2_ledger.tsv"
+  }
+}

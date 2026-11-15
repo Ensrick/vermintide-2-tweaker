@@ -1,0 +1,37 @@
+{
+  "schema": 1,
+  "issue": 285,
+  "class": "R",
+  "status": "draft",
+  "vp": null,
+  "arena": "unknown",
+  "mods": [
+    {
+      "dir": "gui_tweaker_dev",
+      "min_version": "0.2.290",
+      "settings": null
+    }
+  ],
+  "cases": [
+    {
+      "script": "",
+      "steps": [
+        "1. First launch with public GUI enabled and Respawn CD disabled. Enable GUI's respawn timer under **Interface and HUD** and enter a solo mission with bots.",
+        "2. Let one bot die completely, not merely become disabled. Watch that bot's team portrait until respawn.",
+        "3. Check that the timer belongs to the dead bot, counts down once and disappears when it returns.",
+        "4. Repeat after changing HUD scale or resolution. Check a living and a merely disabled teammate as controls; attach a screenshot if alignment is wrong.",
+        "5. Exit normally, enable the recorded Respawn CD installation alongside public GUI, and repeat steps 2-4 in a fresh solo mission with the same GUI timer setting. Record which timer each mod contributes; identify any shadowed, stalled or duplicate GUT countdown rather than treating the reference mod's timer as a GUT pass."
+      ],
+      "assertions": [
+        "GUT contributes one readable countdown beside/over the correct dead portrait at both tested scales, standalone and co-installed. Its countdown advances once, disappears on return and never appears for a living or only-disabled teammate. The second mod must not silently replace or break GUT's draw path.",
+        "Kill a bot via API; assert GUT timer widget for that slot is visible, value decreases, removed on respawn, absent for alive/disabled; position relative to portrait node."
+      ],
+      "pass_closes": true
+    }
+  ],
+  "source": {
+    "card_comment_id": 6591474313,
+    "card_date": "2026-11-02T23:49:58Z",
+    "ledger": "D4_ledger.tsv"
+  }
+}

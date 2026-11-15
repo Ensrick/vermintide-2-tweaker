@@ -4,7 +4,7 @@ local _anim_picker = mod:dofile("scripts/mods/character_weapon_variants/cwv_dev_
 return {
 	name = "Character Weapon Variants",
 	description = mod:localize("mod_description"),
-	is_togglable = true,
+	is_togglable = false,
 	custom_gui_textures = {
 		atlases = {
 			{
