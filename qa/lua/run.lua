@@ -440,6 +440,7 @@ local suites = {
     "test_cos_glow_badge_policy",
     "test_cos_item_grid_presentation",
     "test_cos_mod_lifecycle",
+    "test_cos_embedded_providers",
     "test_cos_glow_instance_policy",
     "test_cos_glow_surface_policy",
     "test_cos_glow_cim_bridge",

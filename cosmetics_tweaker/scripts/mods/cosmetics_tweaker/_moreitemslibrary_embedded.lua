@@ -40,6 +40,7 @@ if not mod then return end
 if _G._cos_mil_embed_owner then
     mod:info("[mil_embed] sibling embed (%s) already active; this copy stays dormant",
         tostring(_G._cos_mil_embed_owner))
+    mod._cos_mil_provider = { state = "sibling", owner = tostring(_G._cos_mil_embed_owner) }  -- WP-COS-05
     return
 end
 
@@ -53,6 +54,7 @@ do
         end
         if enabled then
             mod:info("[mil_embed] standalone MoreItemsLibrary is enabled; embed dormant")
+            mod._cos_mil_provider = { state = "standalone", owner = "MoreItemsLibrary" }  -- WP-COS-05
             return
         end
     end
@@ -60,6 +62,7 @@ end
 
 mod:info("[mil_embed] activating (no conflict detected)")
 _G._cos_mil_embed_owner = "cosmetics_tweaker"
+mod._cos_mil_provider = { state = "embedded", owner = "cosmetics_tweaker" }  -- WP-COS-05
 
 -- ============================================================
 -- Templates (ported from MoreItemsLibrary_templates.lua, MIT © Aussiemon 2022)
@@ -252,8 +255,11 @@ local function hook_backend_mirror()
         return backend_items
     end)
     backend_mirror_hooked = true
+    -- WP-COS-05: engine log receipt (mod:info is invisible with mod logging off).
+    pcall(printf, "[cos:mil] backend mirror hooked provider=embedded owner=cosmetics_tweaker")
     mod:info("[mil_embed] backend_mirror.get_all_inventory_items hooked")
 end
+mod._cos_mil_mirror_hooked = function() return backend_mirror_hooked end
 
 -- ============================================================
 -- Public API on cosmetics_tweaker's mod handle
