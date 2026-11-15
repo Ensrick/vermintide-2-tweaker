@@ -1,5 +1,21 @@
 # Weapon Tweaker Changelog
 
+## 0.12.344-beta (2026-11-14) -- Restore native weapons on disable (WP-WT-01) [not-started]
+
+- Disabling Weapon Tweaker in the mod options returns every managed weapon to
+  its vanilla owners: native careers (for example Ranger on the Dwarf axe) are
+  put back even when their toggle was off, and only cross-career additions are
+  removed. Ownership comes from the static native weapon catalog, never from
+  the live can_wield list.
+- While disabled, game state changes, the per-frame driver and option changes
+  no longer re-apply unlocks or balance edits (every hook, including the node
+  crash guard, is off then). The peer parity beacon keeps ticking.
+- Re-enabling re-seeds the master toggles, resyncs the rework masters and runs
+  the same apply pass as a state change.
+- Mirrored in Dev 0.12.345-dev. Host test `test_wt_lifecycle_disable`; rig case
+  `qa/runtime/wt/wp_wt_01_disable_restore.lua` is pending. No in-game
+  acceptance is claimed.
+
 ## 0.12.343-beta (2026-11-12) -- Reissue finite Flame Sword capture (#942) [not-started]
 
 - Reissue the prepared finite calculation capture under a fresh permanent
