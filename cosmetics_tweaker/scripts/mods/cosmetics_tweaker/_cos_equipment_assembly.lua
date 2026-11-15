@@ -291,7 +291,9 @@ function EquipmentAssembly.install(mod, deps)
                         local prev = result[hand_field]
                         local receiver = LA_BRIDGE.resolve_texture_receiver(
                             entry.armoury_key, prev, entry.authored_family)
-                        if receiver and _override_package_ready(receiver) then
+                        -- WP-COS-01: write only the two real hand keys (backend_utils.lua:144-146).
+                        if receiver and _override_package_ready(receiver)
+                                and (hand_field == "left_hand_unit" or hand_field == "right_hand_unit") then
                             result[hand_field] = receiver
                             _dbg("[husk-mesh-swap] MAGIC-RECEIVER wearer=%s hand=%s %s -> %s (armoury=%s)",
                                 tostring(_current_husk_wield.wearer_peer), tostring(hand_field),
@@ -314,7 +316,9 @@ function EquipmentAssembly.install(mod, deps)
                             -- compat with pre-v0.9.9.4 cache writes).
                             local hand_field = entry.hand_field or "left_hand_unit"
                             local prev = result[hand_field]
-                            result[hand_field] = la_unit
+                            if hand_field == "left_hand_unit" or hand_field == "right_hand_unit" then
+                                result[hand_field] = la_unit  -- WP-COS-01: real hand keys only
+                            end
                             _dbg("[husk-mesh-swap] APPLIED wearer=%s template=%s %s %s -> %s (armoury=%s)",
                                 tostring(_current_husk_wield.wearer_peer), tostring(template),
                                 tostring(hand_field),
