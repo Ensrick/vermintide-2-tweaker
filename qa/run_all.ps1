@@ -149,6 +149,11 @@ $script:qaScopeWtHistory = @(
     'qa/wt_history_freshness_scope.ps1', 'qa/fixtures/wt_history/',
     'qa/run_all.ps1', 'qa/run_selftests.ps1', 'tools/hooks/pre-commit.ps1'
 )
+# WP-H-13: rig test scripts and plans, the stub and checker they are read with,
+# and the checker's fixtures.
+$script:qaScopeRuntimeScripts = @(
+    'qa/runtime/', 'qa/check_runtime_scripts.ps1', 'qa/_test_fixtures/runtime_scripts/'
+)
 function Test-QaScope {
     param(
         [Parameter(Mandatory, Position = 0)][string[]]$Prefixes,
@@ -500,6 +505,9 @@ Run-Check "check_lua_parse"                    { & (Join-Path $here "check_lua_p
 # Keep this before the Quick return: it is deliberately part of both fast local
 # feedback and the full CI gate (issue #544).
 Run-Check "lua_unit_tests"                    { & (Join-Path $here "check_lua_unit_tests.ps1")               -Quiet:$Quiet }
+# WP-H-13: a malformed rig test script or plan fails here in seconds, not in a
+# rig run. Blocking, scoped to qa/runtime/** (and its own checker and fixtures).
+Run-ScopedCheck $script:qaScopeRuntimeScripts "check_runtime_scripts" { & (Join-Path $here "check_runtime_scripts.ps1") -Quiet:$Quiet } -Policy 'Blocking'
 
 if ($Quick) {
     Write-Host "Quick mode - selected checks finished; skipping localization, stale-docs, file-sizes, advisory luacheck." -ForegroundColor DarkGray
