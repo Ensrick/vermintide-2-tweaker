@@ -36,7 +36,7 @@ mod._cim959_accessory_property_policy = mod:dofile(
 local _BULK_ACCESSORY_CRAFT = mod:dofile("scripts/mods/crafting_in_modded_dev/_cim_bulk_accessory_craft")
 _MEM_PROBE_T0_CIMD = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 
-local MOD_VERSION = "0.8.151-dev"
+local MOD_VERSION = "0.8.152-dev"
 local _bootstrap = mod:dofile(
     "scripts/mods/crafting_in_modded_dev/_cim_bootstrap_runtime")({
         mod = mod,
@@ -919,7 +919,8 @@ local function _ensure_item_adventure_visible(item_key, career_name)
     end
 end
 
-local function _athanor_inject_item(weapon_data, backend_id)
+mod:dofile("scripts/mods/crafting_in_modded_dev/_cim_restore_pass")({ mod = mod, print_line = printf })
+local function _athanor_inject_item(weapon_data, backend_id, options)
     local backend_mirror = Managers.backend and Managers.backend:get_backend_mirror()
     if not backend_mirror then return nil, "backend mirror not ready" end
 
@@ -963,28 +964,15 @@ local function _athanor_inject_item(weapon_data, backend_id)
         encoder, cjson_mod and cjson_mod.decode)
     if not item then return nil, payload_err end
 
-    local function refresh_backend()
-        local backend = Managers and Managers.backend
-        if not backend then return false, "backend_unavailable" end
-        if type(backend.dirtify_interfaces) == "function" then
-            backend:dirtify_interfaces()
-        end
-        if type(backend.get_interface) ~= "function" then
-            return false, "items_interface_unavailable"
-        end
-        local items_iface = backend:get_interface("items")
-        if type(items_iface) ~= "table"
-                or type(items_iface._refresh) ~= "function" then
-            return false, "items_refresh_unavailable"
-        end
-        items_iface:_refresh()
-        return true
-    end
-    local added, add_error, ownership_token, rollback =
+    local new_ids = type(options) == "table" and options.restore and rawget(_G, "PlayerData") and PlayerData.new_item_ids
+    local was_new = type(new_ids) == "table" and new_ids[backend_id] ~= nil
+    local function refresh_backend() return mod._cim_refresh_backend_items() end
+    local added, add_error, ownership_token, rollback, warning =
         contract.inject_and_refresh_mirror_item(backend_mirror, backend_id,
-            item, Application.guid, mirror_record, refresh_backend)
+            item, Application.guid, mirror_record, refresh_backend, options)
     if not added then return nil, add_error end
-    return backend_id, nil, ownership_token, rollback
+    if type(options) == "table" and options.restore then mod._cim_note_restored(backend_id, was_new) end
+    return backend_id, nil, ownership_token, rollback, warning
 end
 
 local _DIRECT_CRAFT_OWNER = mod:dofile("scripts/mods/crafting_in_modded_dev/_cim_direct_craft_owner")({ mod = mod, contract = mod._cim_synthetic_item_contract })
@@ -1063,7 +1051,8 @@ local _pending_inject = {}
 -- here. `mod._cim_restore_failures` feeds issue1654_saved_crafts_restored.
 mod._cim_restore_failures = mod._cim_restore_failures or {}
 local _restore_warned = {}
-local function _note_restore_result(bid, w, ok, err)
+local function _note_restore_result(bid, w, ok, err, warning)
+    if ok and warning then mod._cim_note_restore_warning(bid, w, warning) end
     if ok then mod._cim_restore_failures[bid] = nil; return end
     local reason = tostring(err)
     mod._cim_restore_failures[bid] = reason
@@ -1078,7 +1067,7 @@ local function _note_restore_result(bid, w, ok, err)
 end
 
 _athanor_inject_all = function()
-    local count, skipped = 0, 0
+    local count, skipped, injected, kept = 0, 0, 0, 0
     _pending_inject = {}
     for bid, w in pairs(_forge_state.get_forged_weapons()) do
         if w.via_mirror then
@@ -1106,10 +1095,10 @@ _athanor_inject_all = function()
                         "occupied:" .. tostring(exact_reason))
                 end
             else
-                local ok, err = _athanor_inject_item(w, bid)
-                _note_restore_result(bid, w, ok, err)
+                local ok, err, _, _, warning = _athanor_inject_item(w, bid, { restore = true, defer_refresh = true })
+                _note_restore_result(bid, w, ok, err, warning)
                 if ok then
-                    count = count + 1
+                    count, injected, kept = count + 1, injected + 1, kept + (warning and 1 or 0)
                 else
                     skipped = skipped + 1
                     _pending_inject[bid] = w
@@ -1118,6 +1107,8 @@ _athanor_inject_all = function()
             end
         end
     end
+    if injected > 0 then pcall(mod._cim_refresh_backend_items) end
+    pcall(printf, "[cim:restore] saved=%d present=%d kept_with_warning=%d failed=%d", count + skipped, count, kept, skipped)
     if count > 0 then mod:info("Restored %d crafted weapons (mirror path)", count) end
     if skipped > 0 then
         -- "Ignore items from inactive mods" routes this to the log instead of
@@ -1131,15 +1122,17 @@ end
 -- on game-state changes. Cheap when `_pending_inject` is empty.
 local function _athanor_retry_pending()
     if not next(_pending_inject) then return end
-    local recovered = 0
+    local recovered, kept, failed = 0, 0, 0
     for bid, w in pairs(_pending_inject) do
-        local ok, err = _athanor_inject_item(w, bid)
-        _note_restore_result(bid, w, ok, err)
+        local ok, err, _, _, warning = _athanor_inject_item(w, bid, { restore = true, defer_refresh = true })
+        _note_restore_result(bid, w, ok, err, warning)
         if ok then
             _pending_inject[bid] = nil
-            recovered = recovered + 1
-        end
+            recovered, kept = recovered + 1, kept + (warning and 1 or 0)
+        else failed = failed + 1 end
     end
+    if recovered > 0 then pcall(mod._cim_refresh_backend_items) end
+    pcall(printf, "[cim:restore] saved=%d present=%d kept_with_warning=%d failed=%d", recovered + failed, recovered, kept, failed)
     if recovered > 0 then
         local _msg = string.format("[cim] Re-injected %d previously-deferred craft(s)", recovered)
         if mod:get("ignore_unloadable_items") then mod:info(_msg) else mod:echo(_msg) end

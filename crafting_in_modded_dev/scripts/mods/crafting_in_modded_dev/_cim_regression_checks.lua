@@ -466,6 +466,24 @@ _rt_register("issue1654_saved_crafts_restored", function()
         return #missing .. " saved craft(s) missing from inventory: "
             .. table.concat(missing, "; ")
     end
+    -- WP-CIM-04: a restore passes skip_mark_as_new, so it must never add an id
+    -- to PlayerData.new_item_ids (item_helper.lua:128-158). An id that already
+    -- carried the persisted marker before the restore is not counted.
+    local player_data = rawget(_G, "PlayerData")
+    local new_ids = type(player_data) == "table" and player_data.new_item_ids
+    if type(new_ids) == "table" then
+        local marked = {}
+        for bid, info in pairs(mod._cim_restored_ids or {}) do
+            if new_ids[bid] ~= nil and not (type(info) == "table" and info.was_new) then
+                marked[#marked + 1] = tostring(bid)
+            end
+        end
+        if #marked > 0 then
+            table.sort(marked)
+            return #marked .. " restored craft(s) marked as new by the restore: "
+                .. table.concat(marked, ", ")
+        end
+    end
     if checked == 0 then return "skip: no restorable saved crafts" end
 end)
 
