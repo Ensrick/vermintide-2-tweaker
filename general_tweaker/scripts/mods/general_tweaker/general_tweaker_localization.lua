@@ -348,6 +348,8 @@ return {
     gt_lobby_manifest_failnotify_enabled_tooltip = { en = "When you fail to join a modded host over a mod mismatch, replace the generic error with a list of the mods you are missing plus a button to open the Workshop. Falls back to the normal error if the host is not sharing its mod list." },
 
     -- Loose lobby options (A->Z by display label).
+    gt_host_allow_client_requests = { en = "Allow Client Requests" },
+    gt_host_allow_client_requests_tooltip = { en = "When you host, other players running this mod may ask your game to win, fail or restart the level, respawn them, honour their godmode, and spawn or clear enemies. Off by default." },
     allow_duplicate_careers = { en = "Allow Duplicate Careers" },
     allow_duplicate_careers_tooltip = { en = "More than one player can pick the same hero and career in the same lobby." },
 
