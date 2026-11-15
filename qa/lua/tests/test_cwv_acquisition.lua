@@ -2,6 +2,30 @@ return function(H, repo_root)
     local helper = dofile(repo_root
         .. "/character_weapon_variants/scripts/mods/character_weapon_variants/_cwv_acquisition.lua")
 
+    -- WP-CIM-07 (#402, #1688): the pure "did CWV create this backend id"
+    -- predicate behind CWV's official loadout guard. CWV mints
+    -- `<cwv item key>_NNN` (blacksmith_seed_id, legacy_auto_grant_ids; _000 is
+    -- the collision fallback) and cim crafts of CWV keys share the shape.
+    H.test("CWV backend id predicate accepts only CWV-minted id shapes", function()
+        H.equal(type(helper.is_cwv_backend_id), "function")
+        for _, id in ipairs({
+            "cwv_es_musket_old_001", "cwv_es_javelin_002", "cwv_one_000",
+            "cwv_dr_dawi_mace_shield_123",
+        }) do
+            H.equal(helper.is_cwv_backend_id(id), true, id)
+        end
+        for _, id in ipairs({
+            "A1B2C3D4E5F60708", "86741005-7eb6-4e01-b147-a2cf84735533",
+            "woc_blightreaper_001", "es_2h_sword_001", "cwv_one_uuid",
+            "cwv_one_1", "cwv_001", "xcwv_one_001", "",
+        }) do
+            H.equal(helper.is_cwv_backend_id(id), false, id)
+        end
+        H.equal(helper.is_cwv_backend_id(nil), false)
+        H.equal(helper.is_cwv_backend_id(17), false)
+        H.equal(helper.is_cwv_backend_id({}), false)
+    end)
+
     H.test("CWV migration removes only authored legacy auto-grants", function()
         local ids = helper.legacy_auto_grant_ids({
             { item_key = "cwv_one" },
