@@ -120,6 +120,7 @@ local suites = {
     "test_et_issue1497_local_host_fence",
     "test_et_pacing_tick_guard",
     "test_rt_harness_context_absent",
+    "test_rig_driver",
     "test_event_high_intensity_diagnostic",
     "test_event_mission_allowlist",
     "test_event_curse_join_policy",
