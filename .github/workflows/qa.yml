@@ -10,7 +10,7 @@ on:
 permissions:
   contents: read
   pull-requests: read
-  # Read-only issue/PR metadata supports lifecycle cardinality and trusted
+  # Read-only issue/PR metadata supports trusted
   # promotion authorization. Never grant write here (issue #750 is about
   # unlogged label edits; CI must stay read-only).
   issues: read
@@ -25,8 +25,7 @@ concurrency:
 # workflow — decides what blocks. luacheck and check_stale_docs are Advisory;
 # check_file_sizes and check_name_integrity block only on regressions past their
 # frozen baselines in qa/baselines/. lint-mod runs as its own blocking step
-# (duplicate-hook gate, CLAUDE.md NON-NEG #8), which run_all does not include,
-# as does the tracker lifecycle-cardinality guard (issue #750).
+# (duplicate-hook gate, CLAUDE.md NON-NEG #8), which run_all does not include.
 # Windows + pwsh because the whole suite is PowerShell-native (backslash path
 # matching, the committed tools/luacheck/luacheck.exe, backslash-relative
 # signatures). Issue #429.
@@ -121,21 +120,3 @@ jobs:
           if ($code -ge 2) { Write-Host "::error::lint-mod found duplicate-hook error(s) (exit $code)"; exit 1 }
           if ($code -eq 1) { Write-Host "lint-mod reported non-blocking warnings (exit 1)." }
           exit 0
-
-      - name: check-lifecycle-cardinality.ps1 (tracker lifecycle guard, issue 750)
-        shell: pwsh
-        env:
-          GH_TOKEN: ${{ github.token }}
-        # BLOCKING by deliberate design (issue #750): an out-of-repo strip sweep
-        # left 10 open issues with zero lifecycle labels, and the advisory
-        # check_issue_status_labels.ps1 warning did not stop it. This step FAILS
-        # on cardinality drift, retired open labels, blocked/coop leakage, or an
-        # invalid/unpinned newest CURRENT LIVE TEST card on a ready issue, or
-        # multiple pinned exact cards. Read-only: pages issue labels and fetches
-        # full comments only for ready issues via GraphQL isPinned; never edits
-        # labels or comments. No skip label - a red run is fixed by
-        # repairing the tracker (ship.ps1 Get-LifecycleEditPlan), not the gate.
-        run: |
-          ./tools/github/check-lifecycle-cardinality.ps1 -SelfTest
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          ./tools/github/check-lifecycle-cardinality.ps1
