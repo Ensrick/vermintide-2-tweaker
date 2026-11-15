@@ -30,9 +30,9 @@ local function request_contains(request, needle)
     if type(attributes) ~= "table" then return false end
     -- The card's check reads hero_attributes.characters_data; every encoded
     -- attribute is scanned so the vs_characters_data key is covered too.
-    for _, value in pairs(attributes) do
+    for key, value in pairs(attributes) do
         if tostring(value):find(needle, 1, true) then
-            return true
+            return true, key, tostring(value)
         end
     end
     return false
@@ -109,12 +109,17 @@ return {
             career_name = career,
         }, bid, { raw_item_key = key })
         state.bid = bid
-        T.require(crafted ~= false and rawget(mirror._inventory_items, bid) ~= nil,
-            "craft injected: " .. tostring(reason))
+        -- The driver has no cleanup hook and T.require ends the case, so undo
+        -- the setup before any precondition that can fail after a mutation.
+        local injected = crafted ~= false and rawget(mirror._inventory_items, bid) ~= nil
+        if not injected then cleanup() end
+        T.require(injected, "craft injected: " .. tostring(reason))
 
         T.step("equip the craft")
         items:set_loadout_item(bid, career, SLOT)
-        T.require(mirror._career_data[career][index][SLOT] == bid, "craft equipped in _career_data")
+        local equipped = mirror._career_data[career][index][SLOT] == bid
+        if not equipped then cleanup() end
+        T.require(equipped, "craft equipped in _career_data")
 
         T.step("record updateHeroAttributes requests")
         local queue = mirror._request_queue
@@ -125,13 +130,11 @@ return {
         local original_enqueue = queue.enqueue
         queue.enqueue = function(self, request, ...)
             if type(request) == "table" and request.FunctionName == "updateHeroAttributes" then
-                local carries = request_contains(request, bid)
+                local carries, key, text = request_contains(request, bid)
                 recorded[#recorded + 1] = carries
                 if carries then
                     -- Never forward a leaking request to the backend.
-                    leaked[#leaked + 1] = tostring(request.FunctionParameter
-                        and request.FunctionParameter.hero_attributes
-                        and request.FunctionParameter.hero_attributes.characters_data)
+                    leaked[#leaked + 1] = tostring(key) .. "=" .. text:sub(1, 4000)
                     return nil
                 end
             end
@@ -154,9 +157,9 @@ return {
         end
         T.expect(#leaked == 0, "no updateHeroAttributes request contained the crafted id")
         T.expect(mirror._career_data[career][index][SLOT] == bid, "craft still equipped locally")
-        T.expect_rt(MOD_ID, "issue402_career_commit_guard")
 
         cleanup()
+        T.expect_rt(MOD_ID, "issue402_career_commit_guard")
     end,
 
     cleanup = function()
