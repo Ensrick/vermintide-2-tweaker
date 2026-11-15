@@ -14,10 +14,13 @@
 -- T.kill, T.teleport, T.invincible, T.end_level and T.return_to_keep; each case's helper changes are undone
 -- when it ends (run_cleanups). Engine calls that take a unit run in the main update through T.main, never inside
 -- the case coroutine (they fail there: "Attempting get_data with reference from another lua state").
+--
+-- 0.4.5 (WP-H-03): T.cmd runs the command in the main update; every "  <VERDICT>: <check>" row a regression
+-- suite echoes is kept per mod for T.expect_rt; tools/harness/Parse-Sweep.ps1 turns the OUT lines into sweep.json.
 
 local plan, nonce = ...
 
-local DRIVER_VERSION = "0.4.4"
+local DRIVER_VERSION = "0.4.5"
 local driver = {}
 
 local function find_mod(name)
@@ -81,6 +84,7 @@ local S = {
 	main_jobs = {},
 	started_quit = false,
 	rt_capture = nil,
+	rt_results = {},
 	keep_ready = false,
 	shared = {},
 	om_snapshot = nil,
@@ -578,24 +582,52 @@ local function new_T(case)
 		end, timeout or 240, "back in the keep")
 	end
 
-	-- Runs a mod chat command. Returns the lines the command printed through VMF echo/info/warning/error.
+	-- Runs a mod chat command in the main update (T.main: a regression suite's checks touch units) and returns the
+	-- lines the command printed through VMF echo/info/warning/error. Regression rows it prints ("  PASS: <check>")
+	-- are kept for T.expect_rt for the rest of the boot.
 	function T.cmd(name, ...)
 		local vmf = find_mod("VMF")
-		local lines = {}
 
 		T.require(vmf and vmf.run_command, "VMF.run_command available")
 
-		S.rt_capture = lines
+		local args = { n = select("#", ...), ... }
+		local lines, ok, err = T.main(function ()
+			local captured = {}
 
-		local ok, err = pcall(vmf.run_command, name, ...)
+			S.rt_capture = captured
 
-		S.rt_capture = nil
+			local ran, why = pcall(vmf.run_command, name, unpack(args, 1, args.n))
+
+			S.rt_capture = nil
+
+			return captured, ran, why
+		end)
 
 		if not ok then
 			record("ASSERT", false, "command /" .. tostring(name) .. " raised", " got=" .. q(err))
 		end
 
 		return lines
+	end
+
+	-- WP-H-03: a named in-mod regression check passed in this boot. Reads the rows that T.cmd captured from the
+	-- mod's /<mod>_regression_test (run it earlier in the boot, e.g. with qa/runtime/_rig/sweep_regression.lua).
+	-- PASS and XPASS pass; FAIL, XFAIL and BAD-SHAPE fail; SKIP or a missing suite or check is INCONCLUSIVE.
+	function T.expect_rt(mod_id, check_name)
+		local suite = S.rt_results[mod_id]
+
+		T.require(suite ~= nil, "regression suite of " .. tostring(mod_id) .. " ran earlier in this boot")
+
+		local row = suite[check_name]
+
+		T.require(row ~= nil, "check " .. tostring(check_name) .. " reported by " .. tostring(mod_id))
+		T.require(row.verdict ~= "SKIP", "check " .. tostring(check_name) .. " not skipped (" .. tostring(row.detail) .. ")")
+
+		local ok = row.verdict == "PASS" or row.verdict == "XPASS"
+
+		record("ASSERT", ok, "rt " .. tostring(mod_id) .. " " .. tostring(check_name), " got=" .. q(row.verdict) .. (row.detail ~= "" and (" detail=" .. q(row.detail)) or ""))
+
+		return ok
 	end
 
 	-- A copy of what the backend write shield did so far (counts only; see install_shield).
@@ -660,6 +692,17 @@ local function install_capture()
 					capture[#capture + 1] = text
 
 					out("OUT mod=%s via=%s text=%s", name, method, q(text))
+
+					-- WP-H-03: the row every runner echoes, "  <VERDICT>: <check>[ -- <detail>]"
+					-- (e.g. weapon_tweaker/scripts/mods/weapon_tweaker/_wt_regression.lua, chat command body)
+					local verdict, check, rest = text:match("^%s*(%u[%u%-]*): (%S+)(.*)$")
+
+					if method == "echo" and (verdict == "PASS" or verdict == "FAIL" or verdict == "SKIP" or verdict == "XFAIL" or verdict == "XPASS" or verdict == "BAD-SHAPE") then
+						local suite = S.rt_results[name] or {}
+
+						S.rt_results[name] = suite
+						suite[check] = { verdict = verdict, detail = (rest:gsub("^%s*%-%-%s*", "")) }
+					end
 				end
 
 				return original(self, message, ...)
