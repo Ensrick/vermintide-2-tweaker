@@ -12,7 +12,7 @@
 
 local plan, nonce = ...
 
-local DRIVER_VERSION = "0.4.2"
+local DRIVER_VERSION = "0.4.3"
 local driver = {}
 
 local function find_mod(name)
@@ -75,6 +75,22 @@ local S = {
 	current = nil,
 	started_quit = false,
 	rt_capture = nil,
+	keep_ready = false,
+	shared = {},
+	om_snapshot = nil,
+	-- what the backend write shield did; T.shield() hands cases a copy
+	shield = {
+		installed = false,
+		installed_at = -1,
+		career_checks = 0,
+		user_data_checks = 0,
+		keep_decorations_checks = 0,
+		blocked_characters_data = 0,
+		blocked_user_data = 0,
+		blocked_keep_decorations = 0,
+		saw_update_hero_attributes = 0,
+		saw_requests = 0,
+	},
 }
 
 -- The console log is written through a buffer, so the orchestrator cannot rely on it for liveness.
@@ -158,6 +174,31 @@ local function load_cases()
 		if not seen[arena] then
 			seen[arena] = true
 			S.arenas[#S.arenas + 1] = arena
+		end
+	end
+end
+
+-- Shared helpers (qa/runtime/_shared/*.lua) travel in the plan as hex text like the cases. Each returns a table.
+-- Cases get one with T.shared(name); the driver itself uses official_mirror for its end-of-run restore.
+local function load_shared()
+	local list = plan.shared or {}
+
+	for i = 1, #list do
+		local entry = list[i]
+		local id = tostring(entry.id or ("shared" .. i))
+		local chunk, err = loadstring(entry.hex and unhex(entry.hex) or "", "=shared:" .. id)
+		local ok, lib = false, err
+
+		if chunk then
+			ok, lib = pcall(chunk)
+		end
+
+		if ok and type(lib) == "table" then
+			S.shared[id] = lib
+
+			out("SHARED id=%s ok=true", id)
+		else
+			out("SHARED id=%s ok=false err=%s", id, q(lib))
 		end
 	end
 end
@@ -354,6 +395,26 @@ local function new_T(case)
 		return lines
 	end
 
+	-- A copy of what the backend write shield did so far (counts only; see install_shield).
+	function T.shield()
+		local copy = {}
+
+		for key, value in pairs(S.shield) do
+			copy[key] = value
+		end
+
+		return copy
+	end
+
+	-- A shared helper sent with the plan (qa/runtime/_shared/<name>.lua), or INCONCLUSIVE when it is missing.
+	function T.shared(name)
+		local lib = S.shared[name]
+
+		T.require(lib ~= nil, "shared helper " .. tostring(name) .. " delivered with the plan")
+
+		return lib
+	end
+
 	function T.commands(prefix)
 		local vmf = find_mod("VMF")
 		local names = {}
@@ -479,10 +540,85 @@ local function next_case_for(arena)
 end
 
 -- ---------------------------------------------------------------------------
+-- Official loadout rows: snapshot at KEEP READY, restore before quitting (WP-H-14 step 3)
+-- ---------------------------------------------------------------------------
+-- A second line of defence behind the write shield: whatever a case left changed in mirror._career_data is put
+-- back to the copy taken at KEEP READY before the game quits, so no change is left pending for a later commit.
+-- Raw field writes through OM.restore (qa/runtime/_shared/official_mirror.lua); never a commit. Off together
+-- with the shield (plan backend_shield = false).
+local function take_official_snapshot()
+	local OM = S.shared.official_mirror
+
+	if plan.backend_shield == false then
+		return
+	end
+
+	if not OM then
+		out("SHIELD snapshot skipped reason=%s", q("official_mirror helper not delivered with the plan"))
+
+		return
+	end
+
+	local ok, snap = pcall(OM.snapshot)
+
+	if ok and type(snap) == "table" then
+		local careers = 0
+
+		for _ in pairs(snap) do
+			careers = careers + 1
+		end
+
+		S.om_snapshot = snap
+
+		out("SHIELD snapshot careers=%d t=%.1f", careers, S.t)
+	else
+		out("SHIELD snapshot failed err=%s", q(snap))
+	end
+end
+
+local function restore_official_mirror()
+	local snap = S.om_snapshot
+	local OM = S.shared.official_mirror
+
+	if not snap or not OM then
+		return
+	end
+
+	local changed, extra = 0, 0
+	local ok, err = pcall(function ()
+		local rows_now = Managers.backend:get_backend_mirror()._career_data
+
+		for career, rows in pairs(snap) do
+			for index, row in pairs(rows) do
+				local now = rows_now[career] and rows_now[career][index] or {}
+
+				for key, value in pairs(row) do
+					if now[key] ~= value then
+						changed = changed + 1
+					end
+				end
+
+				for key in pairs(now) do
+					if row[key] == nil then
+						extra = extra + 1
+					end
+				end
+			end
+		end
+
+		OM.restore(snap)
+	end)
+
+	out("SHIELD restore changed_fields=%d extra_fields=%d ok=%s%s", changed, extra, tostring(ok), ok and "" or (" err=" .. q(err)))
+end
+
+-- ---------------------------------------------------------------------------
 -- End of run
 -- ---------------------------------------------------------------------------
 local function finish_run(reason)
 	local counts = { PASS = 0, FAIL = 0, ERROR = 0, TIMEOUT = 0, INCONCLUSIVE = 0, SKIP = 0 }
+
+	restore_official_mirror()
 
 	for i = 1, #S.cases do
 		local case = S.cases[i]
@@ -532,6 +668,10 @@ end
 -- 62-64; compared as a string at playfab_mirror_base.lua:2879-2883). The shield now answers that comparison
 -- with the acknowledged string, so a rig run sends no hero-attribute save at all, and prints how many
 -- painting slots it held back when a case changed the layout.
+--
+-- 0.4.3 (WP-H-14): the shield keeps counts that cases read with T.shield(), prints the function name of every
+-- other cloud-script request built after KEEP READY, and the driver puts the official career rows back to the
+-- KEEP READY snapshot before it quits (take_official_snapshot / restore_official_mirror above).
 local function shield_keep_decorations(mirror)
 	local ok, interface = pcall(function ()
 		local interfaces = rawget(Managers.backend, "_interfaces")
@@ -559,6 +699,8 @@ local function shield_keep_decorations(mirror)
 			return encode(self)
 		end
 
+		S.shield.keep_decorations_checks = S.shield.keep_decorations_checks + 1
+
 		pcall(function ()
 			local before, now, changed = cjson.decode(acked), self._keep_decorations, 0
 
@@ -572,6 +714,10 @@ local function shield_keep_decorations(mirror)
 				if now[slot] == nil then
 					changed = changed + 1
 				end
+			end
+
+			if changed > 0 then
+				S.shield.blocked_keep_decorations = S.shield.blocked_keep_decorations + 1
 			end
 
 			if changed > 0 and changed ~= S.shield_keep_changed then
@@ -614,9 +760,16 @@ local function install_shield()
 		local enqueue = queue.enqueue
 
 		rawset(queue, "_vt2_rig_watch", true)
+		-- Observe and pass through: key NAMES of updateHeroAttributes (never values), and after KEEP READY the
+		-- function name of every other cloud-script request the game builds
+		-- (the game itself logs "Enqueuing ExecuteCloudScript request" at playfab_request_queue.lua:49).
 		rawset(queue, "enqueue", function (self, request, ...)
 			pcall(function ()
-				if type(request) == "table" and request.FunctionName == "updateHeroAttributes" then
+				local name = type(request) == "table" and request.FunctionName
+
+				S.shield.saw_requests = S.shield.saw_requests + 1
+
+				if name == "updateHeroAttributes" then
 					local keys = {}
 					local attributes = type(request.FunctionParameter) == "table" and request.FunctionParameter.hero_attributes
 
@@ -628,7 +781,11 @@ local function install_shield()
 						table.sort(keys)
 					end
 
+					S.shield.saw_update_hero_attributes = S.shield.saw_update_hero_attributes + 1
+
 					out("SHIELD saw request=updateHeroAttributes keys=%s characters_key=%s", q(table.concat(keys, ",")), q(rawget(mirror, "_characters_data_key")))
+				elseif S.keep_ready and type(name) == "string" then
+					out("SHIELD saw request=%s case=%s", tostring(name), S.current and S.current.id or "-")
 				end
 			end)
 
@@ -638,6 +795,8 @@ local function install_shield()
 
 	rawset(mirror, "_check_career_data", function (_, careers_data, career_data_mirror)
 		local changed = 0
+
+		S.shield.career_checks = S.shield.career_checks + 1
 
 		pcall(function ()
 			for career, rows in pairs(careers_data) do
@@ -656,6 +815,8 @@ local function install_shield()
 		end)
 
 		if changed > 0 then
+			S.shield.blocked_characters_data = S.shield.blocked_characters_data + 1
+
 			out("SHIELD blocked=characters_data changed_fields=%d case=%s", changed, S.current and S.current.id or "-")
 		end
 
@@ -667,6 +828,8 @@ local function install_shield()
 
 		local changed = 0
 
+		S.shield.user_data_checks = S.shield.user_data_checks + 1
+
 		pcall(function ()
 			for key, value in pairs(self._user_data) do
 				if self._user_data_mirror[key] ~= value then
@@ -676,9 +839,14 @@ local function install_shield()
 		end)
 
 		if changed > 0 then
+			S.shield.blocked_user_data = S.shield.blocked_user_data + 1
+
 			out("SHIELD blocked=user_data changed_keys=%d case=%s", changed, S.current and S.current.id or "-")
 		end
 	end)
+
+	S.shield.installed = true
+	S.shield.installed_at = S.t
 
 	out("SHIELD installed t=%.1f state=%s", S.t, tostring(S.game_state))
 end
@@ -759,6 +927,8 @@ driver.update = function (_, dt)
 			install_capture()
 			install_shield()
 			out("KEEP READY level=%s t=%.1f", tostring(level_key()), S.t)
+			S.keep_ready = true
+			take_official_snapshot()
 			begin_arena(1)
 		end
 	elseif S.phase == "LOADING" then
@@ -816,6 +986,7 @@ end
 load_cases()
 
 out("RUN BEGIN driver=%s plan=%s cases=%d arenas=%s realm=modded", DRIVER_VERSION, q(plan.name or "?"), #S.cases, q(table.concat(S.arenas, ",")))
+load_shared()
 
 local ok_pid, pid = pcall(function ()
 	return Application.process_id and Application.process_id()

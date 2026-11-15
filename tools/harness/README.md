@@ -42,7 +42,7 @@ Offline tests (no game): `pwsh -File tools/harness/tests/GameProcess.Tests.ps1`,
 return { issue = 0, timeout = 60, run = function(T) T.step("x"); T.expect(cond, "label") end }
 ```
 
-The `T` helpers are listed in `docs/program/CONVENTIONS.md` section 3; the driver implements `step`, `note`, `wait`, `frames`, `wait_until`, `require`, `expect`, `expect_eq`, `expect_near`, `find_mod`, `local_player`, `local_hero`, `level_key`, `bots`, `ext`, `cmd`, `commands` today.
+The `T` helpers are listed in `docs/program/CONVENTIONS.md` section 3; the driver implements `step`, `note`, `wait`, `frames`, `wait_until`, `require`, `expect`, `expect_eq`, `expect_near`, `find_mod`, `local_player`, `local_hero`, `level_key`, `bots`, `ext`, `cmd`, `commands`, `shield`, `shared` today.
 
 ## Verdicts
 
@@ -60,8 +60,30 @@ The `T` helpers are listed in `docs/program/CONVENTIONS.md` section 3; the drive
 2. The log is not live (it is buffered). Liveness comes from the driver's `vt2_rig_progress` settings checkpoints. Trust verdicts only after `RUN END` and a clean exit. A clean modded-realm exit code is `0xFA730001`, not 0.
 3. Only FAIL means the product is wrong. Fix an ERROR or INCONCLUSIVE script; never retry a case until it turns green.
 4. The profile is a copy. The owner's save and settings are copied in before each run and never written back. A case that needs a loadout or setting creates it.
-5. The account is not a copy. A run signs in to the owner's real account. The driver's backend write shield (WP-H-14) must stay on.
+5. The account is not a copy. A run signs in to the owner's real account. The driver's backend write shield must stay on (see below).
 6. A script cannot edit a VMF setting table in place (`mod:get` returns a copy). Use the mod's own writer or command.
+
+## The real account: what a run does and never does (backend write shield, WP-H-14)
+
+The profile is isolated; the account is not. The modded realm signs in to the owner's real account.
+
+What a run does on the account, shield or not:
+- It signs in. The game's normal sign-in cloud scripts run exactly as when the owner starts the game; they happen at the title screen, before the backend mirror exists, so before the shield can go up.
+- It reads the account: inventory, loadouts, talents, keep paintings, quests.
+- Cloud-script requests the game builds after the shield is up are passed through unchanged. The driver names each one in the evidence (`SHIELD saw request=<name>` after `KEEP READY`; for `updateHeroAttributes` the key names, never values). The shield does not block them.
+- Statistics, weave data and weapon poses are not sent in the modded realm anyway: they sit behind `GameSettingsDevelopment.read_only_backend`, which the modded realm sets (`Vermintide-2-Source-Code/scripts/settings/game_settings_development.lua:49-52`; checked at `scripts/managers/backend_playfab/playfab_mirror_base.lua:2826`, `:2839`, `:2857`).
+
+What a run never does while the shield is on (driver 0.4.3, `install_shield`, on the live mirror instance only, from the first tick the mirror exists):
+- Send a career loadout or talent change: `_check_career_data` answers "not dirty" (`playfab_mirror_base.lua:2885`) and prints `SHIELD blocked=characters_data` with the number of changed fields.
+- Send user data: `_commit_user_data` sends nothing (`:2111`, `:2911`) and prints `SHIELD blocked=user_data`.
+- Send the keep painting layout: the layout comparison (`:2877-2883`) sees the acknowledged string; `SHIELD blocked=keep_decorations changed_slots=<n>` when a case changed it.
+- Call a commit function itself. The game's own commits still run and complete, so no caller waits for its callback.
+- Leave a changed official row behind: at `KEEP READY` the driver snapshots `mirror._career_data` with `qa/runtime/_shared/official_mirror.lua` and puts it back before it quits (`SHIELD restore changed_fields=<n>`).
+- Write the owner's local profile files (`isolation: OK` in every summary).
+
+`run.ps1` checks the log afterwards: any `Enqueuing ExecuteCloudScript request updateHeroAttributes` line or any `UpdateUserData` line from the game makes a passing run exit 1 and is listed in `summary.md` (`Read-HostLog.ps1`). `summary.json` also says whether `SHIELD installed` came before the first `_commit_internal`. Cases read the shield's counts with `T.shield()` and get shared helpers with `T.shared("official_mirror")`.
+
+A plan may set `backend_shield: false` only when its cases test commit behaviour itself, and then needs a `backend_shield_reason` (enforced by `qa/check_runtime_scripts.ps1`, WP-H-13). Never switch the shield off to make a case pass.
 
 ## Reading a run
 
