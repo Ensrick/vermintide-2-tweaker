@@ -134,7 +134,6 @@ return function(H, repo_root)
 
         H.test(stream.tag .. ": crossings are late-bound through mod._wt, published before the dofile", function()
             local publications = {
-                { field = "validate_attachment_sources", local_name = "_wt_validate_attachment_sources" },
                 { field = "scale_weapon_units", local_name = "_scale_weapon_units" },
                 { field = "resolve_grip_offset", local_name = "_resolve_grip_offset" },
                 { field = "offset_weapon_units", local_name = "_offset_weapon_units" },
@@ -142,6 +141,9 @@ return function(H, repo_root)
                 { field = "track_3p_rotation_units", local_name = "_wt569_track_3p_units" },
                 { field = "grip_offset_policy", local_name = "_wt_grip_offset_policy" },
             }
+            -- WP-WT-12: the dead pre-spawn validator crossing stays deleted.
+            H.equal(entry:find("validate_attachment_sources", 1, true), nil)
+            H.equal(owner:find("validate_attachment_sources", 1, true), nil)
             local dofile_at = entry:find(dofile_call, 1, true)
             for _, row in ipairs(publications) do
                 local publish_at = entry:find("mod._wt." .. row.field .. " ", 1, true)

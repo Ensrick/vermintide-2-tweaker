@@ -28,6 +28,8 @@ param(
     [string] $DriverFile = '',
     [string] $DriverId = '3839345856',
     [string] $SharedDir = '',                         # qa/runtime/_shared: every *.lua in it travels with the plan
+    [hashtable] $SlotSwaps = @{},                     # WP-H-07: real Workshop id -> rig slot id holding its local build
+    [hashtable] $ExpectVersions = @{},                # WP-H-07: VMF mod id -> staged MOD_VERSION the smoke case checks
     [switch] $KeepOwnerMods                           # no-plan experiments: leave the copied mod list as it is
 )
 $ErrorActionPreference = 'Stop'
@@ -73,6 +75,23 @@ $cfg = [regex]::Replace($cfg, '(?ms)^vt2_rig_progress = \{.*?^\}\n', '', 1)
 if ($planObj -or -not $KeepOwnerMods) {
     $wanted = @(); if ($planObj -and $planObj.mods) { $wanted = @($planObj.mods | ForEach-Object { [string]$_ }) }
     if ($planObj) { $wanted += $DriverId }
+    # WP-H-07 local builds: the slot takes the real mod's place in the load order (a copy of the real entry with the
+    # slot id, inserted right before it) and the real id is left disabled.
+    if ($planObj -and $SlotSwaps.Count) {
+        $entryOf = { param([string] $id) '(?m)^\t\{\n(?:\t\t[^\n]*\n)*?\t\tid = "' + $id + '"\n(?:\t\t[^\n]*\n)*?\t\}\n' }
+        foreach ($real in @($SlotSwaps.Keys)) {
+            $slotId = [string]$SlotSwaps[$real]
+            if ($real -notmatch '^\d+$' -or $slotId -notmatch '^\d+$') { throw "slot swap ids must be Workshop numbers: $real -> $slotId" }
+            $cfg = [regex]::Replace($cfg, (& $entryOf $slotId), '')
+            $m = [regex]::Match($cfg, (& $entryOf $real))
+            if ($m.Success) {
+                $copy = $m.Value -replace ('(?m)^\t\tid = "' + $real + '"$'), "`t`tid = `"$slotId`""
+                $copy = $copy -replace '(?m)^\t\tname = "[^"]*"$', "`t`tname = `"VT2 Rig Slot (local build of $real)`""
+                $cfg = $cfg.Insert($m.Index, $copy)
+            }
+        }
+        $wanted = @($wanted | ForEach-Object { if ($SlotSwaps.ContainsKey($_)) { [string]$SlotSwaps[$_] } else { $_ } })
+    }
     # Every plan mod and the driver need an entry in the mods array; add one at the end when missing (plan mods
     # first, the driver last). The game reports an entry whose folder Steam does not list as "was not found in
     # the workshop folder" (mod_manager.lua:297), which Read-HostLog.ps1 forbids by default (WP-H-02).
@@ -108,6 +127,15 @@ if ($planObj) {
     if ($planObj.arenas) { [void]$sb.Append("`tarenas = [`n"); foreach ($a in $planObj.arenas) { [void]$sb.Append("`t`t$(ConvertTo-SjsonString $a)`n") }; [void]$sb.Append("`t]`n") }
     # WP-H-02: the smoke case asserts every one of these VMF mod ids is loaded
     if ($planObj.PSObject.Properties['expect_mods'] -and $planObj.expect_mods) { [void]$sb.Append("`texpect_mods = [`n"); foreach ($e in $planObj.expect_mods) { [void]$sb.Append("`t`t$(ConvertTo-SjsonString ([string]$e))`n") }; [void]$sb.Append("`t]`n") }
+    # WP-H-07: the staged versions of local builds, keyed by VMF mod id
+    if ($ExpectVersions.Count) {
+        [void]$sb.Append("`texpect_versions = {`n")
+        foreach ($k in ($ExpectVersions.Keys | Sort-Object)) {
+            if ($k -notmatch '^[A-Za-z_][A-Za-z0-9_]*$') { throw "expect_versions key is not a mod id: $k" }
+            [void]$sb.Append("`t`t$k = $(ConvertTo-SjsonString ([string]$ExpectVersions[$k]))`n")
+        }
+        [void]$sb.Append("`t}`n")
+    }
     [void]$sb.Append("`tdriver_hex = `"$(ConvertTo-Hex $driverSource)`"`n")
     [void]$sb.Append("`tcases = [`n")
     foreach ($c in $planObj.cases) {

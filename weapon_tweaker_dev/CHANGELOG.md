@@ -1,5 +1,13 @@
 # Weapon Tweaker Changelog
 
+## 0.12.350-dev (2026-11-15) -- Mirror dead preview guard removal (WP-WT-12) [not-started]
+
+- Mirror public 0.12.349-beta: the never-running pre-spawn preview validator is
+  removed; `ENGINE_SURFACE.md` gains this stream's hook count (46: the public
+  44 plus the two Hold-Pose update hooks).
+- Runtime parity, Dev namespace and the friends-only overlay are unchanged.
+  No in-game acceptance is claimed.
+
 ## 0.12.349-dev (2026-11-15) -- Mirror swallowed-error counters (WP-WT-08) [not-started]
 
 - Mirror public 0.12.348-beta: safe_hook calls the hooked original once, and
@@ -1095,7 +1103,7 @@ Prefixed the cross-character weapon entries in the availability menu with `[unte
 ## 0.12.120-dev (2026-06-17) — Crash fix: universal attachment-node guard (Skullsplitter + tome on Kruber); remove Kruber Longbow zoom toggles
 
 ### Crash fix — `j_rightweaponcomponent11` engine-fatal on equip
-Reported 2026-06-17 (GUID 459bd95e): equipping **Skullsplitter + a tome on Kruber Mercenary** hard-crashed the hero-view weapon preview with `[Script Error] j_rightweaponcomponent11`. Root cause: `GearUtils.link_units` runs `Unit.node(source, link.source)` per attachment link (`gear_utils.lua:293-308`), and `Unit.node` is **engine-fatal on a missing node** (bypasses pcall). The tome sub-unit's linking maps its `j_page_nr*` nodes onto `j_rightweaponcomponent11-14`, which Kruber's body lacks in this cross-character context. The existing per-spawn guard (`_wt_validate_attachment_sources`) only covers the weapon's own `.third_person` linking; a sub-attachment carries its **own** flat linking table that never passes through that hook (confirmed via the two distinct table addresses in the crash locals).
+Reported 2026-06-17 (GUID 459bd95e): equipping **Skullsplitter + a tome on Kruber Mercenary** hard-crashed the hero-view weapon preview with `[Script Error] j_rightweaponcomponent11`. Root cause: `GearUtils.link_units` runs `Unit.node(source, link.source)` per attachment link (`gear_utils.lua:293-308`), and `Unit.node` is **engine-fatal on a missing node** (bypasses pcall). The tome sub-unit's linking maps its `j_page_nr*` nodes onto `j_rightweaponcomponent11-14`, which Kruber's body lacks in this cross-character context. The existing per-spawn guard (the pre-spawn attachment-source validator, removed in WP-WT-12) only covers the weapon's own `.third_person` linking; a sub-attachment carries its **own** flat linking table that never passes through that hook (confirmed via the two distinct table addresses in the crash locals).
 - **Fix:** new hook on `GearUtils.link_units` (the universal choke point — `GearUtils.link` calls it via the table) that **drops any link whose source/target node is absent** before the engine reads it. Purely subtractive — valid links (nodes present) are untouched, so it can't regress visibility (unlike the v0.12.112/.113 global-mutation bug that broke elf bows). Catches preview **and** in-mission, for every weapon/sub-attachment. `WT_LINK_UNITS_NODE_GUARD_MARKER`.
 - Filter logic factored into a pure, engine-free `mod._wt_link_filter` with a new `/wt_regression_test` check **`link_units_node_guard`** (drops missing-node links, keeps present ones, zero-copy on the all-present path).
 

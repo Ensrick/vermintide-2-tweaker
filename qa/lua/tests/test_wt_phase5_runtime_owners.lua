@@ -117,7 +117,11 @@ return function(H, repo_root)
             function mod:hook(_, method, fn) hooks[method] = fn end
             local owner = assert(loadfile(streams[1].root .. "_wt_cross_character_safety.lua"))()
                 .install(mod, { dbg = function() end, dbg_alert = function() end })
-            H.equal(type(owner.validate_attachment_sources), "function")
+            -- WP-WT-12: the dead pre-spawn validator stays deleted.
+            H.equal(owner.validate_attachment_sources, nil)
+            local safety_source = assert(io.open(streams[1].root .. "_wt_cross_character_safety.lua", "rb"))
+            local safety_text = safety_source:read("*a"); safety_source:close()
+            H.equal(safety_text:find("validate_attachment_sources", 1, true), nil)
             H.equal(type(hooks.anim_event_with_variable_float), "function")
             H.equal(type(hooks.link_units), "function")
 

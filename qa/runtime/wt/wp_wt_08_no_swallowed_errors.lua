@@ -8,6 +8,7 @@
 return {
 	card = "WP-WT-08",
 	issue = 0,
+	class = "R",
 	arena = "mission:military",
 	mods = { "wt" },
 	timeout = 150,
