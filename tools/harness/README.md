@@ -7,6 +7,7 @@ The rig lets an agent check mod behaviour against the running game with no human
 | Orchestrator | `run.ps1` (+ `GameProcess.cs`, `New-RigProfile.ps1`, `Resolve-Vt2Install.ps1`) | Finds the game through the Steam registry key, builds an isolated profile, starts the retail exe on a private desktop inside a kill-on-close job, watches it, collects evidence, proves the owner's profile was not touched |
 | Bootstrap | `bootstrap/vt2_rig_driver.mod` | The whole of private Workshop item `3839345856`. Inert unless the game runs in the modded realm, the command line carries `-vt2-test-run <nonce>` and the profile holds a plan with that nonce. Then it compiles the driver text from the plan. Never edit it: its bytes are what the item holds. The item's bundles were built from `docs/audits/2026-11-13_FORMAL_AUDIT/rig/bootstrap/package-src/` |
 | Driver | `driver/vt2_rig_driver.lua` | Sent as hex text in every plan. Walks boot to keep, runs the cases, prints evidence lines, saves results, quits |
+| Helper groups | `driver/lib/*.lua`, table `API.md` | Sent with every plan like the driver; each adds helpers to every case's `T` (`T.set`, `T.shot`, ...). `API.md` lists every helper, its status, the engine call it wraps and the plans that exercise it |
 | Subscribe | `steam-ugc.ps1 -ItemId <id>` | Subscribes and installs a Workshop item through the game's own `steam_api64.dll` (no browser, no GUI) |
 | Cases and plans | `qa/runtime/_rig/*.lua`, `qa/runtime/<mod>/issue_<N>_<slug>.lua`, `qa/runtime/plans/*.json` | Test scripts are Lua text; nothing is built or uploaded per script |
 
@@ -20,7 +21,7 @@ pwsh -NoProfile -File tools/harness/run.ps1 -Plan qa/runtime/plans/smoke-keep.js
 
 Exit code: 0 every case PASS; 1 at least one FAIL; 2 ERROR, TIMEOUT or INCONCLUSIVE, or the run did not complete; 3 the rig refused to start or isolation broke. It refuses when a Vermintide process exists, Steam is not running, free RAM is under 6 GiB, the bootstrap item is not installed, or another rig run holds the lock.
 
-Offline tests (no game): `pwsh -File tools/harness/tests/<name>.Tests.ps1` for `GameProcess`, `Profile`, `HostLog`, `FindRunLog`, `SmokePlan` and `Slots`, and `qa/lua/tests/test_rig_driver.lua` inside `pwsh -File qa/check_lua_unit_tests.ps1`. `pwsh -File qa/check_runtime_scripts.ps1` checks the shape of every case and plan in seconds (fields, file-name issue number, no engine access at the top level, every `T.<name>` in the stub `qa/runtime/_stub/T.lua`); it proves shape only, never that a case passes.
+Offline tests (no game): `pwsh -File tools/harness/tests/<name>.Tests.ps1` for `GameProcess`, `Profile`, `HostLog`, `FindRunLog`, `SmokePlan` and `Slots`, and `qa/lua/tests/test_rig_driver.lua` and `test_rig_api_*.lua` (simulated game: `qa/lua/tests/_rig_driver_env.lua`) inside `pwsh -File qa/check_lua_unit_tests.ps1`. `pwsh -File qa/check_runtime_scripts.ps1` checks the shape of every case and plan in seconds (fields, file-name issue number, no engine access at the top level, every `T.<name>` in the stub `qa/runtime/_stub/T.lua` and in `API.md`); it proves shape only, never that a case passes. `qa/runtime/plans/api-selftest.json` calls each available keep helper once in the game.
 
 ## Plan format
 
@@ -52,7 +53,7 @@ A case file returns a table:
 return { issue = 0, timeout = 60, run = function(T) T.step("x"); T.expect(cond, "label") end }
 ```
 
-The `T` helpers are listed in `docs/program/CONVENTIONS.md` section 3; the driver implements `step`, `note`, `wait`, `frames`, `wait_until`, `require`, `expect`, `expect_eq`, `expect_near`, `find_mod`, `local_player`, `local_hero`, `level_key`, `bots`, `ext`, `cmd`, `commands`, `shield`, `shared`, `main`, `spawn`, `kill`, `teleport`, `invincible`, `end_level`, `return_to_keep` today.
+Every `T` helper, available or planned, is a row of `tools/harness/API.md` (the case rules are `docs/program/CONVENTIONS.md` section 3). `T.set(mod_id, setting, value)` changes one mod option through the mod's own `set` with its `on_setting_changed` and puts the old value back when the case ends; `T.shot(label)` only records the request until WP-H-10.
 
 ## Arenas and mission helpers (WP-H-04)
 
@@ -71,6 +72,12 @@ Mission helpers. Each change is undone when the case ends, also after FAIL or ER
 | `T.return_to_keep([timeout])` | loads `inn_level` and waits until the keep is ready | as above |
 
 Use bots or these host-side calls as the actor; never OS input. Every helper above that passes a unit to the engine runs through `T.main`; do the same in a case for any engine call that takes a unit or an extension method that may touch one (e.g. `T.main(function() return buff_ext:has_buff_type(name) end)`). Plain table reads such as `HEALTH_ALIVE[unit]` are fine in the coroutine.
+
+## Regression sweep (WP-H-03)
+
+`qa/runtime/_rig/sweep_regression.lua` lists every chat command containing `regression_test` and runs each with `T.cmd`, two seconds apart. `T.cmd` runs the command in the main update (a suite's checks touch units), and the driver prints every VMF echo as `OUT mod=<VMF mod name> via=echo text="..."`. A plan with `"sweep": true` (`qa/runtime/plans/sweep-public.json`, `sweep-dev.json`, generated by `New-SmokePlan.ps1`) makes `run.ps1` call `Parse-Sweep.ps1`. It writes `sweep.json` (one row per check: suite, mod, check, verdict PASS/FAIL/SKIP, the runner's raw word, detail) and `sweep.md` into the run folder, and a FAIL row makes the run exit 1. Row and summary patterns live in `tools/harness/sweep-formats.psd1`; every runner today echoes `  <VERDICT>: <check>[ -- <detail>]`. After WP-T-01 the engine lines `[<prefix>:rt] <check> <VERDICT> <detail>` are read from the console log. XPASS and BAD-SHAPE count as FAIL, XFAIL as SKIP. A suite that printed nothing is a SKIP row, never a PASS; one whose command never returned is INCONCLUSIVE. Each suite's row count is compared with its own summary line.
+
+`T.expect_rt(mod_id, check)` asserts on a row captured earlier in the same boot (`mod_id` is the VMF mod name, e.g. `gt_dev`): PASS or XPASS passes, FAIL, XFAIL or BAD-SHAPE fails, and SKIP, an unknown check or a suite not run in this boot is INCONCLUSIVE. Run the sweep case (or `T.cmd("<mod>_regression_test")`) before it.
 
 ## Verdicts
 

@@ -1,0 +1,11 @@
+{
+  "name": "api-selftest",
+  "mods": ["1369573612"],
+  "timeout": 300,
+  "host_expect_log": ["SET RESTORE id=api-set mod=VMF setting=vt2_rig_api_selftest", "SHOT id=api-core n=1 label=\"api selftest still\" captured=false"],
+  "cases": [
+    { "id": "api-core", "arena": "keep", "file": "../_rig/api_core.lua" },
+    { "id": "api-set", "arena": "keep", "file": "../_rig/api_set.lua" },
+    { "id": "api-set-restored", "arena": "keep", "file": "../_rig/api_set_restored.lua" }
+  ]
+}
