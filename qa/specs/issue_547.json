@@ -1,0 +1,36 @@
+{
+  "schema": 1,
+  "issue": 547,
+  "class": "R",
+  "status": "draft",
+  "vp": null,
+  "arena": "unknown",
+  "mods": [
+    {
+      "dir": "gui_tweaker_dev",
+      "min_version": "0.2.290",
+      "settings": null
+    }
+  ],
+  "cases": [
+    {
+      "script": "",
+      "steps": [
+        "1. Enter HUD edit mode with `/edit_hud` or **Enter HUD Edit Mode**. Inspect boxes before dragging.",
+        "2. Include pivot-based **Buffs** or **Boss Health**, panel-based **Equipment**, plus representative text, icon and composite elements.",
+        "3. Drag toward every screen edge at two available resolutions or UI scales. Compare each hit/drag box with the visible element and its edge stop.",
+        "4. Save, exit edit mode, reopen it and compare saved positions; inspect an untouched element as a control."
+      ],
+      "assertions": [
+        "Hit areas and boxes surround actual rendered bounds, edge confinement uses those visible bounds, saved positions round-trip and untouched elements do not shift. Attach screenshots if any offset remains.",
+        "hud_drag_geometry_uses_render_bounds PASS; per element compare drag_geometry rect with the widget's scenegraph world rect at two UI scales; edge clamp."
+      ],
+      "pass_closes": true
+    }
+  ],
+  "source": {
+    "card_comment_id": 6591485880,
+    "card_date": "2026-11-02T23:50:41Z",
+    "ledger": "D4_ledger.tsv"
+  }
+}

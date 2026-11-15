@@ -1,0 +1,36 @@
+{
+  "schema": 1,
+  "issue": 1320,
+  "class": "R",
+  "status": "draft",
+  "vp": null,
+  "arena": "unknown",
+  "mods": [
+    {
+      "dir": "character_weapon_variants",
+      "min_version": "0.1.570-dev",
+      "settings": null
+    }
+  ],
+  "cases": [
+    {
+      "script": "",
+      "steps": [
+        "1. Refresh **Character Weapon Variants** from Steam Workshop and confirm the banner above. Workshop item `3716869446`, manifest `6878734095577181464`.",
+        "2. Equip the **Outrider Grenade Launcher** on Kruber, start any mission, and fire it at open ground. Watch the projectile in flight and where it lands.",
+        "3. Fire it five more times at short and long range against enemies and note the projectile every time.",
+        "4. Run `/cwv_regression_test`, exit the game normally, and attach the newest console log."
+      ],
+      "assertions": [
+        "Every shot flies as a grenade, never the Trollhammer torpedo, and the explosion happens where the grenade lands. `PASS: issue1320_outrider_projectile_unit_and_wire` in the regression run, and no Character Weapon Variants script error while equipping or firing.",
+        "Fire the Outrider; capture the spawned projectile unit path; equals the authored grenade unit, not the torpedo; issue1320 check passes on the live build."
+      ],
+      "pass_closes": true
+    }
+  ],
+  "source": {
+    "card_comment_id": 5842502271,
+    "card_date": "2026-09-26T02:46:46Z",
+    "ledger": "D1_ledger.tsv"
+  }
+}

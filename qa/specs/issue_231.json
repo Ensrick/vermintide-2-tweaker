@@ -1,0 +1,39 @@
+{
+  "schema": 1,
+  "issue": 231,
+  "class": "R",
+  "status": "draft",
+  "vp": null,
+  "arena": "unknown",
+  "mods": [
+    {
+      "dir": "gui_tweaker_dev",
+      "min_version": "0.2.290",
+      "settings": null
+    }
+  ],
+  "cases": [
+    {
+      "script": "",
+      "steps": [
+        "1. In **Loadouts**, leave **Use non-modded loadouts** off. With six or fewer rows, confirm Roman-numeral buttons and no page controls.",
+        "2. Add loadouts until **+** greys out. From the seventh row onward, check **<**, **>** and the **Page** counter; at the cap, the last page must read **Page 5/5** with XXV–XXX.",
+        "3. Use the buttons and Left/Right keys to page. Select XIII on page 3, change a weapon, visit I, then return to XIII; confirm its equipment and selection frame return.",
+        "4. On a newly created disposable row beyond VI, check the context-menu numeral and bot designation, then restore the previous designation. Delete only a disposable row created in this test through its held-delete menu; confirm counts/page remain valid. Close/reopen with XIII selected and confirm page 3 is restored.",
+        "5. If available, use a controller bumper from VI to VII and confirm automatic paging.",
+        "6. Turn **Use non-modded loadouts** on: expect at most six vanilla icon buttons and no paging. Turn it off to recover the modded pages. Enter the Official Realm and inspect its unchanged six-slot bar without editing it.",
+        "7. If the Versus hero/loadout menu is available, inspect it without queuing a match: it must retain at most six vanilla slots and no GUT pages. Return to Modded Adventure and confirm its pages remain intact. Record an unavailable Versus menu as unexercised, not passed."
+      ],
+      "assertions": [
+        "Modded Adventure supports 30 independent loadouts in five pages of six, correct selection/equipment persistence, context menus, bot designation, deletion and tested keyboard/controller paging. Official, read-only and Versus selectors remain capped at six vanilla buttons without page controls.",
+        "issue231_loadout_paging PASS; script: add rows to 30, select XIII, equip, page away/back, assert store row and selected_index; readonly/official mode stays at six."
+      ],
+      "pass_closes": true
+    }
+  ],
+  "source": {
+    "card_comment_id": 6591461795,
+    "card_date": "2026-11-02T23:49:09Z",
+    "ledger": "D4_ledger.tsv"
+  }
+}

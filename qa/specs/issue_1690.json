@@ -1,0 +1,30 @@
+{
+  "schema": 1,
+  "issue": 1690,
+  "class": "R",
+  "status": "draft",
+  "vp": null,
+  "arena": "unknown",
+  "mods": [
+    {
+      "dir": "cosmetics_tweaker",
+      "min_version": "",
+      "settings": null
+    }
+  ],
+  "cases": [
+    {
+      "script": "",
+      "steps": [],
+      "assertions": [
+        "Cosmetics without CIM: run the Apply transaction on an owned skin, assert backend item skin changed and persisted; DLC-locked skin denied; official realm data untouched."
+      ],
+      "pass_closes": true
+    }
+  ],
+  "source": {
+    "card_comment_id": null,
+    "card_date": null,
+    "ledger": "D2_ledger.tsv"
+  }
+}

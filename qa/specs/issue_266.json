@@ -1,0 +1,35 @@
+{
+  "schema": 1,
+  "issue": 266,
+  "class": "R",
+  "status": "draft",
+  "vp": null,
+  "arena": "unknown",
+  "mods": [
+    {
+      "dir": "cosmetics_tweaker",
+      "min_version": "0.9.230-dev",
+      "settings": null
+    }
+  ],
+  "cases": [
+    {
+      "script": "",
+      "steps": [
+        "1. With Loremaster's Armoury enabled, inspect every Kruber shield-bearing weapon family.",
+        "2. Preview and Apply representative vanilla and Loremaster shields, including the final Spear and Shield and Mace and Shield choices.",
+        "3. Inspect customization, inventory preview, and owner first- and third-person views, then run `/cos_regression_test`."
+      ],
+      "assertions": [
+        "Every authored shield is available on its compatible family and uses its own model and texture. No Loremaster texture wraps over the currently equipped base shield, and the primary weapon stays independent.",
+        "With LA loaded: enumerate offhand pools of the 7 Kruber shield families, assert non-empty and equal armoury-key sets per UV family; catalogue check passes."
+      ],
+      "pass_closes": true
+    }
+  ],
+  "source": {
+    "card_comment_id": 5165069995,
+    "card_date": "2026-08-03T10:14:46Z",
+    "ledger": "D2_ledger.tsv"
+  }
+}

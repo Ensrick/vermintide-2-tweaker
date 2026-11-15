@@ -1,0 +1,35 @@
+{
+  "schema": 1,
+  "issue": 251,
+  "class": "R",
+  "status": "draft",
+  "vp": null,
+  "arena": "unknown",
+  "mods": [
+    {
+      "dir": "chaos_wastes_tweaker_dev",
+      "min_version": "0.7.354-dev",
+      "settings": null
+    }
+  ],
+  "cases": [
+    {
+      "script": "",
+      "steps": [
+        "1. Enable **Inject Adventure Missions into CW Map Pool**, select Cataclysm, and load Blood in the Darkness inside a Chaos Wastes expedition.",
+        "2. Play to the first Tome location and note whether a Chest of Trials is physically present there.",
+        "3. Exit normally and attach the newest console log. The two log rows to check are named under Expected below."
+      ],
+      "assertions": [
+        "this is the pass condition.",
+        "Load injected Blood in the Darkness with cap 3; dump book-spawner census; assert a cursed-chest unit within 2 m of the first tome spawner."
+      ],
+      "pass_closes": true
+    }
+  ],
+  "source": {
+    "card_comment_id": 5165067572,
+    "card_date": "2026-08-03T10:14:32Z",
+    "ledger": "D3_ledger.tsv"
+  }
+}

@@ -1,0 +1,46 @@
+{
+  "schema": 1,
+  "issue": 476,
+  "class": "C",
+  "status": "draft",
+  "vp": null,
+  "arena": "unknown",
+  "mods": [
+    {
+      "dir": "cosmetics_tweaker",
+      "min_version": "",
+      "settings": null
+    },
+    {
+      "dir": "character_weapon_variants",
+      "min_version": "0.1.570-dev",
+      "settings": null
+    }
+  ],
+  "cases": [
+    {
+      "script": "",
+      "steps": [
+        "1. Both players refresh **Tweaker: Cosmetics** and **Character Weapon Variants** and confirm both current banners in their newest logs.",
+        "2. The owner equips the **Imperial Sword and Shield** with a custom shield and a custom sword illusion before the observer joins.",
+        "3. The observer checks both components on the owner in the Keep and in a mission.",
+        "4. The owner swaps away and back, changes and reapplies both picks, and respawns; the observer also hot-joins once.",
+        "5. Reverse host and client roles, exit normally, and attach both newest logs."
+      ],
+      "assertions": [
+        "The observer consistently sees both intended components without base-model fallback, overlap, or a missing piece on initial join, switch-back, respawn, or hot join. With Character Weapon Variants absent or stale on the observer, rendering falls back safely to the vanilla family.",
+        "Observer client reads the owner husk right and left unit paths; assert they equal the owner's selected illusion units after join, swap and respawn."
+      ],
+      "pass_closes": false
+    }
+  ],
+  "left_for_humans": [
+    "The observer consistently sees both intended components without base-model fallback, overlap, or a missing piece on initial join, switch-back, respawn, or hot join. With Character Weapon Variants absent or stale on the observer, rendering falls back safely to the vanilla family.",
+    "needs two clients"
+  ],
+  "source": {
+    "card_comment_id": 5356498760,
+    "card_date": "2026-08-20T13:24:04Z",
+    "ledger": "D1_ledger.tsv"
+  }
+}

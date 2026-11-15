@@ -1,0 +1,46 @@
+{
+  "schema": 1,
+  "issue": 719,
+  "class": "C",
+  "status": "draft",
+  "vp": null,
+  "arena": "unknown",
+  "mods": [
+    {
+      "dir": "crafting_in_modded_dev",
+      "min_version": "",
+      "settings": null
+    },
+    {
+      "dir": "character_weapon_variants",
+      "min_version": "",
+      "settings": null
+    }
+  ],
+  "cases": [
+    {
+      "script": "",
+      "steps": [
+        "1. As Kruber's **Mercenary**, use the normal Crafting in Modded crafting menu to make an **Imperial Crowbill**, equip it, and select **Imperial Crowbill Model 01** through the normal illusion controls. If the menu cannot offer or equip it, stop and report that with the full log rather than using grant commands.",
+        "2. Leave the inventory and wield the Imperial Crowbill in the keep. Run `/cwv_regression_test`, then run that same command a second time without changing equipment. This repetition checks the old diagnostic-state failure.",
+        "3. Use your configured **Weapon Special** action to turn the weapon to its hammer face. Run `/cwv_regression_test`. Turn it back to the Crowbill face and run the command again. Note any disappearance or unexpected model change.",
+        "4. Swap to your other weapon and back. Enter an Adventure mission and repeat the face changes and diagnostic command while wielding the Imperial Crowbill.",
+        "5. Exit normally and attach the newest complete console log. Report the career, model, face and transition where any failure occurred; include a screenshot if your own model disappears or looks wrong."
+      ],
+      "assertions": [
+        "Each completed observation reaches `[cwv:719] peer observation role=owner peer=... verdict=ok ... publishes exact identity`. The named check `issue719_imperial_crowbill_remote_identity` should not produce a false repeat-run failure. A skipped or failed check is not a pass; send its full output for investigation.",
+        "Observer client reads the owner husk right-hand unit path in pick and hammer faces; equals the Imperial model path and unit stays alive after each toggle."
+      ],
+      "pass_closes": false
+    }
+  ],
+  "left_for_humans": [
+    "Each completed observation reaches `[cwv:719] peer observation role=owner peer=... verdict=ok ... publishes exact identity`. The named check `issue719_imperial_crowbill_remote_identity` should not produce a false repeat-run failure. A skipped or failed check is not a pass; send its full output for investigation.",
+    "needs two clients"
+  ],
+  "source": {
+    "card_comment_id": 6816152621,
+    "card_date": "2026-11-12T06:09:29Z",
+    "ledger": "D1_ledger.tsv"
+  }
+}

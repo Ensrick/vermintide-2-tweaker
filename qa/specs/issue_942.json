@@ -1,0 +1,37 @@
+{
+  "schema": 1,
+  "issue": 942,
+  "class": "R",
+  "status": "draft",
+  "vp": null,
+  "arena": "unknown",
+  "mods": [
+    {
+      "dir": "weapon_tweaker",
+      "min_version": "0.12.343-beta",
+      "settings": null
+    }
+  ],
+  "cases": [
+    {
+      "script": "",
+      "steps": [
+        "1. In the Keep, select Sienna's Pyromancer and equip the ordinary **Flame Sword** with a staff. Record your talents and separate Flame Sword heavy-attack options; keep them unchanged between captures.",
+        "2. Open **Tweaker: Weapons > Weapon Tweaks > Flame Sword: Heat-Scaled Melee**. Turn that option on; set **Cleave Per Heat Point (%)** to **2** and **Direct Damage Per Heat Point (%)** to **1**. Leave **Armor Damage Above Heat Threshold** off for both captures.",
+        "3. Let heat cool naturally and wield the Flame Sword. Use `/wt_heat_capture` with argument `arm`: type the command, a space, then `arm`, and submit. Make one ordinary light attack against a training dummy, then immediately use `/wt_heat_capture` with argument `dump`. Do not change settings during a capture.",
+        "4. Build heat safely with the staff without overheating, then wield the same Flame Sword. Use `/wt_heat_capture` with argument `arm`, make the same light attack, then immediately use `/wt_heat_capture` with argument `dump`. The log supplies each calculation's actual heat.",
+        "5. Exit normally and attach the complete newest console log. Say which capture was cool/hot, whether a command said not ready and whether a real hit occurred. Report missing output rather than repeatedly rearming. If necessary, use `/wt_heat_capture` with argument `clear` to discard a pending capture."
+      ],
+      "assertions": [
+        "Two complete `[wt:942:capture] begin`, bounded `[wt:942:capture] row=` and matching `[wt:942:capture] end count=` groups. Each arm stores at most eight observations; each one-shot dump prints at most ten ASCII rows. Missing phases, unavailable ratios and gate failures are incomplete diagnostic evidence, not a pass.",
+        "Script: light attack on a dummy at zero and high heat, read capture rows; assert post/pre ratios equal 1 plus heat times configured percent within tolerance."
+      ],
+      "pass_closes": true
+    }
+  ],
+  "source": {
+    "card_comment_id": 6824847078,
+    "card_date": "2026-11-12T13:24:46Z",
+    "ledger": "D2_ledger.tsv"
+  }
+}

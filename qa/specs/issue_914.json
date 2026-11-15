@@ -1,0 +1,41 @@
+{
+  "schema": 1,
+  "issue": 914,
+  "class": "C",
+  "status": "draft",
+  "vp": null,
+  "arena": "unknown",
+  "mods": [
+    {
+      "dir": "character_weapon_variants",
+      "min_version": "0.1.570-dev",
+      "settings": null
+    }
+  ],
+  "cases": [
+    {
+      "script": "",
+      "steps": [
+        "1. Both players refresh **Character Weapon Variants**, launch the game, and confirm `[cwv:LOAD] v0.1.570-dev` in each newest log.",
+        "2. Before joining each other, both equip a crafted CWV **Imperial Longsword** with a clearly recognizable illusion. Do not use Dual Axes for this test.",
+        "3. Join the Keep and inspect the other player's weapon. Start an Adventure mission without reapplying its illusion, then inspect it immediately after spawning and again after swapping away and back.",
+        "4. Return to the Keep. Have the client leave and rejoin while the host keeps the weapon equipped, then inspect both players' weapons again.",
+        "5. Reverse host/client roles and repeat steps 2-4. Afterward, both players run `/cwv_regression_test`, exit normally, and attach their newest logs."
+      ],
+      "assertions": [
+        "On both passes, the observer always sees the Imperial Longsword model and chosen illusion through initial join, Keep-to-mission-to-Keep transitions, weapon swaps, and rejoin; it never falls back to the vanilla base weapon. `issue914_peer_ready_identity_lifecycle` passes in both regression runs.",
+        "Soak loop on two clients: hot join, Keep to mission and back, swap, respawn; each step observer husk unit path equals the identity descriptor."
+      ],
+      "pass_closes": false
+    }
+  ],
+  "left_for_humans": [
+    "On both passes, the observer always sees the Imperial Longsword model and chosen illusion through initial join, Keep-to-mission-to-Keep transitions, weapon swaps, and rejoin; it never falls back to the vanilla base weapon. `issue914_peer_ready_identity_lifecycle` passes in both regression runs.",
+    "needs two clients"
+  ],
+  "source": {
+    "card_comment_id": 5355466483,
+    "card_date": "2026-08-20T11:50:52Z",
+    "ledger": "D1_ledger.tsv"
+  }
+}

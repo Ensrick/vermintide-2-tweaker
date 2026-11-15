@@ -1,0 +1,40 @@
+{
+  "schema": 1,
+  "issue": 700,
+  "class": "C",
+  "status": "draft",
+  "vp": null,
+  "arena": "unknown",
+  "mods": [
+    {
+      "dir": "gui_tweaker_dev",
+      "min_version": "0.2.290",
+      "settings": null
+    }
+  ],
+  "cases": [
+    {
+      "script": "",
+      "steps": [
+        "1. Start a normal Adventure mission solo as host, then open the pause menu and request an in-mission mission-change vote.",
+        "2. Inspect the popup title and both choices: **Change Mission?**, **Accept**, **Decline**.",
+        "3. Confirm one usable popup appears, with no blank/internal-key title. Compare a Keep vote or unrelated native vote as a presentation control.",
+        "4. Retain the newest log and a screenshot if the title or choices fail."
+      ],
+      "assertions": [
+        "The SOLO host sees one localized mission-change popup with usable choices; unrelated vote presentation stays native.",
+        "Solo R: start the vote, read IngameVotingUI info_text (non-empty, localized) and both options; C: client log [gut:700] promotion plus widget text."
+      ],
+      "pass_closes": false
+    }
+  ],
+  "left_for_humans": [
+    "The SOLO host sees one localized mission-change popup with usable choices; unrelated vote presentation stays native.",
+    "needs two clients"
+  ],
+  "source": {
+    "card_comment_id": 6591487618,
+    "card_date": "2026-11-02T23:50:47Z",
+    "ledger": "D4_ledger.tsv"
+  }
+}

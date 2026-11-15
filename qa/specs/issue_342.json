@@ -1,0 +1,36 @@
+{
+  "schema": 1,
+  "issue": 342,
+  "class": "R",
+  "status": "draft",
+  "vp": null,
+  "arena": "unknown",
+  "mods": [
+    {
+      "dir": "chaos_wastes_tweaker_dev",
+      "min_version": "0.7.354-beta",
+      "settings": null
+    }
+  ],
+  "cases": [
+    {
+      "script": "",
+      "steps": [
+        "1. Start a Chaos Wastes run and acquire **Stromfels' Retribution** or **Righteous Finesse**. Complete at least one boon roll so the automatic cooldown repair has run.",
+        "2. Perform several successful timed blocks closer together than the boon's stated cooldown. Watch whether each timed block triggers the effect.",
+        "3. Repeat with the other boon when available: Stromfels' Retribution should produce its lightning strike; Righteous Finesse should produce its knockback and Skull-boon refresh.",
+        "4. Run `/ct_regression_test`, exit normally, and attach the newest complete log. State which boon or boons were exercised and whether any consecutive parry failed to trigger."
+      ],
+      "assertions": [
+        "Consecutive successful timed blocks are not suppressed by the old cooldown. Neither boon crashes. The registered cooldown-template checks pass; missing/unreadable templates or a remaining nonzero duration are failures, not a silent pass.",
+        "After one boon roll read boon_skulls_03_cooldown and every static_blade cooldown template: all durations 0; then two scripted timed blocks both proc."
+      ],
+      "pass_closes": true
+    }
+  ],
+  "source": {
+    "card_comment_id": 6693569466,
+    "card_date": "2026-11-06T19:30:28Z",
+    "ledger": "D3_ledger.tsv"
+  }
+}

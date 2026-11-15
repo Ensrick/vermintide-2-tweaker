@@ -1,0 +1,40 @@
+{
+  "schema": 1,
+  "issue": 645,
+  "class": "V",
+  "status": "draft",
+  "vp": null,
+  "arena": "unknown",
+  "mods": [
+    {
+      "dir": "character_weapon_variants",
+      "min_version": "0.1.570-dev",
+      "settings": null
+    }
+  ],
+  "cases": [
+    {
+      "script": "",
+      "steps": [
+        "1. Use **Waystalker** and her native **Spear**, in the **Primary melee** slot. Keep its normal moveset; do not use Spear and Shield, a borrowed weapon/carrier, or a new reciprocal style. Record any Weapon Tweaker/history/tweak setup already active; this test does not assume pristine settings.",
+        "2. After equipping and leaving inventory, switch to your ranged weapon, then back to the Spear. This arms the actual wield-context cache.",
+        "3. Perform one complete light-attack chain, each heavy attack’s wind-up/hold/release, block/hold/release, push, and push attack. Record the order and any visibly missing or stuck animation; avoid endless repeats.",
+        "4. Exit normally and attach the newest **full console log** with your career, weapon, setup, and observations.",
+        "5. Optional, only if already legitimately available: repeat in a **separate fresh game session**, using **Mercenary or Huntsman**, native **Tuskgor Spear**, and **Hunter Combat Style** only, in Primary melee. Repeat the ranged-to-melee swap and actions above. Do not select Infantry Combat Style or Tuskgor-on-Elf; no DLC purchase is required for this invitation."
+      ],
+      "assertions": [
+        "Actual owner-action rows beginning with the source-qualified receipt below, under your recorded native-weapon setup:",
+        "Automatable part: harness performs the attack chain on native Spear and collects the cwv:645 rows; Unit.has_animation_event for every Tuskgor event on the elf 3P unit."
+      ],
+      "pass_closes": false
+    }
+  ],
+  "left_for_humans": [
+    "Actual owner-action rows beginning with the source-qualified receipt below, under your recorded native-weapon setup:"
+  ],
+  "source": {
+    "card_comment_id": 6816668492,
+    "card_date": "2026-11-12T06:38:54Z",
+    "ledger": "D1_ledger.tsv"
+  }
+}

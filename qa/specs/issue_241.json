@@ -1,0 +1,37 @@
+{
+  "schema": 1,
+  "issue": 241,
+  "class": "R",
+  "status": "draft",
+  "vp": null,
+  "arena": "unknown",
+  "mods": [
+    {
+      "dir": "general_tweaker_dev",
+      "min_version": "0.2.180",
+      "settings": null
+    }
+  ],
+  "cases": [
+    {
+      "script": "",
+      "steps": [
+        "1. Host an Adventure mission and enable **Noclip**.",
+        "2. Fly beside a ledge, through a known authored kill boundary, and down below the map's deep-floor limit.",
+        "3. Confirm no forced ledge grab, teleport-back, disabled state, or death interrupts Noclip.",
+        "4. Turn Noclip off and confirm the same kill boundary or deep fall kills normally.",
+        "5. Run `/gt_regression_test`, exit normally, and attach the newest log."
+      ],
+      "assertions": [
+        "Boundary suppression applies only to the local player while Noclip is active. Disabling restores native ledge and death-boundary behaviour. A joining-client suicide/RPC stage is separate and is not marked passed by this solo test.",
+        "Harness: noclip on, move player below z=-240 and call entered_kill_volume; assert alive, not ledge-hanging; noclip off: same calls kill."
+      ],
+      "pass_closes": true
+    }
+  ],
+  "source": {
+    "card_comment_id": 6681730613,
+    "card_date": "2026-11-06T09:32:14Z",
+    "ledger": "D5_ledger.tsv"
+  }
+}

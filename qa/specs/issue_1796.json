@@ -1,0 +1,43 @@
+{
+  "schema": 1,
+  "issue": 1796,
+  "class": "R",
+  "status": "draft",
+  "vp": null,
+  "arena": "unknown",
+  "mods": [
+    {
+      "dir": "gui_tweaker_dev",
+      "min_version": "",
+      "settings": null
+    },
+    {
+      "dir": "gui_tweaker",
+      "min_version": "0.2.290",
+      "settings": null
+    }
+  ],
+  "cases": [
+    {
+      "script": "",
+      "steps": [
+        "1. In the Modded Keep or a level, enable **3rd-Person Camera > Enable Third-Person Camera**.",
+        "2. Turn **Free Camera** on, close the menu if activation is deferred, then press **F8** to exit. Repeat several times; third-person must persist after every exit. F8 is the built-in exit key, not a configured entry hotkey.",
+        "3. Enter again through the checkbox, open the menu and turn the checkbox off. Also try entering with `/freecam` and exiting with F8. If you already assigned a **Free Camera (Hotkey)**, test that entry route too; it is unassigned by default.",
+        "4. Turn Third-Person Camera off and repeat these entry/exit routes; each exit must restore first-person.",
+        "5. With third-person on, request Free Camera from an open menu and cancel before closing it; confirm the perspective never changes.",
+        "6. If **Flight** is already installed, disable it and try Free Camera again. Either normal activation works or a clear unavailable-input refusal leaves the checkbox off and the prior perspective intact. Do not install Flight merely for this optional control."
+      ],
+      "assertions": [
+        "The prior perspective is restored once on every exit and cancellation; repeated OFF never clears third-person. Movement stays frozen only while freecam owns the local player, normal controls recover, and missing native input is refused without a script error or partial activation.",
+        "3P on: enter/exit freecam five times by each route, third-person flag stays true; 3P off stays false; cancel before close changes nothing; missing input manager refuses entry."
+      ],
+      "pass_closes": true
+    }
+  ],
+  "source": {
+    "card_comment_id": 6590898401,
+    "card_date": "2026-11-02T23:14:27Z",
+    "ledger": "D4_ledger.tsv"
+  }
+}

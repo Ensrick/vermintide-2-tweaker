@@ -1,0 +1,40 @@
+{
+  "schema": 1,
+  "issue": 692,
+  "class": "V",
+  "status": "draft",
+  "vp": null,
+  "arena": "unknown",
+  "mods": [
+    {
+      "dir": "character_weapon_variants",
+      "min_version": "0.1.570-dev",
+      "settings": null
+    }
+  ],
+  "cases": [
+    {
+      "script": "",
+      "steps": [
+        "1. On Kruber, equip an ordinary **Bretonnian Longsword**, not an old **Imperial Longsword** instance. In the Career Weapon Variants options, bind **Cycle Combat Style** if it has no key.",
+        "2. Start with its native Bretonnian style as the control. Cycle to **Greatsword Combat Style**, then **Kerillian Greatsword Combat Style**. Inspect the grip and proportions in first person, third person, the inventory character preview, and the native cosmetic preview of that same item where available.",
+        "3. Cycle repeatedly back to the native style, swap weapons away and back, and close/reopen the previews. Watch for an initially correct grip that later moves, rather than only the first frame.",
+        "4. Enter an Adventure mission and repeat the style changes and first-person and third-person checks. Restore the native style afterward.",
+        "5. Run `/cwv_regression_test` once. Exit normally and attach the newest console log, plus screenshots or a short video of any incorrect grip. Report which style, view and transition failed."
+      ],
+      "assertions": [
+        "Both foreign styles retain the inverse grip/proportion correction without accumulating it; native style remains unchanged. The installed check `issue692_inverse_transform_application` should pass. That check exercises a detached production transform writer; it does **not** prove live rendering, later-frame retention or remote-player agreement. CIM Athanor, ordinary crafting and Hold-Tab exact-instance style previews are outside this first test.",
+        "Automatable part: per style read unit local pose N frames after switch on 1P, 3P and preview; equals authored inverse tuple; unchanged after ten toggles."
+      ],
+      "pass_closes": false
+    }
+  ],
+  "left_for_humans": [
+    "Both foreign styles retain the inverse grip/proportion correction without accumulating it; native style remains unchanged. The installed check `issue692_inverse_transform_application` should pass. That check exercises a detached production transform writer; it does **not** prove live rendering, later-frame retention or remote-player agreement. CIM Athanor, ordinary crafting and Hold-Tab exact-instance style previews are outside this first test."
+  ],
+  "source": {
+    "card_comment_id": 6815606775,
+    "card_date": "2026-11-12T05:33:32Z",
+    "ledger": "D1_ledger.tsv"
+  }
+}

@@ -1,5 +1,15 @@
 # Weapons of Chaos — Changelog
 
+## v0.1.64-dev (2026-11-15) - Regression verdicts always reach the game log (WP-CWV-06)
+
+- `/woc_regression_test` now writes every verdict to the game log with
+  `printf` (`[regression] PASS|FAIL|SKIP <name>`), not only to chat (audit
+  finding A2-F08).
+- `issue422_wire_safety_unconditional_singleton` and
+  `no_unit_path_package_force_load` report SKIP instead of PASS when their
+  source text cannot be read, which is always the case in the shipped game.
+  Not confirmed in game.
+
 ## v0.1.63-dev (2026-11-15) - Weapons of Chaos can no longer be switched off (WP-CWV-02)
 
 - The mod is no longer togglable from the VMF options menu (audit finding

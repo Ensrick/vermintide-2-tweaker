@@ -1,0 +1,36 @@
+{
+  "schema": 1,
+  "issue": 456,
+  "class": "R",
+  "status": "draft",
+  "vp": null,
+  "arena": "unknown",
+  "mods": [
+    {
+      "dir": "chaos_wastes_tweaker_dev",
+      "min_version": "0.7.354-dev",
+      "settings": null
+    }
+  ],
+  "cases": [
+    {
+      "script": "",
+      "steps": [
+        "1. Load normal Adventure **Into the Nest**, wait for pickup population to finish, and visit the first Grimoire location.",
+        "2. Load **Into the Nest** through the Chaos Wastes single-mission loader, wait for pickup population, and visit the same location.",
+        "3. Record whether the first Grimoire is present and collectable in each run and whether any duplicate or moved book appears.",
+        "4. Exit normally and attach the complete newest logs for both runs."
+      ],
+      "assertions": [
+        "The two logs contain a bounded census sufficient to distinguish a missing object set, a triggered-only book, and an exhausted guaranteed-spawn path. The Adventure control remains unchanged; no fix is claimed until the injected mission's exact empty path is identified.",
+        "Load skaven_stronghold natively and injected; census book spawners; assert a grimoire unit at the first grimoire spawner position in both runs."
+      ],
+      "pass_closes": true
+    }
+  ],
+  "source": {
+    "card_comment_id": 5356976861,
+    "card_date": "2026-08-20T14:04:31Z",
+    "ledger": "D3_ledger.tsv"
+  }
+}

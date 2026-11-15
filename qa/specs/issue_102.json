@@ -1,0 +1,35 @@
+{
+  "schema": 1,
+  "issue": 102,
+  "class": "R",
+  "status": "draft",
+  "vp": null,
+  "arena": "unknown",
+  "mods": [
+    {
+      "dir": "chaos_wastes_tweaker_dev",
+      "min_version": "0.7.354-dev",
+      "settings": null
+    }
+  ],
+  "cases": [
+    {
+      "script": "",
+      "steps": [
+        "1. Find a Temper Altar that can be used more than once and record its displayed rarity.",
+        "2. Upgrade a weapon below that rarity, then use the same altar again on the resulting weapon.",
+        "3. Repeat until the altar is depleted, then run `/ct_regression_test`."
+      ],
+      "assertions": [
+        "Every use awards the altar's original rolled rarity without climbing to Exotic or Veteran rarity. A same-tier reroll remains usable while charges remain, a true downgrade remains unavailable, and the altar disables when depleted.",
+        "Spawn an upgrade altar with 2+ uses; script two open_chest calls; assert chest _rarity unchanged and awarded weapon rarity equals the rolled rarity both times."
+      ],
+      "pass_closes": true
+    }
+  ],
+  "source": {
+    "card_comment_id": 5161339190,
+    "card_date": "2026-08-03T01:17:49Z",
+    "ledger": "D3_ledger.tsv"
+  }
+}

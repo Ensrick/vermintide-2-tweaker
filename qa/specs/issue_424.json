@@ -1,0 +1,40 @@
+{
+  "schema": 1,
+  "issue": 424,
+  "class": "C",
+  "status": "draft",
+  "vp": null,
+  "arena": "unknown",
+  "mods": [
+    {
+      "dir": "character_weapon_variants",
+      "min_version": "0.1.570-dev",
+      "settings": null
+    }
+  ],
+  "cases": [
+    {
+      "script": "",
+      "steps": [
+        "1. Refresh **Character Weapon Variants**, enter the Keep, and run `/cwv_regression_test`.",
+        "2. Equip the **Tuskgor Javelin**, throw several into terrain and enemies, recover them, and confirm ammunition and pickups behave normally.",
+        "3. Enter a mission and repeat the throw-and-recover cycle after one weapon swap.",
+        "4. Exit normally and attach the newest console log."
+      ],
+      "assertions": [
+        "The regression test reports zero failures, including `cwv_wire_safe_thrown_variant_installed`; the Tuskgor Javelin remains selectable and works normally in solo play; and no mixed-lobby fence activates. This completes the solo floor. If it passes, the next card will test a player without Character Weapon Variants hot-joining while a custom thrown object or recovery pickup exists.",
+        "Offline: test_cwv_thrown_wire_policy. Co-op: non-CWV peer hot-joins while a javelin pickup exists; no decode fatal. Solo: spy outgoing ids are vanilla when parity unconfirmed."
+      ],
+      "pass_closes": false
+    }
+  ],
+  "left_for_humans": [
+    "The regression test reports zero failures, including `cwv_wire_safe_thrown_variant_installed`; the Tuskgor Javelin remains selectable and works normally in solo play; and no mixed-lobby fence activates. This completes the solo floor. If it passes, the next card will test a player without Character Weapon Variants hot-joining while a custom thrown object or recovery pickup exists.",
+    "needs two clients"
+  ],
+  "source": {
+    "card_comment_id": 5356595784,
+    "card_date": "2026-08-20T13:32:34Z",
+    "ledger": "D1_ledger.tsv"
+  }
+}

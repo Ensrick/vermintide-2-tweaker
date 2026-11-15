@@ -1,0 +1,41 @@
+{
+  "schema": 1,
+  "issue": 421,
+  "class": "C",
+  "status": "draft",
+  "vp": null,
+  "arena": "unknown",
+  "mods": [
+    {
+      "dir": "cosmetics_tweaker",
+      "min_version": "0.9.230-dev",
+      "settings": null
+    }
+  ],
+  "cases": [
+    {
+      "script": "",
+      "steps": [
+        "1. The Cosmetics player refreshes **Tweaker: Cosmetics**, confirms the current banner, and equips the illusion named **Mace & Bretonnian Shield**.",
+        "2. Run `/cos_421_diag` and confirm the chat says the audit was written to the console log.",
+        "3. Have the player without Tweaker: Cosmetics join the lobby.",
+        "4. Transition Keep to mission to Keep, then swap away from and back to **Mace & Bretonnian Shield** once.",
+        "5. Exit normally and attach both players' newest logs."
+      ],
+      "assertions": [
+        "Neither player crashes or disconnects. The player without Cosmetics sees a resident vanilla fallback, the Cosmetics player keeps **Mace & Bretonnian Shield** after both transitions and the re-equip, the diagnostic reports catalog/surfaces/policy/restore passing with one live custom skin, and the other log contains no weapon-skin lookup failure.",
+        "Single-client part: equip a ct_* illusion, wrap the four rpc_add_equipment senders, assert outgoing weapon_skin_id within vanilla lookup size. Peer survival needs a non-mod client."
+      ],
+      "pass_closes": false
+    }
+  ],
+  "left_for_humans": [
+    "Neither player crashes or disconnects. The player without Cosmetics sees a resident vanilla fallback, the Cosmetics player keeps **Mace & Bretonnian Shield** after both transitions and the re-equip, the diagnostic reports catalog/surfaces/policy/restore passing with one live custom skin, and the other log contains no weapon-skin lookup failure.",
+    "needs two clients"
+  ],
+  "source": {
+    "card_comment_id": 5356602898,
+    "card_date": "2026-08-20T13:33:11Z",
+    "ledger": "D5_ledger.tsv"
+  }
+}

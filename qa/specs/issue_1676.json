@@ -1,0 +1,37 @@
+{
+  "schema": 1,
+  "issue": 1676,
+  "class": "R",
+  "status": "draft",
+  "vp": null,
+  "arena": "unknown",
+  "mods": [
+    {
+      "dir": "character_weapon_variants",
+      "min_version": "0.1.570-dev",
+      "settings": null
+    }
+  ],
+  "cases": [
+    {
+      "script": "",
+      "steps": [
+        "1. Refresh the dev collection normally and start a fresh session with CWV above enabled after Vermintide Mod Framework. For this baseline leave both Weapons Tweaker streams disabled; do not delete or reset their saved settings. Route VMF Info and Echo output to the log. Confirm the exact `[cwv:LOAD] v0.1.570-dev` line; a missing/different banner is not a result for this candidate.",
+        "2. In the Keep, run `/cwv_regression_test`. Retain the entire output, including unrelated FAIL/SKIP rows. Find the shared profile-constructor check named in Expected below; its verdict must be **PASS**. If that row is FAIL, SKIP, missing, or the command errors, stop and attach the full log with its exact reason; do not continue as if construction passed.",
+        "3. As Mercenary, select an ordinary Greatsword you already own. In Equipment, cycle its existing Combat Style control until the button reads **Switch to: Kerillian Greatsword Combat Style**, then press it once to select that style. If that item/control/style is unavailable, stop and describe what is shown; do not use a debug-give command, a retired Imperial Longsword craft, or an unadmitted Tuskgor style.",
+        "4. Wield that Greatsword and try several ordinary light and charged heavy attacks on the same Keep practice dummy, allowing each attack to finish. Record the weapon power/properties/trait, Mercenary talents and any displayed hit numbers or unexpected behavior. Note whether a number was shown rather than inventing one. This is live observation, not a prescribed numeric damage-ratio test.",
+        "5. Run `/cwv_regression_test` again and attach the newest full console log plus the observations from step 4. Include any crash/error or inability to equip, switch style or attack. Do not tune multipliers or reset settings to force a pass."
+      ],
+      "assertions": [
+        "`issue1676_resolved_profile_multipliers` reports PASS, not SKIP, in the actual loaded game; the existing selected Greatsword style can be wielded and its ordinary light/heavy attacks exercised without a new error. A named-row PASS proves retained constructor read-back only. It does not prove the final selected action's damage/stagger/cleave, a fixed dummy-hit ratio, later Weapons Tweaker modifiers, DLC-inclusive coverage, or non-CWV-host behavior. Any live discrepancy must retain the exact setup and log for the next source-qualified investigation.",
+        "For each multiplied CWV clone read the resolved power tables in the running game; equals donor times multiplier; donor unchanged (issue1676 check)."
+      ],
+      "pass_closes": true
+    }
+  ],
+  "source": {
+    "card_comment_id": 6523155964,
+    "card_date": "2026-10-30T12:45:00Z",
+    "ledger": "D1_ledger.tsv"
+  }
+}

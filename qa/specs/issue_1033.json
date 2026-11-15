@@ -1,0 +1,47 @@
+{
+  "schema": 1,
+  "issue": 1033,
+  "class": "R",
+  "status": "draft",
+  "vp": null,
+  "arena": "unknown",
+  "mods": [
+    {
+      "dir": "gui_tweaker_dev",
+      "min_version": "",
+      "settings": null
+    },
+    {
+      "dir": "weapon_tweaker",
+      "min_version": "",
+      "settings": null
+    },
+    {
+      "dir": "cosmetics_tweaker",
+      "min_version": "",
+      "settings": null
+    }
+  ],
+  "cases": [
+    {
+      "script": "",
+      "steps": [
+        "1. In the Modded Keep, equip a mod-only weapon and mod-only hat/outfit on the active career. Record the corresponding official baseline first.",
+        "2. Open **Mod Tweaker > Equipment**, choose **Default**, confirm and **Apply**.",
+        "3. Inspect the visible character immediately, without reopening another menu; watch for stale gear, repeated equips or repeated respawns.",
+        "4. Repeat the reset during Adventure. Finish or leave normally and inspect the character at the next safe Keep boundary.",
+        "5. Return to the Official Realm and compare its recorded selections without changing them. Retain the logs."
+      ],
+      "assertions": [
+        "Keep reset immediately presents official defaults, with at most one necessary skin-change respawn. Mission reset persists and reconciles at the next safe Keep boundary. No stale mod-only item, equip storm or official-data mutation remains.",
+        "Keep: equip mod-only weapon and hat, run DEFAULT; assert live inventory slot item keys and hat attachment equal the new backend rows, at most one respawn, official rows unchanged."
+      ],
+      "pass_closes": true
+    }
+  ],
+  "source": {
+    "card_comment_id": 6591495149,
+    "card_date": "2026-11-02T23:51:17Z",
+    "ledger": "D2_ledger.tsv"
+  }
+}

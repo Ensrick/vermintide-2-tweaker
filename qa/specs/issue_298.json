@@ -1,0 +1,37 @@
+{
+  "schema": 1,
+  "issue": 298,
+  "class": "R",
+  "status": "draft",
+  "vp": null,
+  "arena": "unknown",
+  "mods": [
+    {
+      "dir": "general_tweaker_dev",
+      "min_version": "0.2.180",
+      "settings": null
+    }
+  ],
+  "cases": [
+    {
+      "script": "",
+      "steps": [
+        "1. Host with bots, enable **Improved Bot Combat**, and open its advanced options.",
+        "2. Toggle the six children independently: **Smarter Attack Choices**, **Ping Attacking Elites**, **Limit Special Chasing**, **Ignore Distant Gunners**, **Limit Boss Over-Focus**, and **Smarter Career Ability Timing**. There is one ability-timing checkbox, not one for each career.",
+        "3. Exercise **Special Chase Distance (in meters)**, **Gunner Cover Distance (in meters)** and **Boss Engage Distance (in meters)** on both sides of their thresholds.",
+        "4. Turn off the Improved Bot Combat master and confirm native decisions return. Briefly swap a bot's weapon to exercise the missing-weapon guard.",
+        "5. Run `/gt_regression_test`, exit normally, and attach the newest log."
+      ],
+      "assertions": [
+        "Disabling one child changes only its own behaviour family; disabling the master returns all six to native behaviour. The named control regression passes and weapon swapping does not crash. Attacker pinging in this candidate is elite-only; this card does not claim special/monster attacker-ping coverage.",
+        "Harness: per child toggle, feed bot blackboard an elite/special/boss attacker and assert ping and target decisions; policy truth table offline (test_gt_improved_bot_combat_controls.lua)."
+      ],
+      "pass_closes": true
+    }
+  ],
+  "source": {
+    "card_comment_id": 6681736153,
+    "card_date": "2026-11-06T09:32:34Z",
+    "ledger": "D5_ledger.tsv"
+  }
+}

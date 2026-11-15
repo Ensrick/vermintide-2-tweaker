@@ -1,0 +1,36 @@
+{
+  "schema": 1,
+  "issue": 203,
+  "class": "R",
+  "status": "draft",
+  "vp": null,
+  "arena": "unknown",
+  "mods": [
+    {
+      "dir": "cosmetics_tweaker",
+      "min_version": "0.9.230-dev",
+      "settings": null
+    }
+  ],
+  "cases": [
+    {
+      "script": "",
+      "steps": [
+        "1. Equip and Apply a visibly distinct **Loremaster's Armoury shield** before entering a mission.",
+        "2. In owner third person, confirm it appears immediately without reopening Cosmetics.",
+        "3. Swap to the secondary weapon and back several times, respawn once, then return to the Keep.",
+        "4. Inspect the inventory character preview and owner third person again, then attach the newest console log."
+      ],
+      "assertions": [
+        "The saved shield never disappears, duplicates, or falls back after mission entry, re-wield, respawn, return to the Keep, or inventory preview refresh.",
+        "Solo: saved LA shield, mission entry, wield round trips, respawn; after each assert left-hand 3P unit name equals LA mesh and one reapply receipt. Paint V."
+      ],
+      "pass_closes": true
+    }
+  ],
+  "source": {
+    "card_comment_id": 5356900587,
+    "card_date": "2026-08-20T13:58:10Z",
+    "ledger": "D2_ledger.tsv"
+  }
+}

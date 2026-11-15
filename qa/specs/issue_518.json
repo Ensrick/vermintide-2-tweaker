@@ -1,0 +1,51 @@
+{
+  "schema": 1,
+  "issue": 518,
+  "class": "C",
+  "status": "draft",
+  "vp": null,
+  "arena": "unknown",
+  "mods": [
+    {
+      "dir": "chaos_wastes_tweaker_dev",
+      "min_version": "",
+      "settings": null
+    },
+    {
+      "dir": "cosmetics_tweaker",
+      "min_version": "",
+      "settings": null
+    },
+    {
+      "dir": "character_weapon_variants",
+      "min_version": "0.1.570-dev",
+      "settings": null
+    }
+  ],
+  "cases": [
+    {
+      "script": "",
+      "steps": [
+        "1. Refresh all three named mods, enable debug logging in **Tweaker: Cosmetics**, equip the **Imperial Crowbill**, and apply a Loremaster weapon illusion in the normal Keep.",
+        "2. Enter the **Pilgrimage Chamber** and confirm the remembered Loremaster illusion remains visible.",
+        "3. Start a Chaos Wastes expedition and upgrade that Imperial Crowbill at a shrine until it visibly receives a different Chaos Wastes upgrade cosmetic.",
+        "4. Swap away and back, cross one map transition, and confirm the upgraded cosmetic remains instead of the old Loremaster illusion returning.",
+        "5. Run `/la_loadout`, `/cos_persist_dump`, and `/cos_regression_test`, then exit normally and attach the newest console log plus one screenshot of the upgraded weapon."
+      ],
+      "assertions": [
+        "The Pilgrimage Chamber keeps the Loremaster illusion, while an active expedition yields to the real upgraded Chaos Wastes cosmetic. The log contains bounded `[cos:518] OWNER-WIELD slot=%s item=%s skin=%s deus_yield=%s` evidence with a non-empty upgraded skin and `cos_la_deus_yield_active_mission_only` passes.",
+        "Solo: after a shrine upgrade read the wielded slot skin and spawned unit path; assert upgraded CW skin. Co-op: observer husk unit path equals owner's."
+      ],
+      "pass_closes": false
+    }
+  ],
+  "left_for_humans": [
+    "The Pilgrimage Chamber keeps the Loremaster illusion, while an active expedition yields to the real upgraded Chaos Wastes cosmetic. The log contains bounded `[cos:518] OWNER-WIELD slot=%s item=%s skin=%s deus_yield=%s` evidence with a non-empty upgraded skin and `cos_la_deus_yield_active_mission_only` passes.",
+    "needs two clients"
+  ],
+  "source": {
+    "card_comment_id": 5356474624,
+    "card_date": "2026-08-20T13:21:59Z",
+    "ledger": "D1_ledger.tsv"
+  }
+}

@@ -1,0 +1,37 @@
+{
+  "schema": 1,
+  "issue": 728,
+  "class": "R",
+  "status": "draft",
+  "vp": null,
+  "arena": "unknown",
+  "mods": [
+    {
+      "dir": "career_tweaker",
+      "min_version": "0.4.34-beta",
+      "settings": null
+    }
+  ],
+  "cases": [
+    {
+      "script": "",
+      "steps": [
+        "1. Use a hero with at least one career still locked by hero level and open the in-Keep career picker.",
+        "2. With the picker still open, switch on **Unlock all careers (owned DLC only)**.",
+        "3. Confirm the owned, level-locked careers become selectable immediately, and that careers from downloadable content you do not own stay locked.",
+        "4. Switch the setting off and confirm the exact vanilla level locks return immediately, with no career spawned and no profile request sent.",
+        "5. Switch it back on, reopen the picker once, run `/crt_regression_test` and attach the log."
+      ],
+      "assertions": [
+        "the setting refreshes the already-open picker and bypasses only the hero-level gate on careers you own; unowned downloadable-content careers remain locked because that gate lives upstream of this hook; disabling restores vanilla locks exactly; no profile request or forced career spawn occurs at any point; diagnostics stay bounded. The log must contain `[crt:728] installed setting=<true|false> scope=local_level_gate occupancy=vanilla` at load, `[crt:728] level_gate ...` rows recording the bypass decisions, and a `[crt:728] ui_refresh setting=true hero_summary=... character_select=...` row for the toggle performed with the picker open.",
+        "With the picker open toggle the setting: [crt:728] ui_refresh row, level-locked owned career becomes selectable, unowned DLC stays locked, no profile request; C residual: occupancy stays vanilla."
+      ],
+      "pass_closes": true
+    }
+  ],
+  "source": {
+    "card_comment_id": 5165096060,
+    "card_date": "2026-08-03T10:17:11Z",
+    "ledger": "D4_ledger.tsv"
+  }
+}

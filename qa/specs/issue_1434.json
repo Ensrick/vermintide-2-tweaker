@@ -1,0 +1,30 @@
+{
+  "schema": 1,
+  "issue": 1434,
+  "class": "S",
+  "status": "draft",
+  "vp": null,
+  "arena": "none",
+  "cases": [
+    {
+      "script": "",
+      "steps": [],
+      "assertions": [
+        "gh api repos/Ensrick/vermintide-2-tweaker/immutable-releases returns enabled=true (today: enabled=false, enforced_by_owner=false), then the fixture suite."
+      ],
+      "pass_closes": true
+    }
+  ],
+  "offline": [
+    {
+      "class": "S",
+      "command": "",
+      "expect": "gh api repos/Ensrick/vermintide-2-tweaker/immutable-releases returns enabled=true (today: enabled=false, enforced_by_owner=false), then the fixture suite."
+    }
+  ],
+  "source": {
+    "card_comment_id": null,
+    "card_date": null,
+    "ledger": "D5_ledger.tsv"
+  }
+}

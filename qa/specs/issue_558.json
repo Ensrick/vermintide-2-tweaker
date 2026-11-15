@@ -1,0 +1,30 @@
+{
+  "schema": 1,
+  "issue": 558,
+  "class": "S",
+  "status": "draft",
+  "vp": null,
+  "arena": "none",
+  "cases": [
+    {
+      "script": "",
+      "steps": [],
+      "assertions": [
+        "git ls-files \"*.mod_bundle\" returns 0 and every tools/mod-inventory.psd1 row has BundleAuthority receipt (today 67 files, 21 rows tracked)."
+      ],
+      "pass_closes": true
+    }
+  ],
+  "offline": [
+    {
+      "class": "S",
+      "command": "",
+      "expect": "git ls-files \"*.mod_bundle\" returns 0 and every tools/mod-inventory.psd1 row has BundleAuthority receipt (today 67 files, 21 rows tracked)."
+    }
+  ],
+  "source": {
+    "card_comment_id": null,
+    "card_date": null,
+    "ledger": "D5_ledger.tsv"
+  }
+}

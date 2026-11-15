@@ -1,0 +1,37 @@
+{
+  "schema": 1,
+  "issue": 1570,
+  "class": "R",
+  "status": "draft",
+  "vp": null,
+  "arena": "unknown",
+  "mods": [
+    {
+      "dir": "gui_tweaker_dev",
+      "min_version": "0.2.290",
+      "settings": null
+    }
+  ],
+  "cases": [
+    {
+      "script": "",
+      "steps": [
+        "1. Disable standalone **Tab Scoreboard**. Enable **Expanded Scoreboard (Live + End Screen)** and **Host Statistics**, then choose **Page 2**.",
+        "2. Start Adventure SOLO on Champion or higher. Before fighting, **Friendly Fire Damage** after **Times Revived** must show 0 for you and the bots.",
+        "3. Shoot a bot ally several times at close range; confirm only your Friendly Fire Damage rises and bot values stay 0.",
+        "4. Damage enemies with melee/ranged attacks and confirm that row does not rise from enemy damage; other rows, sorting and page stay unchanged.",
+        "5. Finish and confirm the end-screen value is not lower than the last held-Tab value. Start another mission and confirm everyone's row resets to 0."
+      ],
+      "assertions": [
+        "The host statistic measures only actual friendly damage, is credited to the attacker, survives to the end screen and resets per mission without changing unrelated scoreboard behaviour.",
+        "Champion or higher: damage a bot ally from the player unit: FF ledger rises by the clamped amount; enemy damage leaves it; end screen not below Tab; next mission zero."
+      ],
+      "pass_closes": true
+    }
+  ],
+  "source": {
+    "card_comment_id": 6591498201,
+    "card_date": "2026-11-02T23:51:28Z",
+    "ledger": "D4_ledger.tsv"
+  }
+}

@@ -1,0 +1,37 @@
+{
+  "schema": 1,
+  "issue": 388,
+  "class": "R",
+  "status": "draft",
+  "vp": null,
+  "arena": "unknown",
+  "mods": [
+    {
+      "dir": "weapon_tweaker",
+      "min_version": "0.12.344-dev",
+      "settings": null
+    }
+  ],
+  "cases": [
+    {
+      "script": "",
+      "steps": [
+        "1. Equip **Kerillian: Deepwood Staff** on a career other than Sister of the Thorn and build low, medium and high overcharge.",
+        "2. Swap away and back, let the overcharge decay, then cross a mission or respawn boundary and build charge again.",
+        "3. Record the bar colour and icon tint at each charge level, plus the warning flash, sounds, slowdown, lockout, drainability and recharge behaviour.",
+        "4. Repeat the whole sequence on Sister of the Thorn as the native control, then repeat the recharge leg with **Kerillian: Moonfire Bow**.",
+        "5. Run `/wt_regression_test` and attach the newest log."
+      ],
+      "assertions": [
+        "on the non-Sister career the overcharge bar and icon use the same palette Sister of the Thorn shows natively in step 4 - the green presentation named in the report - at low, medium and high charge, and it survives swap-away-and-back plus the mission or respawn boundary. Gameplay is unchanged: warning flash, sounds, slowdown, lockout, drainability and stowed and wielded recharge all behave as on the native control. `/wt_regression_test` reports `PASS: issue388_deepwood_overcharge_profile`, and the log carries `[wt:388] Deepwood overcharge HUD hook installed`, one `[wt:388] Deepwood overcharge profile applied career=<career> transport=owner-authoritative` per career, and `[wt:388] Deepwood overcharge profile restored` on unequip. A default or career-standard bar instead of the Sister palette is a REGRESSION - attach the log and say which career and charge level.",
+        "Non-Sister with Deepwood: assert overcharge extension fields equal the we_thornsister profile and HUD bar colours equal Sister palette at 3 charge levels; restored on unequip. Sounds V."
+      ],
+      "pass_closes": true
+    }
+  ],
+  "source": {
+    "card_comment_id": 5165082391,
+    "card_date": "2026-08-03T10:15:49Z",
+    "ledger": "D2_ledger.tsv"
+  }
+}

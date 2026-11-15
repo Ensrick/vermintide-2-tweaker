@@ -1,0 +1,30 @@
+{
+  "schema": 1,
+  "issue": 428,
+  "class": "S",
+  "status": "draft",
+  "vp": null,
+  "arena": "none",
+  "cases": [
+    {
+      "script": "",
+      "steps": [],
+      "assertions": [
+        "qa/check_shared_lib_drift.ps1 exit 0 (ran today: OK) plus a census showing zero unmanifested duplicate helpers named in OOP_REFACTOR_PLAN WS4."
+      ],
+      "pass_closes": true
+    }
+  ],
+  "offline": [
+    {
+      "class": "S",
+      "command": "",
+      "expect": "qa/check_shared_lib_drift.ps1 exit 0 (ran today: OK) plus a census showing zero unmanifested duplicate helpers named in OOP_REFACTOR_PLAN WS4."
+    }
+  ],
+  "source": {
+    "card_comment_id": null,
+    "card_date": null,
+    "ledger": "D5_ledger.tsv"
+  }
+}

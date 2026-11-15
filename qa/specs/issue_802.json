@@ -1,0 +1,37 @@
+{
+  "schema": 1,
+  "issue": 802,
+  "class": "R",
+  "status": "draft",
+  "vp": null,
+  "arena": "unknown",
+  "mods": [
+    {
+      "dir": "event_tweaker",
+      "min_version": "0.4.54-dev",
+      "settings": null
+    }
+  ],
+  "cases": [
+    {
+      "script": "",
+      "steps": [
+        "1. In Tweaker: Events, enable **The Feast of Grimnir** and **A Quiet Drink**.",
+        "2. Open **Own Game**. Confirm **Campaign** is still the first tile and opens the ordinary Helmgart campaign, and that exactly one later **Events** tile appears.",
+        "3. Open **Events**. Confirm it contains **The Feast of Grimnir** and **A Quiet Drink**. Visit Campaign and the other DLC areas and confirm neither event mission appears there.",
+        "4. Back out and reopen Own Game three times. If a controller is available, repeat the same menu traversal with it.",
+        "5. Run `/event_mission_probe`, then `/event_tweaker_regression_test`, exit the game, and attach the newest log."
+      ],
+      "assertions": [
+        "Campaign remains first and unchanged; exactly one later Events tile contains only the two enabled event missions; repeated reopen does not duplicate or move it. The probe records `campaign_index=1`, one later `event_index`, `stock_identity=true`, and mission filtering only while Events is selected. `issue802_event_mission_area_scope` passes.",
+        "Open Own Game by script; read area widgets: first is Helmgart, exactly one Events area later; its missions equal the enabled allowlist; reopen three times."
+      ],
+      "pass_closes": true
+    }
+  ],
+  "source": {
+    "card_comment_id": 5154812228,
+    "card_date": "2026-08-02T02:57:39Z",
+    "ledger": "D3_ledger.tsv"
+  }
+}
