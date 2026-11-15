@@ -1244,4 +1244,39 @@ return function(Harness, repo_root)
         Harness.equal(f.package.unloads, 0)
         Harness.equal(#f.package.receipts, 0)
     end)
+
+    -- WP-COS-02 (audit finding A3-F12): /cd_regression_test printed one aggregate
+    -- "failures=%d" line, so no check could be named. Each check now echoes its own
+    -- PASS / FAIL line; the summary line stays. Runs the real installed command.
+    Harness.test("cd regression command echoes one named PASS line per check", function()
+        local f = live_dialogue_fixture(repo_root)
+        local commands, echoes = {}, {}
+        setmetatable(f.cd, { __newindex = function(t, key, value)
+            if key == "command" then
+                value = function(_, name, _, fn) commands[name] = fn end
+            elseif key == "echo" then
+                value = function(_, fmt, ...)
+                    echoes[#echoes + 1] = select("#", ...) > 0 and string.format(fmt, ...) or tostring(fmt)
+                end
+            end
+            rawset(t, key, value)
+        end })
+        f:load_live_cd()
+        Harness.equal(type(commands.cd_regression_test), "function", "cd_regression_test registered")
+        -- table.size is an engine extension (foundation/scripts/util/table.lua:9), absent in plain Lua.
+        f.env.table = setmetatable({ size = function(t)
+            local n = 0
+            for _ in pairs(t) do n = n + 1 end
+            return n
+        end }, { __index = table })
+        commands.cd_regression_test()
+        local names, distinct = {}, 0
+        for _, line in ipairs(echoes) do
+            local name = line:match("^  PASS: (%S+)$")
+            if name and not names[name] then names[name] = true; distinct = distinct + 1 end
+        end
+        Harness.truthy(distinct >= 6, "expected at least six named PASS lines, got " .. distinct
+            .. ": " .. table.concat(echoes, " | "))
+        Harness.truthy(table.concat(echoes, "\n"):find("failures=0", 1, true), "the summary line stays")
+    end)
 end
