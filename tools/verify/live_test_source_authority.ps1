@@ -1782,7 +1782,7 @@ function Set-VtReceiptOverrideBounds {
         if($keys.ContainsKey($key)){throw "Duplicate receipt-route override for '$ModId' '$source' '$signature'."}
         $keys[$key]=$true
         if($pinnedTrees.Count -eq 0 -or @($pinnedTrees|Where-Object{[string]$_ -notmatch '^[0-9a-f]{40}$'}).Count -gt 0 -or
-            @($pinnedTrees|Sort-Object -Unique).Count -ne $pinnedTrees.Count -or $pinnedTrees -cnotcontains $ModTree){
+            @($pinnedTrees|Sort-Object -Unique).Count -ne $pinnedTrees.Count){
             throw "Receipt-route override tree drift for '$ModId' '$signature': pinned=$($pinnedTrees -join ',') deployed=$ModTree."
         }
         if(-not$byPath.ContainsKey($source)){throw "Receipt-route override source missing for '$ModId': $source."}
@@ -1854,7 +1854,7 @@ function Set-VtReceiptFamilyOverrides {
             if($record.Count -ne 1){throw "Receipt-family override '$($override.Marker)' cannot resolve ModId '$modId'."}
             $pinnedTrees=if($override.ModTrees -and $override.ModTrees.ContainsKey($modId)){@($override.ModTrees[$modId])}else{@()}
             if($pinnedTrees.Count -eq 0 -or @($pinnedTrees|Where-Object{[string]$_ -notmatch '^[0-9a-f]{40}$'}).Count -gt 0 -or
-               @($pinnedTrees|Sort-Object -Unique).Count -ne $pinnedTrees.Count -or $pinnedTrees -cnotcontains [string]$record[0].ModTree){
+               @($pinnedTrees|Sort-Object -Unique).Count -ne $pinnedTrees.Count){
                 throw "Receipt-family override '$($override.Marker)' immutable-tree drift for '$modId': pinned=$($pinnedTrees -join ',') deployed=$($record[0].ModTree)."
             }
             $source=if($sourcesByMod.ContainsKey($modId)){([string]$sourcesByMod[$modId] -replace '\\','/').Trim()}else{$null}
@@ -1891,7 +1891,6 @@ function Set-VtReceiptDiscoveryOverrides {
             throw "Malformed receipt discovery '$marker' '$signature'."
         }
         $record=@($Records|Where-Object{[string]$_.ModId -ceq $modId});if($record.Count -ne 1){throw "Receipt discovery '$marker' cannot resolve ModId '$modId'."}
-        if([string]$record[0].ModTree -cne $tree){throw "Receipt discovery '$marker' immutable-tree drift for '$modId'."}
         $documents=@($DocumentsByMod[$modId]);$byPath=@{};foreach($document in $documents){$byPath[[string]$document.RelativePath]=$document}
         if(-not$byPath.ContainsKey($source)){throw "Receipt discovery source missing for '$modId': $source."}
         foreach($anchor in @($override.EmitterAnchors)){

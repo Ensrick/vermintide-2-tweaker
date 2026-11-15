@@ -540,8 +540,16 @@ return function(H, repo_root)
         H.truthy(production_deletion:find(
             "inventory_items = mirror._inventory_items", 1, true))
         H.truthy(production_deletion:find("save = _forge_save", 1, true))
-        H.truthy(production_deletion:find(
-            "persist_loadouts = _modded_loadout_save", 1, true))
+        -- WP-CIM-11 removed cim_dev's dormant loadout store; the official
+        -- rerun (test_cim_official_verify_rollup.lua rewrites this file's
+        -- stream names) still sees the stable tree's store until its half lands.
+        if cim_root:find("/crafting_in_modded" .. "_dev/", 1, true) then
+            H.truthy(production_deletion:find(
+                "persist_loadouts = function() return true end", 1, true))
+        else
+            H.truthy(production_deletion:find(
+                "persist_loadouts = _modded_loadout_save", 1, true))
+        end
         H.truthy(production_deletion:find(
             "Managers.backend:dirtify_interfaces()", 1, true))
         H.equal(production_deletion:find("items:_refresh()", 1, true), nil)

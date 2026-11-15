@@ -620,4 +620,192 @@ return {
         H.equal(#failed, 1, "one failure for the locked skin")
         H.truthy(failed[1] and failed[1]:find("INV%-A dirty es_mercenary%[1%]%.slot_skin .*not in _unlocked_cosmetics"), "INV-A names the slot and reason: " .. tostring(failed[1]))
     end)
+
+    -- -----------------------------------------------------------------------------------------------------
+    -- WP-H-04: arena sequencing with a stub mechanism whose level changes a number of updates after
+    -- debug_load_level (game_mechanism_manager.lua:880-892), and the actor helpers with a stub conflict director.
+    -- -----------------------------------------------------------------------------------------------------
+    local KEEP_CASE = [[
+return { arena = "keep", run = function(T) T.expect_eq(T.level_key(), "inn_level", "in the keep") end }
+]]
+
+    local function mission_world(env)
+        local world = { level = "inn_level", loads = {}, pending = nil, alive = {}, spawned = {}, queued = {} }
+        local hero = env.Managers.player:local_player().player_unit
+        local bot = { name = "stub bot unit" }
+        world.hero = hero
+        world.alive[hero] = true
+        world.alive[bot] = true
+        world.health = { is_invincible = false }
+        -- engine stubs that take a unit record a call made inside a coroutine (the real engine fails there)
+        world.in_coroutine = {}
+        local function main_only(name)
+            if coroutine.running() then
+                world.in_coroutine[#world.in_coroutine + 1] = name
+            end
+        end
+        env.HEALTH_ALIVE = {}
+        env.Unit = {
+            alive = function(unit) return unit ~= nil and world.alive[unit] == true end,
+            local_position = function() main_only("Unit.local_position"); return env.Vector3(0, 0, 0) end,
+        }
+        local vector_mt = {}
+        vector_mt.__add = function(a, b) return setmetatable({ a[1] + b[1], a[2] + b[2], a[3] + b[3] }, vector_mt) end
+        env.Vector3 = function(x, y, z) return setmetatable({ x, y, z }, vector_mt) end
+        env.Vector3Box = function(v) return { v } end
+        env.QuaternionBox = function(q) return { q } end
+        env.Quaternion = { identity = function() return {} end }
+        env.Breeds = { skaven_slave = { name = "skaven_slave" } }
+        env.AiUtils = {
+            kill_unit = function(unit)
+                main_only("AiUtils.kill_unit")
+                env.HEALTH_ALIVE[unit] = nil
+                world.alive[unit] = nil
+            end,
+        }
+        env.ScriptUnit = {
+            has_extension = function(unit, system)
+                main_only("ScriptUnit.has_extension")
+                if unit == hero and system == "health_system" then return world.health end
+                if unit == hero and system == "buff_system" then
+                    return { has_buff_type = function() main_only("buff:has_buff_type"); return false end }
+                end
+            end,
+        }
+        env.Managers.player.bots = function() return { { player_unit = bot } } end
+        env.Managers.mechanism = {
+            debug_load_level = function(_, level, variation)
+                world.loads[#world.loads + 1] = level .. ":" .. tostring(variation)
+                world.pending = { level = level, left = 20 }
+            end,
+        }
+        env.Managers.state.game_mode = { level_key = function() return world.level end }
+        env.Managers.state.conflict = {
+            spawned_units_by_breed = function(_, name) return world.spawned[name] end,
+            spawn_queued_unit = function(_, breed, position_box, rotation_box)
+                main_only("spawn_queued_unit")
+                world.queued[#world.queued + 1] = { breed = breed, position = position_box[1] }
+            end,
+        }
+        -- one update of the stub game: queued enemies appear, a pending level change progresses
+        function world.tick(object)
+            for _, q in ipairs(world.queued) do
+                local unit = { breed = q.breed.name }
+                world.spawned[q.breed.name] = world.spawned[q.breed.name] or {}
+                world.spawned[q.breed.name][#world.spawned[q.breed.name] + 1] = unit
+                world.alive[unit] = true
+                env.HEALTH_ALIVE[unit] = true
+            end
+            world.queued = {}
+            local p = world.pending
+            if p then
+                p.left = p.left - 1
+                if p.left == 15 then callback(object, "on_game_state_changed", "enter", "StateLoading") end
+                if p.left == 0 then
+                    world.level = p.level
+                    world.pending = nil
+                    callback(object, "on_game_state_changed", "enter", "StateIngame")
+                end
+            end
+        end
+        return world
+    end
+
+    local function run_mission(plan)
+        local object, env, lines = boot(plan)
+        local world = mission_world(env)
+        callback(object, "on_game_state_changed", "enter", "StateIngame")
+        for _ = 1, 30000 do
+            world.tick(object)
+            callback(object, "update", 0.1)
+            if env.Boot.quit_game then break end
+        end
+        H.truthy(env.Boot.quit_game, "the driver asked the game to quit")
+        return lines, world, env
+    end
+
+    local function index_of(lines, pattern, from)
+        for i = from or 1, #lines do
+            if lines[i]:find(pattern) then return i end
+        end
+    end
+
+    H.test("rig arenas: keep, mission:military, back to the keep, then quit", function()
+        local plan = make_plan({
+            { id = "keep-case", arena = "keep", src = KEEP_CASE },
+            { id = "mission-military", arena = "mission:military", src = read(repo_root .. "/qa/runtime/_rig/mission_military.lua") },
+        }, { arenas = { "keep", "mission:military", "keep" } })
+        local lines, world = run_mission(plan)
+        H.deep_equal(world.loads, { "military:0", "inn_level:0" }, "debug_load_level to the mission, then to the keep")
+        local order = {
+            "KEEP READY level=inn_level",
+            "CASE END id=keep%-case verdict=PASS",
+            "LOAD arena=mission:military level=military from=inn_level",
+            "LEVEL READY level=military t=[%d%.]+ load_seconds=[%d%.]+",
+            "CASE END id=mission%-military verdict=PASS",
+            "LOAD arena=keep level=inn_level from=military",
+            "LEVEL READY level=inn_level",
+            "RUN END reason=\"plan complete\" cases=2 pass=2",
+        }
+        local at = 1
+        for _, pattern in ipairs(order) do
+            local found = index_of(lines, tag .. pattern, at)
+            H.truthy(found, "in order: " .. pattern)
+            at = (found or at) + 1
+        end
+        H.truthy(first(lines, tag .. "CLEANUP id=mission%-military actions=2 errors=0"), "the mission case's helper changes were cleaned up")
+        H.equal(world.health.is_invincible, false, "invincibility restored after the case")
+        H.equal(table.concat(world.in_coroutine, ","), "", "spawn, kill, invincible and the buff read ran in the main update, not in the case coroutine")
+    end)
+
+    H.test("rig helpers: cleanup kills a spawned enemy and restores invincibility after an ERROR", function()
+        local plan = make_plan({
+            { id = "boom", arena = "keep", src = [[
+return { run = function(T)
+    T.invincible(true)
+    local u = T.spawn("skaven_slave", { 1, 0, 0 })
+    T.expect(u ~= nil, "spawned")
+    T.note("spawned", tostring(u ~= nil))
+    error("planted error after spawning")
+end }
+]] },
+        })
+        local lines, world, env = run_mission(plan)
+        H.truthy(first(lines, tag .. "CASE END id=boom verdict=ERROR .*planted error after spawning"), "ERROR reported")
+        H.truthy(first(lines, tag .. "CLEANUP id=boom actions=2 errors=0"), "two cleanups ran")
+        local unit = world.spawned.skaven_slave and world.spawned.skaven_slave[1]
+        H.truthy(unit ~= nil, "the enemy was spawned")
+        H.equal(env.HEALTH_ALIVE[unit], nil, "the enemy left alive by the case was killed at cleanup")
+        H.equal(world.health.is_invincible, false, "invincibility restored")
+        H.equal(table.concat(world.in_coroutine, ","), "", "no unit-taking engine call ran inside the case coroutine")
+    end)
+
+    H.test("rig arenas: an arena the driver cannot load ends its cases as INCONCLUSIVE", function()
+        local plan = make_plan({ { id = "deus-case", arena = "deus", src = "return { run = function(T) T.expect(true, 'x') end }" } })
+        local lines = run_mission(plan)
+        H.truthy(first(lines, tag .. "CASE END id=deus%-case verdict=INCONCLUSIVE .*arena not supported by this driver: deus"), "INCONCLUSIVE names the arena")
+        H.truthy(first(lines, tag .. "RUN END"), "run still ends")
+    end)
+
+    H.test("rig T.main: runs the function outside the case coroutine and hands back its results and errors", function()
+        local plan = make_plan({
+            { id = "main-ok", src = [[
+return { run = function(T)
+    T.expect(coroutine.running() ~= nil, "the case itself runs in a coroutine")
+    local outside, a, b, c = T.main(function(x, y) return coroutine.running() == nil, x, nil, y end, 1, 3)
+    T.expect(outside, "T.main ran the function in the main update")
+    T.expect_eq(a, 1, "first result")
+    T.expect_eq(b, nil, "a nil result keeps its place")
+    T.expect_eq(c, 3, "third result")
+end }
+]] },
+            { id = "main-err", src = "return { run = function(T) T.main(function() error('planted main error') end) end }" },
+            { id = "main-require", src = "return { run = function(T) T.main(function() T.require(false, 'precondition inside main') end) end }" },
+        })
+        local object, env, lines = boot(plan)
+        H.truthy(run_to_end(object, env), "run completed")
+        H.equal(count(lines, tag .. "CASE END id=main%-ok verdict=PASS asserts=5 failed=0"), 1, "results returned in order")
+        H.truthy(first(lines, tag .. "CASE END id=main%-err verdict=ERROR .*planted main error"), "an error in main is the case's ERROR")
+        H.truthy(first(lines, tag .. "CASE END id=main%-require verdict=INCONCLUSIVE .*precondition inside main"), "a failed T.require in main stays INCONCLUSIVE")
+    end)
 end

@@ -96,7 +96,7 @@ return {
     show_only_modded_weapons_description = {
         en = "Hides normal weapons from your inventory and equip screens, leaving only modded ones. Crafting materials and cosmetics are unaffected.",
     },
-    -- persist_modded_loadouts / restore_modded_loadout loc entries REMOVED
+    -- The two loadout persistence toggles' loc entries were REMOVED
     -- 2026-06-30 with the toggles (loadout persistence moved to Tweaker: GUI).
     ignore_unloadable_items = {
         en = "Ignore items from inactive mods (no chat spam)",

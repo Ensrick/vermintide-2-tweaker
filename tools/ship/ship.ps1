@@ -141,6 +141,8 @@ if (-not (Test-Path -LiteralPath $publicationSnapshotHelpers -PathType Leaf)) {
     throw "Publication snapshot policy not found: $publicationSnapshotHelpers"
 }
 . $publicationSnapshotHelpers
+# WP-P-02: one ship-result JSON and one ledger line per run; writes only warn.
+. (Join-Path $PSScriptRoot 'ship-result.ps1')
 
 function Fail {
     param([string]$Message)
@@ -149,6 +151,7 @@ function Fail {
     # Write-Error for a proper error record, but don't let it throw a second time
     # (global ErrorActionPreference is Stop); the explicit exit is the real signal.
     Write-Error $Message -ErrorAction Continue
+    if ($script:VtShipResult) { Complete-VtShipResult -Result $script:VtShipResult -Status 'failed' -Message $Message }
     exit 1
 }
 
@@ -292,6 +295,14 @@ function Get-ShipDeploymentPolicy {
         RemoteDeploy = (-not [bool]$NoRemote)
         Reason = 'local Workshop subscription is present'
     }
+}
+
+# WP-P-07: the launcher doctor prints one line per check as [ ok ], [warn] or
+# [ERR ] followed by "Title: detail". An error, or any Steam warning, means the
+# release station is not ready to publish.
+function Get-ShipDoctorProblems {
+    param([string[]]$Lines)
+    return @(@($Lines) | Where-Object { [string]$_ -match '^\[ERR \]' -or [string]$_ -match '^\[warn\] Steam:' })
 }
 
 function Test-ShipUploadEvidencePolicy {
@@ -988,6 +999,11 @@ function Invoke-ShipSelfTest {
     Assert $receiptRemoteRejected "receipt local deployment never silently substitutes for remote deployment"
     $receiptBuildOnlyPolicy = Get-ShipDeploymentPolicy -PublishedId '3733366851' -DeployDirectoryExists $true -BundleAuthority receipt -BuildOnly
     Assert (-not $receiptBuildOnlyPolicy.ShouldDeploy) "receipt artifact-only build does not acquire deployment authority"
+    # WP-P-07: doctor ERR lines and Steam warnings stop a ship; other warnings do not.
+    $doctorFixture = @(Get-ShipDoctorProblems -Lines @('[ERR ] Steam: not running', '[warn] Steam: not logged in', '[ ok ] Steam: running', '[warn] Workshop content folder: not found', '[ ok ] VMB: found'))
+    Assert ($doctorFixture.Count -eq 2 -and $doctorFixture[0] -ceq '[ERR ] Steam: not running' -and $doctorFixture[1] -ceq '[warn] Steam: not logged in') "launcher doctor ERR lines and Steam warnings stop a ship"
+    Assert (@(Get-ShipDoctorProblems -Lines @('[ERR ] Project folder: missing')).Count -eq 1) "any launcher doctor ERR line stops a ship"
+    Assert (@(Get-ShipDoctorProblems -Lines @('[ ok ] Steam: running', '[warn] Workshop content folder: not found')).Count -eq 0) "healthy doctor output and non-Steam warnings pass"
     $bootstrapPolicy = Get-ShipDeploymentPolicy -PublishedId '0' -DeployDirectoryExists $false
     Assert ($bootstrapPolicy.Mode -eq 'bootstrap' -and -not $bootstrapPolicy.ShouldDeploy -and -not $bootstrapPolicy.RemoteDeploy) "first upload remains a separate no-deploy bootstrap"
     $invalidPublishedIdRejected = $false
@@ -1711,6 +1727,10 @@ if ($EmergencyPublicationReason) {
     Fail "-EmergencyPublicationReason is no longer accepted. Workshop publication requires exact clean default-branch HEAD, its merged PR, and successful hosted qa-gate."
 }
 
+# WP-P-02: every run from here on leaves one ship-result JSON and one ledger line.
+$script:VtShipResult = New-VtShipResult -Mod $Mod -Mode $(if ($BuildOnly) { 'build-only' } else { 'ship' })
+if ($script:VtShipResult) { Set-VtShipResultStage -Result $script:VtShipResult -Name 'resolve' }
+
 # ---------------------------------------------------------------------------
 # Step 1: resolve paths + parse published_id and MOD_VERSION
 # ---------------------------------------------------------------------------
@@ -1751,6 +1771,7 @@ if ($cfgTxt -notmatch 'published_id\s*=\s*(\d+)L') {
     Fail "No published_id found in $cfgPath (mod not yet uploaded to Workshop?)"
 }
 $publishedId = $matches[1]
+if ($script:VtShipResult) { $script:VtShipResult.published_id = [string]$publishedId }
 $isFirstUploadBootstrap = ($publishedId -eq '0')
 if ($isFirstUploadBootstrap -and
     [string]$bundleAuthorityPolicy.Authority -ceq 'receipt') {
@@ -1805,6 +1826,7 @@ if (Test-Path $luaPath) {
 if ($modVersion -eq '(unknown)') {
     Fail "No MOD_VERSION found in $luaPath."
 }
+if ($script:VtShipResult) { $script:VtShipResult.version = $modVersion }
 if ($cfgTxt -match 'title[ \t]*=[ \t]*"([^"]+)"') {
     $streamIdentity = $matches[1]
     $versionSuffix = " v$modVersion"
@@ -1845,6 +1867,7 @@ if (-not $releaseIdentity.Ok) {
 # must hold the machine-global claim; missing tooling and every coordination
 # failure are fail-closed before VMB can build, deploy, or upload.
 # ---------------------------------------------------------------------------
+if ($script:VtShipResult) { Set-VtShipResultStage -Result $script:VtShipResult -Name 'preflight' }
 if ($NoClaim) {
     Write-Host ""
     Write-Host "  !! -NoClaim: skipping the ship/version claim gate. Safe ONLY in a solo" -ForegroundColor Yellow
@@ -1879,6 +1902,7 @@ if ($commitProbe.ExitCode -ne 0 -or $commitProbe.Lines.Count -eq 0) {
     Fail "Cannot resolve the invoking checkout's source commit at $repoRoot. Shipping requires a git worktree identity (issue #647)."
 }
 $sourceCommit = ([string]$commitProbe.Lines[-1]).Trim()
+if ($script:VtShipResult) { $script:VtShipResult.source_commit = $sourceCommit }
 
 $publicationAuthorization = $null
 if (-not $BuildOnly) {
@@ -2028,6 +2052,19 @@ catch {
 }
 Write-Host ("VMBLauncher publication capability: PASS (v{0}, receipt schema 3, authority {1}, locked snapshot)" -f $launcherCapability.Version, $bundleAuthorityPolicy.Authority) -ForegroundColor DarkGray
 
+# WP-P-07 (#1328): a release station whose Steam or SDK is not ready must stop
+# here, before the build, the GitHub release and the upload. doctor is read-only;
+# nothing restarts Steam or changes machine state when it fails (D-P-09).
+if (-not $BuildOnly) {
+    $doctorRun = Invoke-ShipLauncherNoWindow -LauncherExecutableLease $launcherExecutableLease -ArgumentList @('doctor', '--no-banner', '--config', $launcherSettings)
+    $doctorProblems = @(Get-ShipDoctorProblems -Lines @($doctorRun.Lines))
+    if ($doctorRun.ExitCode -ne 0 -or $doctorProblems.Count -gt 0) {
+        $doctorDetail = if ($doctorProblems.Count -gt 0) { $doctorProblems -join '; ' } else { "doctor exited $($doctorRun.ExitCode)" }
+        Fail "VMBLauncher doctor reports the release station is not ready; nothing was built, published or uploaded: $doctorDetail"
+    }
+    Write-Host "VMBLauncher doctor: PASS (release station ready)" -ForegroundColor DarkGray
+}
+
 # ---------------------------------------------------------------------------
 # Headless red gate (issues #590/#591): exercise the same fast, host-runnable
 # QA tier used by local development before the launcher is allowed to build,
@@ -2044,6 +2081,7 @@ if (-not (Test-Path $quickGate)) {
 }
 
 Write-Host ""
+if ($script:VtShipResult) { Set-VtShipResultStage -Result $script:VtShipResult -Name 'qa' }
 Write-Host "==> Headless preflight (fast QA + Lua 5.1 units)" -ForegroundColor Cyan
 & $quickGate -Quick -SkipLua -SkipBundleAtomicity:$BuildOnly -SkipBuildReceipts:$BuildOnly -SkipCustomUnitBundleReachability:$BuildOnly -Quiet
 if ($LASTEXITCODE -ne 0) {
@@ -2082,6 +2120,7 @@ Write-Host "    deploy dir: $(if ($deploymentPolicy.Mode -eq 'publication-only')
 if ($AllowPublic) { Write-Host "    --allow-public : ON (public Workshop item)" -ForegroundColor Yellow }
 if ($NoRemote)    { Write-Host "    --no-remote    : ON (skipping PC-B push)" }
 
+if ($script:VtShipResult) { Set-VtShipResultStage -Result $script:VtShipResult -Name 'build' }
 # ---------------------------------------------------------------------------
 # Step 2: clean build via VMBLauncher. Deploy and upload are deliberately
 # separate actions so the freshly generated bundle can be proven byte-identical
@@ -2288,6 +2327,7 @@ if ($BuildOnly) {
     }
     Write-Host ""
     Write-Host "BUILD-ONLY COMPLETE -- bundle and exact schema-3 source/output receipt generated; receipt, atomicity, and applicable compiled contracts verified; custom-unit reachability status is reported above (SKIP is not verification); no deploy, upload, GitHub release, or lifecycle edit was attempted." -ForegroundColor Green
+    if ($script:VtShipResult) { Complete-VtShipResult -Result $script:VtShipResult -Status 'ok' -Message 'build-only complete' }
     exit 0
 }
 
@@ -2331,6 +2371,7 @@ $publicationParityLabel = if ([string]$bundleAuthorityPolicy.Authority -ceq 'tra
 }
 Write-Host "  OK -- clean build exactly reproduces the $publicationParityLabel." -ForegroundColor Green
 
+if ($script:VtShipResult) { Set-VtShipResultStage -Result $script:VtShipResult -Name 'deploy' }
 $deployOk = $false
 if ($deploymentPolicy.ShouldDeploy) {
     $deployArgs = @('deploy', $Mod)
@@ -2383,6 +2424,7 @@ if ($cfgTxtAfter -match 'published_id\s*=\s*(\d+)L' -and $matches[1] -ne $publis
           "and re-verify both items' content before doing anything else (issue #344).")
 }
 
+if ($script:VtShipResult) { Set-VtShipResultStage -Result $script:VtShipResult -Name 'verify-deploy' }
 # ---------------------------------------------------------------------------
 # Step 3: VERIFY DEPLOY -- byte-exact bundles; newline-normalized .mod descriptor
 # ---------------------------------------------------------------------------
@@ -2440,6 +2482,7 @@ if ($deploymentPolicy.ShouldDeploy) {
     }
 }
 
+if ($script:VtShipResult) { Set-VtShipResultStage -Result $script:VtShipResult -Name 'release' }
 # ---------------------------------------------------------------------------
 # Step 4: re-authorize, record release provenance, then upload only.
 # Branch head and hosted QA can change while the clean build/deploy runs. The
@@ -2567,6 +2610,7 @@ if (-not $isFirstUploadBootstrap) {
     catch { $beforeWorkshopSnapshotError = $_.Exception.Message }
 }
 
+if ($script:VtShipResult) { Set-VtShipResultStage -Result $script:VtShipResult -Name 'upload' }
 $uploadArgs = @('upload', $Mod)
 if ($AllowPublic) { $uploadArgs += '--allow-public' }
 $uploadArgs += @('--publication-receipt', $receiptPath, '--config', $launcherSettings)
@@ -2612,10 +2656,12 @@ if ($uploadFailure) {
 }
 if ($isFirstUploadBootstrap) {
     $publishedId = $receiptAcceptance.PublishedId
+    if ($script:VtShipResult) { $script:VtShipResult.published_id = [string]$publishedId }
     $deployDir = Join-Path $workshopRoot $publishedId
     Write-Host "  Bootstrap assigned Workshop ID $publishedId. Commit the ID-only itemV2.cfg change before the next ship." -ForegroundColor Yellow
 }
 
+if ($script:VtShipResult) { Set-VtShipResultStage -Result $script:VtShipResult -Name 'verify-upload' }
 # ---------------------------------------------------------------------------
 # Step 5: VERIFY UPLOAD -- consume the bounded terminal transaction evidence
 # ---------------------------------------------------------------------------
@@ -2713,9 +2759,11 @@ if ($isFirstUploadBootstrap) {
     Write-Host "  default-branch HEAD. The machine-global claim remains held until that" -ForegroundColor Yellow
     Write-Host "  reconciliation completes; do not release or override it early." -ForegroundColor Yellow
     Write-Host "=====================================================================" -ForegroundColor Yellow
+    if ($script:VtShipResult) { Complete-VtShipResult -Result $script:VtShipResult -Status 'ok' -Message 'first-upload bootstrap complete' }
     exit 0
 }
 
+if ($script:VtShipResult) { Set-VtShipResultStage -Result $script:VtShipResult -Name 'pins' }
 # ---------------------------------------------------------------------------
 # Step 5b: reconcile GitHub source provenance before live-test authority.
 # Failure finalization calls the SAME helper, but never reaches readiness.
@@ -2746,6 +2794,7 @@ catch {
     Write-Host ("  WARNING: deployed live-test authority unavailable ({0}); no issue may enter a ready lifecycle state." -f $_.Exception.Message) -ForegroundColor Yellow
 }
 
+if ($script:VtShipResult) { Set-VtShipResultStage -Result $script:VtShipResult -Name 'labels' }
 # ---------------------------------------------------------------------------
 # Step 6: STATUS-LABEL the shipped issues (issue #326 mechanization)
 # ---------------------------------------------------------------------------
@@ -2926,6 +2975,7 @@ catch {
     $labelSummary += 'ERRORED -- label by hand'
 }
 
+if ($script:VtShipResult) { Set-VtShipResultStage -Result $script:VtShipResult -Name 'cards' }
 # ---------------------------------------------------------------------------
 # Step 6b: refresh pinned CURRENT LIVE TEST card version surfaces (issue #1102)
 # ---------------------------------------------------------------------------
@@ -3037,6 +3087,7 @@ if (-not $NoClaim) {
     }
 }
 
+$script:VtShipBodyCompleted = $true
 }
 finally {
     # An SDK/upload/verification failure must not strand GitHub source pins.
@@ -3075,10 +3126,15 @@ finally {
         if ($null -ne $transactionLease) {
             Exit-VmbMachineTransactionLease -Lease $transactionLease
         }
+        # WP-P-02: an exception that escaped the transaction body is a crash.
+        if ($script:VtShipResult -and -not $script:VtShipBodyCompleted) {
+            Complete-VtShipResult -Result $script:VtShipResult -Status 'crashed' -Message 'ship.ps1 left its transaction body without completing it'
+        }
     }
     }
 }
 
+if ($script:VtShipResult) { Set-VtShipResultStage -Result $script:VtShipResult -Name 'finish' }
 # ---------------------------------------------------------------------------
 # Step 7: success summary -- only after ALL owned cleanup has returned.
 # A completed upload is not a completed transaction (#1328). In particular,
@@ -3128,4 +3184,5 @@ Write-Host "    Confirm the running build via the NEWEST log under" -ForegroundC
 Write-Host "       %APPDATA%\Fatshark\Vermintide 2\console_logs\" -ForegroundColor Yellow
 Write-Host ("    look for:  [{0}:LOAD] v{1}" -f $loadTag, $modVersion) -ForegroundColor Yellow
 Write-Host $bar -ForegroundColor Yellow
+if ($script:VtShipResult) { Complete-VtShipResult -Result $script:VtShipResult -Status 'ok' -Message 'ship complete' }
 exit 0

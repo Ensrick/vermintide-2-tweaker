@@ -4,21 +4,18 @@
 # marker-wide permission for a card to invent evidence: deployed-tree, source,
 # literal signature, and concrete guard anchors all have to match.
 #
-# PIN REPOINTING (issue #1328): the ModTree/ModTrees values in the three
-# CONSUMED structures (ReceiptFamilyOverrides / ReceiptRouteOverrides /
-# ReceiptDiscoveryOverrides) normally name the exact deployed scripts/mods
-# subtree audited by the finite-output proof. #1777's explicit, source/receipt-
-# bound ReviewedRouteTransitions alone may retain two reviewed route trees;
-# see the sole policy owner PROJECT_STANDARDS.md section 6.6. Canonical
-# ship reconciles confirmed GitHub publication even if later Workshop work
-# fails. After hard process death, its next authorized pre-build entry proves
-# all consumed pins against the fresh current published manifest, without
-# replaying an old intent journal. Changed invoking pins stop for a metadata
-# PR; an already prepared primary candidate does not bypass that stop. The
-# per-override token anchors still fail closed if audited code changed, so a
-# provenance repoint never grants an unreviewed finite-output proof. Ship
-# cannot commit to master: any rewrite remains a working-tree candidate for
-# review. LegacyMarkerFamilyModTrees (reviewer context) and LegacySourceTrees
+# SOURCE PINS ARE INFORMATIONAL (WP-P-05, 2026-11-15; issue #1328): the
+# ModTree/ModTrees values in the three CONSUMED structures
+# (ReceiptFamilyOverrides / ReceiptRouteOverrides / ReceiptDiscoveryOverrides)
+# record the deployed scripts/mods subtree each override was reviewed against.
+# They are no longer compared with the deployed tree and no longer rewritten
+# after a ship; tools/verify/live_test_contract.ps1 still reads them to find
+# the tree its offline proofs run against. The protection is the override's
+# source, literal signature and token anchors: they are checked against the
+# deployed source and fail closed when audited code changed. Pins stay
+# lowercase 40-hex without duplicates, and the consumed pins of one mod agree.
+# #1777 ReviewedRouteTransitions are read only by the dormant rewrite path.
+# LegacyMarkerFamilyModTrees (reviewer context) and LegacySourceTrees
 # (carried-forward promotion pins) are deliberately NEVER rewritten.
 # These pins establish source provenance only. A partial GitHub publication
 # does not establish Workshop transfer or make a new build ready for testing.

@@ -16,7 +16,11 @@ return function(H, repo_root)
         H.truthy(math.abs(actual - expected) < 0.0001,
             "expected " .. tostring(expected) .. ", got " .. tostring(actual))
     end
-    local function runtime_harness()
+    -- WP-GT-02: `saved` stands in for VMF's stored settings. The default marks the
+    -- one-time default-off migration as done and the user as opted in, so the
+    -- behaviour cases below run with the feature on.
+    local function runtime_harness(saved)
+        saved = saved or { gt_host_lag_comp_default_off_v1 = true }
         local hooks = {}
         local updates = {}
         local hit_count = 0
@@ -50,10 +54,12 @@ return function(H, repo_root)
         }
         local mod = {
             get = function(_, key)
+                if saved[key] ~= nil then return saved[key] end
                 if key == "gt_host_lag_comp" then return true end
                 if key == "gt_host_lag_comp_max_ms" then return 250 end
                 return nil
             end,
+            set = function(_, key, value) saved[key] = value end,
             dofile = function()
                 return policy
             end,
@@ -125,6 +131,7 @@ return function(H, repo_root)
         }
 
         return {
+            saved = saved,
             player = player,
             other_player = other_player,
             proxy = proxy,
@@ -173,9 +180,12 @@ return function(H, repo_root)
         }
     end
 
-    H.test("GT host lag compensation is default on and wired once", function()
+    H.test("GT host lag compensation is default off and wired once", function()
         H.truthy(data:find('setting_id    = "gt_host_lag_comp"', 1, true))
-        H.truthy(data:find("default_value = true", data:find("gt_host_lag_comp", 1, true), true))
+        -- WP-GT-02: the first default_value after the setting id is false.
+        local after = data:find('setting_id    = "gt_host_lag_comp"', 1, true)
+        local default_at = data:find("default_value = ", after, true)
+        H.equal(data:sub(default_at, default_at + #"default_value = false" - 1), "default_value = false")
         H.truthy(main:find('mod:dofile("scripts/mods/general_tweaker_dev/_gt_host_lag_comp")', 1, true))
 
         local _, damage_hooks = runtime:gsub('mod:hook%("AiUtils", "damage_target"', "")
@@ -349,5 +359,32 @@ return function(H, repo_root)
         H.truthy(runtime:find("player.peer_id == local_peer", 1, true))
         H.truthy(runtime:find("player.bot_player", 1, true))
         H.truthy(runtime:find("action.fatigue_type", 1, true))
+    end)
+
+    -- WP-GT-02 (audit finding A6-F02): the option ships off. VMF already saved
+    -- `true` for existing users (VMF options.lua:603-604), so a one-time
+    -- migration resets it once; a later opt-in is never overwritten.
+    H.test("GT host lag compensation migrates a saved true to off exactly once", function()
+        local saved = { gt_host_lag_comp = true }
+        local first = runtime_harness(saved)
+        H.equal(first.saved.gt_host_lag_comp, false, "first load resets the saved true to off")
+        H.equal(first.saved.gt_host_lag_comp_default_off_v1, true, "the migration flag is recorded")
+        saved.gt_host_lag_comp = true  -- the user turns it back on afterwards
+        local second = runtime_harness(saved)
+        H.equal(second.saved.gt_host_lag_comp, true, "a later opt-in is left untouched")
+        H.equal(second.saved.gt_host_lag_comp_default_off_v1, true)
+    end)
+
+    H.test("GT host lag compensation default-off migration policy", function()
+        H.deep_equal({ policy.migrate_default_off(true, nil) }, { false, true })
+        H.deep_equal({ policy.migrate_default_off(nil, nil) }, { false, true })
+        H.deep_equal({ policy.migrate_default_off(true, true) }, { true, true })
+        H.deep_equal({ policy.migrate_default_off(false, true) }, { false, true })
+    end)
+
+    H.test("GT host lag compensation treats only an explicit true as enabled", function()
+        H.equal(runtime:find('mod:get("gt_host_lag_comp") ~= false', 1, true), nil)
+        H.equal(runtime:find('mod:get("gt_host_lag_comp") == false', 1, true), nil)
+        H.truthy(runtime:find('enabled = mod:get("gt_host_lag_comp") == true,', 1, true))
     end)
 end

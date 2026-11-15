@@ -15,8 +15,6 @@ return function(ctx)
         "CIM command owner requires custom-forge accessor")
     local _get_forged_weapons = assert(ctx.get_forged_weapons,
         "CIM command owner requires forged-weapon accessor")
-    local _get_modded_loadout = assert(ctx.get_modded_loadout,
-        "CIM command owner requires loadout accessor")
     local _get_more_items_lib = assert(ctx.get_more_items_lib,
         "CIM command owner requires MoreItemsLibrary accessor")
     local _commit_craft = assert(ctx.commit_craft,
@@ -35,8 +33,6 @@ return function(ctx)
         if saved == false then error(save_err, 0) end
         return saved
     end
-    local _modded_loadout_save = assert(ctx.modded_loadout_save,
-        "CIM command owner requires loadout persistence")
 
     -- This state was entry-local and is consumed only by the manual /forge*
     -- command family. Moving it with its sole owner preserves one transaction.
@@ -594,10 +590,13 @@ mod._cim277_delete_owned_ids = function(backend_ids, foreign_ids)
         new_item_ids = PlayerData and PlayerData.new_item_ids,
         new_item_ids_by_career = PlayerData
             and PlayerData.new_item_ids_by_career,
-        loadouts = _get_modded_loadout(),
+        -- WP-CIM-11: the dormant modded-loadout store is gone (Tweaker: GUI owns
+        -- modded loadout persistence); deletion cleans no cim loadout table and
+        -- never rewrites the players' saved `modded_loadout` setting.
+        loadouts = {},
         clear_loadout_refs = mod._cim277_bulk_core
             and mod._cim277_bulk_core.clear_loadout_refs,
-        persist_loadouts = _modded_loadout_save,
+        persist_loadouts = function() return true end,
         get_overrides = function()
             return mod:get("vanilla_skin_overrides_by_backend_id")
         end,

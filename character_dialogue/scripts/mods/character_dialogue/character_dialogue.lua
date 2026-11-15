@@ -1,5 +1,5 @@
 local mod = get_mod("character_dialogue")
-local MOD_VERSION = "0.1.16-dev"
+local MOD_VERSION = "0.1.17-dev"
 -- Fatshark keeps DialogueQueries local to dialogue_system.lua; it is not a
 -- global like TagQueryDatabase.  Resolve the canonical module before asking
 -- VMF to install the hook, otherwise VMF receives nil and emits a startup
@@ -386,14 +386,14 @@ end
 -- candidates: explicit enable bypasses Fatshark's per-line filter, explicit
 -- disable rejects, and inherited lines still use the vanilla filter.
 mod:hook(DialogueQueries, "get_filtered_dialogue_event_index", function(func, dialogue, context, global_filters)
-    local index, used = Policy.choose_index(dialogue, overrides,
-        function() return DialogueQueries.get_dialogue_event_index(dialogue, true) end,
-        function(i) return DialogueQueries.filter_sound_event(dialogue, i, context, global_filters) end)
-    if not used then return func(dialogue, context, global_filters) end
-    -- The all-explicitly-disabled case is removed at TagQueryDatabase below.
-    -- Otherwise retain vanilla's historical fallback behavior and never pass a
-    -- nil index into DialogueSystem's network/duration path.
-    return index or 1
+    if not Policy.has_override(dialogue, overrides) then return func(dialogue, context, global_filters) end
+    -- WP-COS-03 (#605): select through the real index source so a fresh group
+    -- builds its shuffle (the old `index or 1` always picked line 1). The
+    -- all-explicitly-disabled case is removed at TagQueryDatabase below; any
+    -- other nil falls back to vanilla, never a nil index into DialogueSystem.
+    local index = Policy.select_index(dialogue, overrides, DialogueQueries, context, global_filters)
+    if type(index) == "number" then return index end
+    return func(dialogue, context, global_filters)
 end)
 
 mod:hook(TagQueryDatabase, "iterate_query", function(func, self, t)
@@ -652,6 +652,18 @@ mod:command("cd_regression_test", "Character Dialogue self-check", function()
                ~= PreviewResidency.MORRIS_PACKAGE
                or PreviewResidency.package_for_source("hero_conversations_dlc_holly") ~= nil then
                 return "Morris sources do not map to exactly the one Morris package"
+            end
+        end },
+        -- WP-COS-03 (#605): a fresh group (randomize_indexes_n = 0) with line 1
+        -- disabled must never select line 1 through the live DialogueQueries.
+        { "override_selection_fresh_group", function()
+            local local_overrides = { cd_rt_line_a = false }
+            for _ = 1, 50 do
+                local group = { sound_events_n = 3, sound_events = { "cd_rt_line_a", "cd_rt_line_b", "cd_rt_line_c" },
+                    randomize_indexes_n = 0, randomize_indexes = {} }
+                local index = Policy.select_index(group, local_overrides, DialogueQueries, {}, {})
+                if index == 1 then return "the disabled line 1 was selected on a fresh group" end
+                if index == nil then return "no eligible line was selected on a fresh group" end
             end
         end },
         -- #998 isolation ownership: mute on first owner, restore only on last,

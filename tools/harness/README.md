@@ -52,7 +52,25 @@ A case file returns a table:
 return { issue = 0, timeout = 60, run = function(T) T.step("x"); T.expect(cond, "label") end }
 ```
 
-The `T` helpers are listed in `docs/program/CONVENTIONS.md` section 3; the driver implements `step`, `note`, `wait`, `frames`, `wait_until`, `require`, `expect`, `expect_eq`, `expect_near`, `find_mod`, `local_player`, `local_hero`, `level_key`, `bots`, `ext`, `cmd`, `commands`, `shield`, `shared` today.
+The `T` helpers are listed in `docs/program/CONVENTIONS.md` section 3; the driver implements `step`, `note`, `wait`, `frames`, `wait_until`, `require`, `expect`, `expect_eq`, `expect_near`, `find_mod`, `local_player`, `local_hero`, `level_key`, `bots`, `ext`, `cmd`, `commands`, `shield`, `shared`, `main`, `spawn`, `kill`, `teleport`, `invincible`, `end_level`, `return_to_keep` today.
+
+## Arenas and mission helpers (WP-H-04)
+
+`arenas` run in the plan's order and may repeat: `["keep", "mission:military", "keep"]` loads Righteous Stand after the keep cases and returns to the keep before quitting. The run always starts in the keep; arenas of cases the plan does not list follow at the end. A level change goes through the host's `Managers.mechanism:debug_load_level(level, 0)` (`Vermintide-2-Source-Code/scripts/managers/game_mode/game_mechanism_manager.lua:880-892`; the keep is the hub level `inn_level`). The driver waits for `StateIngame` with that level and a live hero, prints `LEVEL READY level=<key> load_seconds=<s>`, and `summary.json` lists every load under `level_loads`. An arena other than `keep`, `mission:<key>` or `level:<key>` ends its cases INCONCLUSIVE.
+
+Mission helpers. Each change is undone when the case ends, also after FAIL or ERROR, and is printed as `CLEANUP id=<case> actions=<n> errors=<n>`:
+
+| Helper | Does | Engine call |
+|---|---|---|
+| `T.main(fn, ...)` | runs `fn(...)` in the driver's main update, outside the case coroutine, and returns its results (its error is raised in the case); one update | engine calls that take a unit fail inside a coroutine ("Attempting get_data with reference from another lua state", lead run 2026-11-15) |
+| `T.spawn(breed, offset[, timeout])` | queues one enemy next to the hero (`offset` a Vector3 or `{x, y, z}`), returns the unit once alive; killed at cleanup if still alive | `conflict_director_testify.lua:18-22`, `spawned_units_by_breed` `conflict_director.lua:2144` |
+| `T.kill(unit)` | kills a living unit | `AiUtils.kill_unit`, `ai_utils.lua:1326` |
+| `T.teleport(unit, position)` | moves a unit with a `teleport_to` locomotion | `player_unit_locomotion_extension.lua:1005` |
+| `T.invincible(on)` | sets the hero's health-extension invincibility, restored at cleanup | `generic_health_extension.lua:496-512` |
+| `T.end_level(result)` | `"win"` completes, `"fail"` fails the level as host | `game_mode_manager.lua:636, 645` |
+| `T.return_to_keep([timeout])` | loads `inn_level` and waits until the keep is ready | as above |
+
+Use bots or these host-side calls as the actor; never OS input. Every helper above that passes a unit to the engine runs through `T.main`; do the same in a case for any engine call that takes a unit or an extension method that may touch one (e.g. `T.main(function() return buff_ext:has_buff_type(name) end)`). Plain table reads such as `HEALTH_ALIVE[unit]` are fine in the coroutine.
 
 ## Verdicts
 
@@ -99,10 +117,10 @@ A plan may set `backend_shield: false` only when its cases test commit behaviour
 
 The game loads only Workshop items Steam lists as subscribed, and a mod's bundles are found by package name, not folder id. So the rig owns six private items ("VT2 Rig Slot 1" to "6", ids in `slots.psd1`) whose content it overwrites with a local build. A real mod's Workshop folder is never written.
 
-- Once: `pwsh -File tools/harness/New-RigSlotItems.ps1` prepares the six item folders (private, placeholder content: the bootstrap's bundles plus an inert `vt2_rig_slot.mod`) and prints the `ugc_tool -c item.cfg -x` and `steam-ugc.ps1 -ItemId <id>` commands; `-Publish` runs them. Record each id in `slots.psd1`.
+- Once: `pwsh -File tools/harness/New-RigSlotItems.ps1` prepares the six item folders (private, placeholder content: the bootstrap's bundles plus an inert `vt2_rig_slot.mod`) and prints the `ugc_tool -c item.cfg -x` and `steam-ugc.ps1 -ItemId <id>` commands; `-Publish` runs them. ugc_tool asks the Vermintide 2 modding-EULA question on stdin and exits 1 "You did not agree to the EULA" without an answer; `Invoke-UgcTool.ps1` answers `y` once the prompt appears, as VMB does. Record each id in `slots.psd1`. The six items were created on 2026-11-15 (ids 3840301411, 3840301616, 3840301649, 3840301687, 3840301709, 3840301739).
 - Per build: `pwsh -File tools/harness/stage-build.ps1 -Mod <dir> -Slot <n>` builds the mod from the worktree that holds the script (through `tools/ship/ship.ps1 -BuildOnly` under the machine-wide build lock; `-NoBuild` stages the existing `bundleV2`), replaces the slot folder's files with `bundleV2\*` and writes `slot.json` (commit, version, file hashes). It refuses any id that is not in `slots.psd1`, a real mod's id and the bootstrap.
 - Per run: plan field `"local_builds": [{ "mod": "<dir>", "slot": <n> }]`. `run.ps1` refuses (exit 3) when the slot's files no longer match `slot.json` (Steam may restore the placeholder at any time: re-stage). The slot takes the real id's place in the mod list, the real id is disabled, the staged version must appear in the mod's load banner, and `summary.json` lists the build's commit, version and `real_folder_unchanged`.
 
 ## Reading a run
 
-`runs\<run>\summary.md` has one line with the host verdict (`EXITED code=...`, `HOST-TIMEOUT-KILLED`, `VISIBLE-WINDOW`), the exit code, `isolation OK|BROKEN` and whether `RUN END` was seen, then one table row per case (verdict, assertion count, failed count, seconds, first failure). `summary.json` adds `keep_ready_seconds` (log timestamp of `KEEP READY` minus the first log line; the polled `marks_seconds.keep_ready` is later because the log is buffered), the driver's own `keep_ready_driver_t`, the host log findings, `loaded_versions` from the `[<tag>:LOAD] v<version>` banners, the seconds from start to each boot mark, the first script errors and notes. `evidence.txt` is every `[vt2t:<nonce>]` line in order; `console.log` is the game log (the game is started with `--default-console-log-path <run>\console.log`; `log_source` says whether that switch worked or the profile's `console_logs` folder was used after 20 s); `plan.json` and `user_settings.after.config` are kept for replay.
+`runs\<run>\summary.md` has one line with the host verdict (`EXITED code=...`, `HOST-TIMEOUT-KILLED`, `VISIBLE-WINDOW`), the exit code, `isolation OK|BROKEN` and whether `RUN END` was seen, then one table row per case (verdict, assertion count, failed count, seconds, first failure). `summary.json` adds `keep_ready_seconds` (log timestamp of `KEEP READY` minus the first log line; the polled `marks_seconds.keep_ready` is later because the log is buffered), the driver's own `keep_ready_driver_t`, the host log findings, `loaded_versions` from the `[<tag>:LOAD] v<version>` banners, the seconds from start to each boot mark, the first script errors and notes. `evidence.txt` is every `[vt2t:<nonce>]` line in order; `console.log` is the game log (the game is started with `--default-console-log-path <run>\console.log`; `log_source` says whether that switch worked or the profile's `console_logs` folder was used after 20 s; in the rig runs of 2026-11-15 the retail exe ignored the switch and the fallback found the log); `plan.json` and `user_settings.after.config` are kept for replay.

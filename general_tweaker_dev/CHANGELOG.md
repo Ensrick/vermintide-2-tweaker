@@ -1,5 +1,26 @@
 # General Tweaker Changelog
 
+## 0.2.282-dev (2026-11-15) -- One owner for level-world and unit-position reads (WP-GT-03)
+
+- New `_gt_world.lua` (`mod._gt_world`): `live()` returns the level world only
+  when it exists, `is_live(world)` tells whether a cached handle still belongs
+  to the current level world, and `unit_pos(unit)` reads a live unit's
+  position safely (audit finding A6-F08, advances #490).
+- The creature spawner's crosshair raycast no longer calls
+  `Managers.world:world("level_world")` unguarded; with no level loaded the
+  spawn commands say "No level is loaded." instead of faulting.
+- The five copies of the world guard (debug highlights, the bot teleport lab
+  twice, solo QoL, the melee warning) now use the helper. Behaviour and the
+  `[gt:459]` log lines are unchanged. Not confirmed in game.
+
+## 0.2.281-dev (2026-11-15) -- Host melee latency compensation off by default (WP-GT-02)
+
+- "Host-side Melee Latency Compensation" is now off by default (audit finding
+  A6-F02). It has never been verified with two clients (#1034). Players who
+  had the old default saved get it switched off once on the first load of
+  this version; turning it back on afterwards sticks. The feature, its
+  setting and its command are unchanged. Not confirmed in game.
+
 ## 0.2.280-dev (2026-11-14) -- Host opt-in for client-requested host actions (WP-GT-01)
 
 - Any peer running this mod could make the host win, fail or restart the

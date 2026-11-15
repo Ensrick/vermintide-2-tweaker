@@ -110,8 +110,9 @@
 
     # -- item 12: #459 cached-LineObject cleanup is world-liveness gated (live == w)
     #    at BOTH sites (btlab + dh).
-    @{ mod='gt_dev'; file='general_tweaker_dev/scripts/mods/general_tweaker_dev/_gt_bot_teleport_lab.lua'; needle='if live == w then'; literal=$true; polarity='present'; issueRef='#459'; note='LineObject cleanup guarded by a live-world identity check (dead-world AV).' }
-    @{ mod='gt_dev'; file='general_tweaker_dev/scripts/mods/general_tweaker_dev/_gt_debug_highlights.lua'; needle='if live == w then'; literal=$true; polarity='present'; issueRef='#459'; note='LineObject cleanup guarded by a live-world identity check (dead-world AV).' }
+    @{ mod='gt_dev'; file='general_tweaker_dev/scripts/mods/general_tweaker_dev/_gt_bot_teleport_lab.lua'; needle='if mod._gt_world.is_live(w) then'; literal=$true; polarity='present'; issueRef='#459'; note='LineObject cleanup guarded by a live-world identity check (dead-world AV).' }
+    @{ mod='gt_dev'; file='general_tweaker_dev/scripts/mods/general_tweaker_dev/_gt_debug_highlights.lua'; needle='if mod._gt_world.is_live(w) then'; literal=$true; polarity='present'; issueRef='#459'; note='LineObject cleanup guarded by a live-world identity check (dead-world AV).' }
+    @{ mod='gt_dev'; file='general_tweaker_dev/scripts/mods/general_tweaker_dev/_gt_world.lua'; needle='return world ~= nil and W.live() == world'; literal=$true; polarity='present'; issueRef='#459'; note='WP-GT-03: the shared live-world identity check both cleanup sites call.' }
 
     # -- item 13: #448 downed-bot Morrs-Protection gate - attribution + knocked-down.
     @{ mod='gt_dev'; file='general_tweaker_dev/scripts/mods/general_tweaker_dev/_gt_bot_fixes.lua'; needle='granted.attacker_unit == owner_unit'; literal=$true; polarity='present'; issueRef='#448'; note='#448 gate: only the owner-attributed grant, not any attacker.' }
