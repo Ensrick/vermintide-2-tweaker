@@ -9,6 +9,10 @@
 #   -Action finish -Mod <m> [-AllowPublic] [-NoRemote] [-ConfirmVersion <v>]
 #                  land, sync, ship, aftercare
 #   -Action run    all nine steps; -DryRun prints each step as done or pending
+#   -Action rollback -Mod <m> -ToVersion <v> -Reason <text>
+#                  restore <mod> to the source of its <v> release (manifest
+#                  source_commit; CHANGELOG.md and itemV2.cfg stay current),
+#                  then run all nine steps: a NEW version ships the old source
 #
 # Every step checks its postcondition against the real state first and is
 # skipped when it already holds, so any action can be rerun after an
@@ -19,13 +23,14 @@
 # failed check, 13 master QA not success, 14 timed out, 15 gh failed.
 # Other exits: 2 usage, 20 clean version without -ConfirmVersion (D-P-04),
 # 21 claim stale, 22 claim held by another session (never re-claimed),
-# 23 a step failed, 24 the head moved three times, 25 PR body has a closing keyword.
+# 23 a step failed, 24 the head moved three times, 25 PR body has a closing keyword,
+# 30 no release manifest names that mod version, 31 rollback refused (WT pair).
 # The driver calls claim.ps1 and ship.ps1 only; it never calls the launcher,
 # `gh release`, the uploader or Steam. ASCII only; PS 5.1 and 7.
 
 [CmdletBinding()]
 param(
-    [ValidateSet('land', 'start', 'finish', 'run', 'status')][string]$Action = 'status',
+    [ValidateSet('land', 'start', 'finish', 'run', 'status', 'rollback')][string]$Action = 'status',
     [string]$Mod = '',
     [int]$Pr = 0,
     [string]$Branch = '',
@@ -36,6 +41,8 @@ param(
     [switch]$AllowPublic,
     [switch]$NoRemote,
     [string]$ConfirmVersion = '',
+    [string]$ToVersion = '',
+    [string]$Reason = '',
     [switch]$DryRun,
     [int]$PollSeconds = 30,
     [int]$TimeoutMinutes = 120,
@@ -76,8 +83,61 @@ switch ($Action) {
         $journal | ConvertTo-Json -Depth 6
         exit 0
     }
-    default {
-        if ([string]::IsNullOrWhiteSpace($Mod)) { Write-Host "[release] -Action $Action needs -Mod <folder>." -ForegroundColor Red; exit 2 }
+    'rollback' {
+        if ([string]::IsNullOrWhiteSpace($Mod) -or [string]::IsNullOrWhiteSpace($ToVersion) -or [string]::IsNullOrWhiteSpace($Reason)) {
+            Write-Host '[release] -Action rollback needs -Mod, -ToVersion and -Reason.' -ForegroundColor Red; exit 2
+        }
+        if ($script:ReleaseRollbackRefusedMods -ccontains $Mod) {
+            Write-Host "[release] $Mod is bound to its stream twin by qa/check_wt_stream_parity.ps1; a one-sided rollback would fail that gate. Refused." -ForegroundColor Red
+            exit $script:ReleaseExit.RollbackRefused
+        }
+        $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
+        if (-not (Test-Path -LiteralPath (Join-Path $repoRoot $Mod) -PathType Container)) { Write-Host "[release] mod folder not found: $Mod" -ForegroundColor Red; exit 2 }
+        if (Test-ReleasePrimaryCheckout -RepoRoot $repoRoot) {
+            Write-Host '[release] refusing to run in the shared primary checkout; use a worktree from tools/worktrees/worktree.ps1.' -ForegroundColor Red
+            exit 2
+        }
+        $journal = Read-ReleaseJournal -Mod $Mod
+        if ($null -eq $journal) { $journal = New-ReleaseJournal -Mod $Mod }
+        if ($null -ne $journal.rollback -and [string]$journal.rollback.to_version -cne $ToVersion) {
+            Write-Host "[release] the active journal for $Mod is a rollback to $($journal.rollback.to_version); one active journal per mod." -ForegroundColor Red
+            exit 2
+        }
+        if ($null -eq $journal.rollback) {
+            $modId = Get-ReleaseModId -RepoRoot $repoRoot -Mod $Mod
+            $source = if ($modId) { Find-ReleaseRollbackSource -ModId $modId -ToVersion $ToVersion } else { $null }
+            if ($null -eq $source) {
+                Write-Host "[release] no release manifest names $Mod ($modId) version $ToVersion." -ForegroundColor Red
+                exit $script:ReleaseExit.RollbackNotFound
+            }
+            $journal.rollback = [ordered]@{ to_version = $ToVersion; source_commit = $source.SourceCommit; tag = $source.Tag; reason = $Reason }
+            $journal.branch = if ($Branch) { $Branch } else { "rollback/$Mod-$ToVersion" }
+            Save-ReleaseJournal -Journal $journal
+        }
+        Set-ReleaseSession -Journal $journal
+        $commit = [string]$journal.rollback.source_commit
+        if (-not (Test-ReleaseRestoreDone -RepoRoot $repoRoot -Mod $Mod -SourceCommit $commit)) {
+            Write-Host "[release] restore: $Mod to $commit ($($journal.rollback.tag))"
+            $code = Invoke-ReleaseRestore -RepoRoot $repoRoot -Journal $journal
+            if ($code -eq 0 -and -not (Test-ReleaseRestoreDone -RepoRoot $repoRoot -Mod $Mod -SourceCommit $commit)) { $code = $script:ReleaseExit.StepFailed }
+            Add-ReleaseJournalStep -Journal $journal -Name 'restore' -Result $(if ($code -eq 0) { 'done' } else { "exit $code" }) -Detail $commit
+            Save-ReleaseJournal -Journal $journal
+            if ($code -ne 0) { exit $code }
+        } else { Write-Host '[release] restore: done, skipped' }
+        $files = New-ReleaseRollbackFiles -Journal $journal
+        $options = [pscustomobject]@{
+            ChangelogFile = $(if ($ChangelogFile) { $ChangelogFile } else { $files.ChangelogFile })
+            CommitMessageFile = $(if ($CommitMessageFile) { $CommitMessageFile } else { $files.CommitMessageFile })
+            PrTitle = $(if ($PrTitle) { $PrTitle } else { $files.PrTitle })
+            PrBodyFile = $(if ($PrBodyFile) { $PrBodyFile } else { $files.PrBodyFile })
+            AllowPublic = [bool]$AllowPublic; NoRemote = [bool]$NoRemote; ConfirmVersion = $ConfirmVersion; DryRun = $false
+            PollSeconds = $PollSeconds; TimeoutMinutes = $TimeoutMinutes
+        }
+        $code = Invoke-ReleaseSteps -Steps @($script:ReleaseStepNames) -Journal $journal -RepoRoot $repoRoot -Options $options
+        Write-Host ("[release] rollback {0} to {1}: exit {2}" -f $Mod, $ToVersion, $code)
+        exit $code
+    }
+    default {        if ([string]::IsNullOrWhiteSpace($Mod)) { Write-Host "[release] -Action $Action needs -Mod <folder>." -ForegroundColor Red; exit 2 }
         $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
         if (-not (Test-Path -LiteralPath (Join-Path $repoRoot $Mod) -PathType Container)) { Write-Host "[release] mod folder not found: $Mod" -ForegroundColor Red; exit 2 }
         if (-not $DryRun -and (Test-ReleasePrimaryCheckout -RepoRoot $repoRoot)) {

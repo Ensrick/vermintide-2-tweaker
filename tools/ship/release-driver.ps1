@@ -541,3 +541,110 @@ function Test-ReleasePrimaryCheckout {
     if ([string]::IsNullOrWhiteSpace($gitDir) -or [string]::IsNullOrWhiteSpace($common)) { return $true }
     return ([IO.Path]::GetFullPath($gitDir).TrimEnd('\', '/') -ieq [IO.Path]::GetFullPath($common).TrimEnd('\', '/'))
 }
+
+# ---------------------------------------------------------------------------
+# WP-P-10: roll a mod's source back to an earlier published version and ship
+# it as a NEW version (roll-forward of old source). The launcher only uploads
+# a build that matches the current commit, version and claim, so old bytes are
+# never re-uploaded; the old source commit comes from the release manifests.
+# ---------------------------------------------------------------------------
+$script:ReleaseExit.RollbackNotFound = 30
+$script:ReleaseExit.RollbackRefused = 31
+$script:ReleaseRollbackRefusedMods = @('weapon_tweaker', 'weapon_tweaker_dev')
+
+function Get-ReleaseModId {
+    param([Parameter(Mandatory)][string]$RepoRoot, [Parameter(Mandatory)][string]$Mod)
+    $inventory = Import-PowerShellDataFile -Path (Join-Path $RepoRoot 'tools\mod-inventory.psd1')
+    $row = @($inventory.Mods | Where-Object { [string]$_.Dir -ceq $Mod })
+    if ($row.Count -ne 1) { return $null }
+    return [string]$row[0].ModId
+}
+
+# Newest release first; the first manifest row with this mod_id and version
+# names the commit that release was built from.
+function Find-ReleaseRollbackSource {
+    param([Parameter(Mandatory)][string]$ModId, [Parameter(Mandatory)][string]$ToVersion)
+    $list = Invoke-ReleaseGh -Arguments @('release', 'list', '--limit', '200', '--json', 'tagName')
+    if ($list.ExitCode -ne 0 -or [string]::IsNullOrWhiteSpace($list.Output)) { return $null }
+    foreach ($release in @($list.Output | ConvertFrom-Json | ForEach-Object { $_ })) {
+        $tag = [string]$release.tagName
+        if ([string]::IsNullOrWhiteSpace($tag)) { continue }
+        $manifest = Invoke-ReleaseGh -Arguments @('release', 'download', $tag, '-p', 'manifest.json', '-O', '-')
+        if ($manifest.ExitCode -ne 0 -or [string]::IsNullOrWhiteSpace($manifest.Output)) { continue }
+        try { $data = $manifest.Output | ConvertFrom-Json } catch { continue }
+        foreach ($row in @($data.mods | ForEach-Object { $_ })) {
+            if ([string]$row.mod_id -ceq $ModId -and [string]$row.version -ceq $ToVersion -and [string]$row.source_commit -cmatch '^[0-9a-f]{40}$') {
+                return [pscustomobject]@{ SourceCommit = [string]$row.source_commit; Tag = $tag }
+            }
+        }
+    }
+    return $null
+}
+
+# The restore holds when <mod>/scripts equals the old commit, except that the
+# main Lua file may differ in MOD_VERSION lines (the version step's change).
+function Test-ReleaseRestoreDone {
+    param([Parameter(Mandatory)][string]$RepoRoot, [Parameter(Mandatory)][string]$Mod, [Parameter(Mandatory)][string]$SourceCommit)
+    $scripts = "$Mod/scripts"
+    $names = Invoke-ReleaseGit -RepoRoot $RepoRoot -Arguments @('diff', '--name-only', $SourceCommit, '--', $scripts)
+    if ($names.ExitCode -ne 0) { return $false }
+    $mainLua = "$Mod/scripts/mods/$Mod/$Mod.lua"
+    foreach ($name in @($names.Output -split "`n" | ForEach-Object { $_.Trim() } | Where-Object { $_ })) {
+        if ($name.Replace('\', '/') -cne $mainLua) { return $false }
+        $diff = Invoke-ReleaseGit -RepoRoot $RepoRoot -Arguments @('diff', '-U0', $SourceCommit, '--', $mainLua)
+        foreach ($line in @($diff.Output -split "`n")) {
+            if ($line -match '^(\+\+\+|---|@@|diff |index )') { continue }
+            if ($line -match '^[+-]' -and $line -notmatch 'MOD_VERSION\s*=') { return $false }
+        }
+    }
+    return $true
+}
+
+function Invoke-ReleaseRestore {
+    param([Parameter(Mandatory)][string]$RepoRoot, [Parameter(Mandatory)]$Journal)
+    $mod = [string]$Journal.mod
+    $commit = [string]$Journal.rollback.source_commit
+    $null = Invoke-ReleaseGit -RepoRoot $RepoRoot -Arguments @('fetch', 'origin', 'master', '--quiet')
+    $head = (Invoke-ReleaseGit -RepoRoot $RepoRoot -Arguments @('rev-parse', 'HEAD')).Output.Trim()
+    $live = (Invoke-ReleaseGit -RepoRoot $RepoRoot -Arguments @('rev-parse', 'origin/master')).Output.Trim()
+    $status = (Invoke-ReleaseGit -RepoRoot $RepoRoot -Arguments @('status', '--porcelain')).Output
+    if ($head -cne $live -or -not [string]::IsNullOrWhiteSpace($status)) {
+        Write-ReleaseLog 'rollback needs a clean worktree on the live origin/master commit'
+        return $script:ReleaseExit.StepFailed
+    }
+    # itemV2.cfg keeps the current Workshop identity; the version step needs
+    # the version it names now, not the restored Lua's old one.
+    $Journal.cfg_version = Get-ReleaseSourceVersion $RepoRoot $mod
+    Save-ReleaseJournal -Journal $Journal
+    foreach ($call in @(
+        @('rm', '-r', '-q', '--', $mod),
+        @('checkout', $commit, '--', $mod),
+        @('checkout', 'HEAD', '--', "$mod/CHANGELOG.md", "$mod/itemV2.cfg")
+    )) {
+        $result = Invoke-ReleaseGit -RepoRoot $RepoRoot -Arguments $call
+        if ($result.ExitCode -ne 0) { Write-ReleaseLog "git $($call -join ' ') failed: $($result.Output)"; return $script:ReleaseExit.StepFailed }
+    }
+    return 0
+}
+
+# Changelog fragment, commit message and PR body for a rollback, written next
+# to the journal (outside the repository). No issue number, no lifecycle tag.
+function New-ReleaseRollbackFiles {
+    param([Parameter(Mandatory)]$Journal)
+    $rollback = $Journal.rollback
+    $directory = Split-Path (Get-ReleaseJournalPath -Mod ([string]$Journal.mod)) -Parent
+    [void][IO.Directory]::CreateDirectory($directory)
+    $date = [DateTime]::UtcNow.ToString('yyyy-MM-dd', [Globalization.CultureInfo]::InvariantCulture)
+    $base = Join-Path $directory ("release-{0}-rollback" -f $Journal.mod)
+    $utf8 = New-Object Text.UTF8Encoding($false)
+    $changelog = "## {VERSION} ($date) - Roll back to $($rollback.to_version)`n`n" +
+        "- Source restored to the $($rollback.to_version) release (commit $($rollback.source_commit), release $($rollback.tag)).`n" +
+        "- Reason: $($rollback.reason)`n"
+    [IO.File]::WriteAllText("$base-changelog.md", $changelog, $utf8)
+    [IO.File]::WriteAllText("$base-commit.txt", ("{0}: roll back to {1}`n`nSource of the {1} release (commit {2}, release {3}). Reason: {4}`n" -f $Journal.mod, $rollback.to_version, $rollback.source_commit, $rollback.tag, $rollback.reason), $utf8)
+    [IO.File]::WriteAllText("$base-pr.md", ("Rolls {0} back to the source of its {1} release (commit {2}, release {3}) and ships it as a new version.`n`nReason: {4}`n`nCHANGELOG.md and itemV2.cfg stay current (history and Workshop identity).`n" -f $Journal.mod, $rollback.to_version, $rollback.source_commit, $rollback.tag, $rollback.reason), $utf8)
+    return [pscustomobject]@{
+        ChangelogFile = "$base-changelog.md"; CommitMessageFile = "$base-commit.txt"; PrBodyFile = "$base-pr.md"
+        PrTitle = ("{0}: roll back to {1}" -f $Journal.mod, $rollback.to_version)
+    }
+}

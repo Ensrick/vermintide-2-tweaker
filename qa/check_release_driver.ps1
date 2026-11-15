@@ -14,6 +14,8 @@ param([switch]$SelfTest, [switch]$Quiet)
 $ErrorActionPreference = 'Stop'
 $repoRoot = Split-Path $PSScriptRoot -Parent
 . (Join-Path $repoRoot 'tools\ship\release-driver.ps1')
+# The rollback fixture needs real git in a disposable repository.
+$script:RealReleaseGit = ${function:Invoke-ReleaseGit}
 
 if (-not $SelfTest) {
     if (-not $Quiet) { Write-Host '[check_release_driver] Use -SelfTest for the offline release-driver fixtures.' }
@@ -49,6 +51,12 @@ function Invoke-ReleaseGh {
         'pr view' { return [pscustomobject]@{ ExitCode = 0; Output = ((Get-FakeNext 'View') | ConvertTo-Json -Depth 4 -Compress) } }
         'pr checks' { return [pscustomobject]@{ ExitCode = 0; Output = (ConvertTo-Json -InputObject @(Get-FakeNext 'Checks') -Depth 4 -Compress) } }
         'run list' { return [pscustomobject]@{ ExitCode = 0; Output = (ConvertTo-Json -InputObject @(Get-FakeNext 'Runs') -Depth 4 -Compress) } }
+        'release list' { return [pscustomobject]@{ ExitCode = 0; Output = (ConvertTo-Json -InputObject @($script:fakeReleases | ForEach-Object { [pscustomobject]@{ tagName = $_.Tag } }) -Compress) } }
+        'release download' {
+            $release = @($script:fakeReleases | Where-Object { $_.Tag -ceq $Arguments[2] })
+            if ($release.Count -ne 1) { return [pscustomobject]@{ ExitCode = 1; Output = 'release not found' } }
+            return [pscustomobject]@{ ExitCode = 0; Output = ($release[0].Manifest | ConvertTo-Json -Depth 5 -Compress) }
+        }
         default { return [pscustomobject]@{ ExitCode = 0; Output = '' } }
     }
 }
@@ -256,10 +264,80 @@ try {
     $env:VT2_SHIP_RESULT_DIR = $previousDir
     if (Test-Path -LiteralPath $machineRoot) { Remove-Item -LiteralPath $machineRoot -Recurse -Force }
 }
+# --- WP-P-10: rollback source lookup and restore -----------------------------
+$script:fakeReleases = @(
+    @{ Tag = 'mods-2026-11-15'; Manifest = @{ manifest_schema = 2; mods = @(@{ mod_id = 'fixture_mod'; version = '0.1.1-dev'; source_commit = ('b' * 40) }) } },
+    @{ Tag = 'mods-2026-11-10'; Manifest = @{ manifest_schema = 2; mods = @(@{ mod_id = 'other'; version = '0.1.0-dev'; source_commit = ('c' * 40) }, @{ mod_id = 'fixture_mod'; version = '0.1.0-dev'; source_commit = ('d' * 40) }) } }
+)
+Reset-Fake
+$found = Find-ReleaseRollbackSource -ModId 'fixture_mod' -ToVersion '0.1.0-dev'
+$missing = Find-ReleaseRollbackSource -ModId 'fixture_mod' -ToVersion '0.0.9-dev'
+if ($null -eq $found -or $found.SourceCommit -cne ('d' * 40) -or $found.Tag -cne 'mods-2026-11-10' -or $null -ne $missing) { $failures += 'rollback source lookup did not walk the manifests newest first' }
+else { Write-Host '  [PASS] rollback finds the manifest source_commit newest first; an unknown version finds none' -ForegroundColor Green }
+
+Set-Item -Path function:Invoke-ReleaseGit -Value $script:RealReleaseGit
+$gitRoot = Join-Path ([IO.Path]::GetTempPath()) ('vt2-release-rollback-' + [guid]::NewGuid().ToString('N'))
+$previousDir = $env:VT2_SHIP_RESULT_DIR
+try {
+    $bare = Join-Path $gitRoot 'origin.git'; $work = Join-Path $gitRoot 'work'
+    [void][IO.Directory]::CreateDirectory($work)
+    $env:VT2_SHIP_RESULT_DIR = Join-Path $gitRoot 'runs'
+    $g = { param([string[]]$GitArgs) $r = Invoke-ReleaseGit -RepoRoot $work -Arguments $GitArgs; if ($r.ExitCode -ne 0) { throw "git $($GitArgs -join ' '): $($r.Output)" }; $r.Output.Trim() }
+    $null = Invoke-ReleaseGit -Arguments @('init', '-q', '--bare', $bare)
+    $null = Invoke-ReleaseGit -Arguments @('init', '-q', $work)
+    & $g @('checkout', '-q', '-b', 'master') | Out-Null
+    & $g @('config', 'user.email', 'qa@example.invalid') | Out-Null
+    & $g @('config', 'user.name', 'VT2 QA') | Out-Null
+    & $g @('config', 'core.autocrlf', 'false') | Out-Null
+    $scripts = Join-Path $work 'fixture_mod\scripts\mods\fixture_mod'
+    [void][IO.Directory]::CreateDirectory($scripts)
+    [IO.File]::WriteAllText((Join-Path $scripts 'fixture_mod.lua'), "local MOD_VERSION = ""0.1.0-dev""`nlocal body = ""old""`n")
+    [IO.File]::WriteAllText((Join-Path $work 'fixture_mod\itemV2.cfg'), "title = ""Fixture v0.1.0-dev"";`n")
+    [IO.File]::WriteAllText((Join-Path $work 'fixture_mod\CHANGELOG.md'), "# Fixture`n`n## 0.1.0-dev (2026-11-10) -- old`n")
+    & $g @('add', '-A') | Out-Null; & $g @('commit', '-q', '-m', 'old') | Out-Null
+    $oldCommit = & $g @('rev-parse', 'HEAD')
+    [IO.File]::WriteAllText((Join-Path $scripts 'fixture_mod.lua'), "local MOD_VERSION = ""0.1.1-dev""`nlocal body = ""new""`n")
+    [IO.File]::WriteAllText((Join-Path $scripts '_later.lua'), "return {}`n")
+    [IO.File]::WriteAllText((Join-Path $work 'fixture_mod\itemV2.cfg'), "title = ""Fixture v0.1.1-dev"";`n")
+    [IO.File]::WriteAllText((Join-Path $work 'fixture_mod\CHANGELOG.md'), "# Fixture`n`n## 0.1.1-dev (2026-11-15) -- new`n`n## 0.1.0-dev (2026-11-10) -- old`n")
+    & $g @('add', '-A') | Out-Null; & $g @('commit', '-q', '-m', 'new') | Out-Null
+    & $g @('remote', 'add', 'origin', $bare) | Out-Null
+    & $g @('push', '-q', 'origin', 'master') | Out-Null
+
+    $journal = New-ReleaseJournal -Mod 'fixture_mod'
+    $journal.rollback = [ordered]@{ to_version = '0.1.0-dev'; source_commit = $oldCommit; tag = 'mods-fixture'; reason = 'fixture' }
+    $code = Invoke-ReleaseRestore -RepoRoot $work -Journal $journal
+    $diff = & $g @('diff', '--stat', $oldCommit, '--', 'fixture_mod/scripts')
+    $cfg = [IO.File]::ReadAllText((Join-Path $work 'fixture_mod\itemV2.cfg'))
+    $log = [IO.File]::ReadAllText((Join-Path $work 'fixture_mod\CHANGELOG.md'))
+    if ($code -ne 0 -or -not [string]::IsNullOrWhiteSpace($diff) -or (Test-Path -LiteralPath (Join-Path $scripts '_later.lua')) -or
+            -not $cfg.Contains('v0.1.1-dev') -or -not $log.Contains('## 0.1.1-dev') -or [string]$journal.cfg_version -cne '0.1.1-dev' -or
+            -not (Test-ReleaseRestoreDone -RepoRoot $work -Mod 'fixture_mod' -SourceCommit $oldCommit)) {
+        $failures += "rollback restore: exit $code, diff '$diff', cfg/changelog current or later file handling wrong"
+    } else { Write-Host '  [PASS] rollback restore: scripts equal the old commit, the later file is gone, cfg and CHANGELOG stay current' -ForegroundColor Green }
+
+    # The version step then writes the new version over the current cfg identity.
+    $journal.version = '0.1.2-dev'
+    $files = New-ReleaseRollbackFiles -Journal $journal
+    $rOptions = [pscustomobject]@{ ChangelogFile = $files.ChangelogFile; CommitMessageFile = ''; PrTitle = ''; PrBodyFile = ''; AllowPublic = $false; NoRemote = $false; ConfirmVersion = ''; DryRun = $false; PollSeconds = 1; TimeoutMinutes = 1 }
+    $code = Invoke-ReleaseSteps -Steps @('version') -Journal $journal -RepoRoot $work -Options $rOptions
+    $cfg = [IO.File]::ReadAllText((Join-Path $work 'fixture_mod\itemV2.cfg'))
+    $log = [IO.File]::ReadAllText((Join-Path $work 'fixture_mod\CHANGELOG.md'))
+    if ($code -ne 0 -or (Get-ReleaseSourceVersion $work 'fixture_mod') -cne '0.1.2-dev' -or -not $cfg.Contains('Fixture v0.1.2-dev') -or
+            $log -notmatch '(?m)^## 0\.1\.2-dev \([0-9-]+\) - Roll back to 0\.1\.0-dev$' -or
+            -not (Test-ReleaseRestoreDone -RepoRoot $work -Mod 'fixture_mod' -SourceCommit $oldCommit)) {
+        $failures += "rollback version step: exit $code"
+    } else { Write-Host '  [PASS] rollback ships a new version: MOD_VERSION, current cfg and a Roll back to heading' -ForegroundColor Green }
+} catch {
+    $failures += "rollback fixture crashed: $($_.Exception.Message)"
+} finally {
+    $env:VT2_SHIP_RESULT_DIR = $previousDir
+    if (Test-Path -LiteralPath $gitRoot) { Remove-Item -LiteralPath $gitRoot -Recurse -Force }
+}
 if ($failures.Count -gt 0) {
     Write-Host '[check_release_driver -SelfTest] FAILED' -ForegroundColor Red
     foreach ($failure in $failures) { Write-Host "  X $failure" -ForegroundColor Red }
     exit 2
 }
-Write-Host '[check_release_driver -SelfTest] OK -- land exit codes, body rule, journal, session id, skips, clean-version stop, head retry, dry run.' -ForegroundColor Green
+Write-Host '[check_release_driver -SelfTest] OK -- land exit codes, body rule, journal, session id, skips, clean-version stop, head retry, dry run, rollback.' -ForegroundColor Green
 exit 0
