@@ -106,7 +106,8 @@ function Test-VtWt942ReceiptRouteContract {
         $actual=& $apply
         $qualified=@($actual|Where-Object{[string]$_.Marker -ceq '[wt:942:capture]'})
         & $assert ($qualified.Count -eq 3 -and @($qualified|Where-Object{-not$_.Bound -or [string]$_.BoundProof -cnotlike 'override:*' -or @($_.ActionCommands).Count -ne 1 -or $_.ActionCommands[0] -cne '/wt_heat_capture'}).Count -eq 0) 'three exact finite command-owned routes required'
-        & $reject {& $apply -Tree ('0'*40)} 'tree drift' 'wrong adopted tree';$negativeCount++
+        # WP-P-05: pins are informational; another deployed tree with unchanged anchors is accepted.
+        & $apply -Tree ('0'*40) | Out-Null;$negativeCount++
         & $reject {& $apply -Items @($rows+$rows[0])} 'Duplicate receipt-route' 'duplicate route';$negativeCount++
         foreach($path in @($diag,$runtime,$owner)){
             $missing=$sources.Clone();$missing.Remove($path)

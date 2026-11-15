@@ -1336,10 +1336,12 @@ end
         & $assertFamily577Rejected ($familySource.Replace('if _is_mp_realm() and chip_type == Dailies.REWARD_KIND then', 'if _is_mp_realm() or chip_type == Dailies.REWARD_KIND then')) 'anchor drift' 'Changing the realm/currency gate did not fail closed.'
         & $assertFamily577Rejected ($familySource.Replace('[fx:577] purchase_rejected item=%s reason=%s backend=none', '[fx:577] purchase_rejected item=%s reason=%s backend=local')) 'anchor drift' 'Changing the rejection format string did not fail closed.'
         & $assertFamily577Rejected ($familySource.Replace('[fx:577] purchase_committed item=%s price=%d balance=%d overlay=%s backend=none', '[fx:577] purchase_committed item=%s price=%d balance=%d overlay=%s backend=local')) 'anchor drift' 'Changing the committed format string did not fail closed.'
-        $rejected = $false
+        # WP-P-05: pins are informational. A different deployed tree whose documents
+        # and anchors are unchanged is accepted; the anchor-drift cases above still fail closed.
+        $otherTreeError = $null
         try { & $invokeFamily577 $familySource ('d' * 40) $familyOverrides | Out-Null }
-        catch { $rejected = [string]$_.Exception.Message -match 'immutable-tree drift' }
-        Assert-VtContractFixture $rejected 'Changing the deployed source tree did not fail closed.'
+        catch { $otherTreeError = [string]$_.Exception.Message }
+        Assert-VtContractFixture ($null -eq $otherTreeError) "A different deployed tree with unchanged anchors was rejected: $otherTreeError"
         $savedFamilySource = $familyOverrides[0].SourcesByMod.fixture
         try {
             $familyOverrides[0].SourcesByMod.fixture = 'fixture_mod/scripts/mods/fixture_mod/_missing.lua'
@@ -1647,10 +1649,11 @@ return M
             catch { $rejected = [string]$_.Exception.Message -match $pattern }
             Assert-VtContractFixture $rejected "#1190 source mutation did not fail closed: $($case.Old)"
         }
-        $rejected = $false
+        # WP-P-05: pins are informational; another deployed tree with unchanged anchors is accepted.
+        $otherTreeError = $null
         try { & $invokeCurrentWt1190 $wt1190Sources ('a' * 40) | Out-Null }
-        catch { $rejected = [string]$_.Exception.Message -match 'tree drift' }
-        Assert-VtContractFixture $rejected '#1190 wrong deployed tree was accepted.'
+        catch { $otherTreeError = [string]$_.Exception.Message }
+        Assert-VtContractFixture ($null -eq $otherTreeError) "#1190 a different deployed tree with unchanged anchors was rejected: $otherTreeError"
         $missingWt1190Source = $wt1190Sources.Clone()
         $missingWt1190Source.Remove($wt1190Backend)
         $rejected = $false
