@@ -36,7 +36,7 @@ mod._cim959_accessory_property_policy = mod:dofile(
 local _BULK_ACCESSORY_CRAFT = mod:dofile("scripts/mods/crafting_in_modded_dev/_cim_bulk_accessory_craft")
 _MEM_PROBE_T0_CIMD = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 
-local MOD_VERSION = "0.8.148-dev"
+local MOD_VERSION = "0.8.149-dev"
 local _bootstrap = mod:dofile(
     "scripts/mods/crafting_in_modded_dev/_cim_bootstrap_runtime")({
         mod = mod,
@@ -274,10 +274,9 @@ mod._cim_favorite_persistence = mod:dofile(
     "scripts/mods/crafting_in_modded_dev/_cim_favorite_persistence")
 
 -- ============================================================
--- Forge state owner (persistence + item creation)
+-- Forge state owner (persistence + item creation) + #402 career commit guard
 -- ============================================================
--- These callbacks are bound later in the entry. The forge owner resolves them
--- only when BackendManagerPlayFab rebuilds its interfaces.
+-- These callbacks are bound later in the entry; the owner resolves them when BackendManagerPlayFab rebuilds interfaces.
 local _athanor_inject_all
 local _restore_modded_loadout
 local _bubble_cap
@@ -295,6 +294,7 @@ local _forge_create_item = _forge_state.create_item
 local _forge_detect_mil = _forge_state.detect_mil
 local _forge_load = _forge_state.load
 local _forge_save = _forge_state.save
+mod:dofile("scripts/mods/crafting_in_modded_dev/_cim_career_commit_guard")({ mod = mod, guard = mod:dofile("scripts/mods/crafting_in_modded_dev/_lib_official_loadout_guard"), rt_register = _rt_register, print_line = printf })
 -- ============================================================
 -- Vanilla-safe loadout wire owner
 -- ============================================================
