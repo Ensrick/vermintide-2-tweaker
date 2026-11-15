@@ -1,0 +1,37 @@
+{
+  "schema": 1,
+  "issue": 941,
+  "class": "R",
+  "status": "draft",
+  "vp": null,
+  "arena": "unknown",
+  "mods": [
+    {
+      "dir": "event_tweaker",
+      "min_version": "0.4.54-dev",
+      "settings": null
+    }
+  ],
+  "cases": [
+    {
+      "script": "",
+      "steps": [
+        "1. Enable Tweaker: Events and enter the Keep without another player in the lobby.",
+        "2. Open Own Game > Event Missions and confirm Prologue appears beside A Quiet Drink and The Feast of Grimnir.",
+        "3. Select Prologue and run `/event_tweaker_regression_test`; retain the complete result.",
+        "4. Launch Prologue, confirm the normal tutorial loads, and play until you have control of Kruber.",
+        "5. Return safely, reopen Event Missions, and confirm A Quiet Drink and The Feast of Grimnir are still present and unchanged."
+      ],
+      "assertions": [
+        "The named `issue941_prologue_solo_only_projection` check and the full suite pass; Prologue launches as the intact solo tutorial without replacing its canonical level identity, and the two existing event missions remain usable.",
+        "issue941 check passes; select Prologue in the Events list and launch solo: level prologue reaches in-game; two-player verdict blocked_not_solo by unit test."
+      ],
+      "pass_closes": true
+    }
+  ],
+  "source": {
+    "card_comment_id": 5473545913,
+    "card_date": "2026-08-31T04:04:49Z",
+    "ledger": "D3_ledger.tsv"
+  }
+}

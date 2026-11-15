@@ -1,0 +1,39 @@
+{
+  "schema": 1,
+  "issue": 458,
+  "class": "R",
+  "status": "draft",
+  "vp": null,
+  "arena": "unknown",
+  "mods": [
+    {
+      "dir": "chaos_wastes_tweaker_dev",
+      "min_version": "0.7.354-beta",
+      "settings": null
+    }
+  ],
+  "cases": [
+    {
+      "script": "",
+      "steps": [
+        "1. In **Tweaker: Chaos Wastes**, enable **Buy Starting Boons**. Set **Start Shrine: Boons Offered** to 4, **Start Shrine: Miracles Offered** to 0, **Start Shrine: Boon Price** to **50%**, and **Start Shrine: Boon Purchase Limit** to **1**. Leave **Individual Boon Prices** off. Under **Pilgrim's Coin**, set **Starting Coins** to 1000. Leave free **Starting Boons** selections off for this purchase test.",
+        "2. Start an ordinary fresh pilgrimage. Before the first map choice, confirm the shrine opens with four boon cards and no miracles, with numeric prices and the start node's normal map appearance.",
+        "3. Record one card's price and your coins, then buy it. Confirm you receive the boon and the exact displayed price is deducted. A second boon purchase must be blocked for this hero. Run `/ct_verify_start_shrine` while still in the starting shrine.",
+        "4. Choose **Ready**. Confirm normal first-map choice opens, with no startup crash or blocked-view fallback. Later in the same expedition, visit an ordinary shrine: the starting discount and one-purchase limit must not apply there.",
+        "5. For a fresh run, change the starting purchase limit to **Unlimited** and confirm two affordable purchases work. Then try another fresh run with **Start Shrine: Miracles Offered** at 1 and, under **Start Shrine: Miracle Pool**, only **Blessing of Power** enabled. Exactly that miracle must be offered.",
+        "6. Turn **Blessing of Power** off as well, leaving the miracle count at 1, and start another fresh run. No miracle may be offered from the now-empty eligible pool. The off selection must not be replaced by an earlier enabled choice.",
+        "7. Turn **Buy Starting Boons** off and start a fresh expedition. It must begin at the normal map choice with no starting shrine. Run `/ct_regression_test`, exit normally, and attach the newest complete log with prices, coin totals, purchase counts, and the miracle-pool results."
+      ],
+      "assertions": [
+        "Configured offers, price, per-run purchase limit, and Ready transition work at the starting shrine only. Unlimited permits more than one purchase, disabled miracle selections stay excluded, and the main off control restores native startup. `issue458_start_shrine_config`, `issue1146_false_discount`, and the full regression report pass. A fallback instead of the requested shop is containment evidence, not a pass.",
+        "Start a run with the shrine on; assert shop opens with N offers and M pooled miracles, price equals percent x base, buy debits price, limit blocks a second buy."
+      ],
+      "pass_closes": true
+    }
+  ],
+  "source": {
+    "card_comment_id": 6693582524,
+    "card_date": "2026-11-06T19:31:09Z",
+    "ledger": "D3_ledger.tsv"
+  }
+}

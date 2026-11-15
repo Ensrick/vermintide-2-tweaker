@@ -1,0 +1,38 @@
+{
+  "schema": 1,
+  "issue": 1124,
+  "class": "R",
+  "status": "draft",
+  "vp": null,
+  "arena": "unknown",
+  "mods": [
+    {
+      "dir": "chaos_wastes_tweaker_dev",
+      "min_version": "0.7.354-dev",
+      "settings": null
+    }
+  ],
+  "cases": [
+    {
+      "script": "",
+      "steps": [
+        "1. Refresh **Tweaker: Chaos Wastes Dev**, launch Vermintide 2, and confirm the exact load banner above in the newest log.",
+        "2. In **Single Mission Loader**, select **Old Haunts** and load it as a Chaos Wastes mission.",
+        "3. Play until **Restore the Gargoyle Heads** begins.",
+        "4. Locate all four gargoyle heads, carry each one to a socket, and finish the objective if the mission permits it.",
+        "5. Record the highest objective count shown and whether the objective completed.",
+        "6. Run `/ct_regression_test`, exit cleanly, and attach the newest console log to this issue."
+      ],
+      "assertions": [
+        "The log contains bounded `[ct:1124]` rows with `mutation=false` for the authored spawners, group registration/activation, actual gargoyle-head spawns, sockets, and objective progress. Healthy behavior reaches four socketed heads and `completed=true`; any missing phase, wrong pickup, lower count, or incomplete objective is useful diagnostic evidence rather than a failed procedure.",
+        "Load dlc_portals through the loader; read limited-item-track spawner activation and [ct:1124] rows; script heads to sockets; assert four spawners and objective completion."
+      ],
+      "pass_closes": true
+    }
+  ],
+  "source": {
+    "card_comment_id": 5474377427,
+    "card_date": "2026-08-31T06:00:14Z",
+    "ledger": "D3_ledger.tsv"
+  }
+}

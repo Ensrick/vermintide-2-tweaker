@@ -1,0 +1,41 @@
+{
+  "schema": 1,
+  "issue": 624,
+  "class": "R",
+  "status": "draft",
+  "vp": null,
+  "arena": "unknown",
+  "mods": [
+    {
+      "dir": "crafting_in_modded_dev",
+      "min_version": "",
+      "settings": null
+    },
+    {
+      "dir": "crafting_in_modded",
+      "min_version": "0.8.148",
+      "settings": null
+    }
+  ],
+  "cases": [
+    {
+      "script": "",
+      "steps": [
+        "1. Refresh the public Crafting in Modded subscription normally. Enable it after Vermintide Mod Framework and disable Crafting in Modded Dev. Start Modded Realm and confirm the exact banner in the newest log; report an absent/different version before continuing.",
+        "2. After the Keep finishes loading, walk to the physical Forge. Confirm its ordinary interaction prompt appears and use it to open the normal crafting window. Do not use the separate Athanor hotkey as a substitute.",
+        "3. Close the crafting window and use the same Forge prompt again. Confirm repeat-safe opening and normal inventory/menu access after closing. Report the input method used; if a controller is available, repeat one interaction with it and report that result separately.",
+        "4. Run `/cim_regression_test` once. Copy or screenshot the named chat result below if absent from the console log. Exit normally and attach the full log plus that evidence, identifying any failed step rather than repeating until it looks successful."
+      ],
+      "assertions": [
+        "The original physical Forge prompt opens the crafting window twice, without a related hook/script error or lost interaction. Require explicit `PASS: issue624_keep_forge_interaction`; a general total, missing output or SKIP is insufficient. This check audits the live installed predicate and exercises the production installer with detached callbacks, including official/non-Keep delegation; it does not substitute for the two real interactions or a real controller result.",
+        "Modded Keep: forge_access.client.can_interact returns true and [cim:624] logs; start the interaction, forge view opens, close, reopen; issue624 PASS; non-Keep returns the original result."
+      ],
+      "pass_closes": true
+    }
+  ],
+  "source": {
+    "card_comment_id": 6867217702,
+    "card_date": "2026-11-13T23:09:17Z",
+    "ledger": "D4_ledger.tsv"
+  }
+}

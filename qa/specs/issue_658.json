@@ -1,0 +1,37 @@
+{
+  "schema": 1,
+  "issue": 658,
+  "class": "R",
+  "status": "draft",
+  "vp": null,
+  "arena": "unknown",
+  "mods": [
+    {
+      "dir": "cosmetics_tweaker",
+      "min_version": "0.9.230-dev",
+      "settings": null
+    }
+  ],
+  "cases": [
+    {
+      "script": "",
+      "steps": [
+        "1. With the Purpure/Azure set enabled, confirm Grail Knight can equip its hat, outfit, and shield while the Mercenary, Huntsman, and Foot Knight sharing settings default off.",
+        "2. Enable only Mercenary sharing, equip all three pieces, and inspect the inventory character preview and local third person; confirm the other two careers stay unavailable.",
+        "3. Repeat independently for Huntsman and Foot Knight.",
+        "4. Disable one career's sharing setting, then disable and re-enable the set master.",
+        "5. Restart, enter a mission, and run `/cos_regression_test`."
+      ],
+      "assertions": [
+        "All three sharing settings are independent and default off, Grail Knight stays natively available, owner surfaces and persistence follow the selected career, disabling one affects only that career, and the issue 658 plus career-identity contracts pass. This completes the solo floor only; matched and unmatched peer behavior follows after it passes.",
+        "Change each career toggle through the VMF setting-changed route; assert can_wield of the 3 set items changes for exactly that career; defaults off; survives restart."
+      ],
+      "pass_closes": true
+    }
+  ],
+  "source": {
+    "card_comment_id": 5165093078,
+    "card_date": "2026-08-03T10:16:51Z",
+    "ledger": "D2_ledger.tsv"
+  }
+}

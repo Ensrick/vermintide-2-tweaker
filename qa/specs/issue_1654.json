@@ -1,0 +1,36 @@
+{
+  "schema": 1,
+  "issue": 1654,
+  "class": "R",
+  "status": "draft",
+  "vp": null,
+  "arena": "unknown",
+  "mods": [
+    {
+      "dir": "crafting_in_modded_dev",
+      "min_version": "0.8.148-dev",
+      "settings": null
+    }
+  ],
+  "cases": [
+    {
+      "script": "",
+      "steps": [
+        "1. Refresh **Crafting In Modded (Dev)** from Steam Workshop. Do not craft, delete or favorite anything first: the missing unfavorited Greatsword copy should still be in your saved crafts.",
+        "2. Launch the Modded Realm with the same mod set as the original report and confirm the banner above in the newest log.",
+        "3. In the keep, open Kruber's inventory and note whether both Greatsword copies are there, or only the favorited one.",
+        "4. Run `/cim_regression_test`, exit normally, and attach the newest console log."
+      ],
+      "assertions": [
+        "Either the unfavorited Greatsword copy is back in the inventory and the regression run reports `PASS: issue1654_saved_crafts_restored`, or that check reports `FAIL: issue1654_saved_crafts_restored` listing the missing copy and the saved field that failed to restore. Either result is useful; please attach the log both ways.",
+        "Repro: craft two copies of one item_key with different properties, favorite one, relaunch: both bids in saved forged_weapons AND mirror inventory; log record counts at save and at load."
+      ],
+      "pass_closes": true
+    }
+  ],
+  "source": {
+    "card_comment_id": 5843457819,
+    "card_date": "2026-09-26T05:16:30Z",
+    "ledger": "D4_ledger.tsv"
+  }
+}

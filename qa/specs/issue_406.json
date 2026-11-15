@@ -1,0 +1,29 @@
+{
+  "schema": 1,
+  "issue": 406,
+  "class": "X",
+  "status": "draft",
+  "vp": null,
+  "arena": "none",
+  "mods": [
+    {
+      "dir": "chaos_wastes_tweaker_dev",
+      "min_version": "",
+      "settings": null
+    }
+  ],
+  "cases": [
+    {
+      "script": "",
+      "steps": [],
+      "assertions": [],
+      "pass_closes": false
+    }
+  ],
+  "on_fail": "unclassified: triage first",
+  "source": {
+    "card_comment_id": null,
+    "card_date": null,
+    "ledger": null
+  }
+}

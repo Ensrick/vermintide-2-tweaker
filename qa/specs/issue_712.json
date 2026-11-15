@@ -1,0 +1,40 @@
+{
+  "schema": 1,
+  "issue": 712,
+  "class": "V",
+  "status": "draft",
+  "vp": null,
+  "arena": "unknown",
+  "mods": [
+    {
+      "dir": "weapons_of_chaos",
+      "min_version": "0.1.62-dev",
+      "settings": null
+    }
+  ],
+  "cases": [
+    {
+      "script": "",
+      "steps": [
+        "1. In the Keep, equip **Blightreaper** and run `/woc_pose_reset`.",
+        "2. Inspect Blightreaper in first person, owner third person, and the inventory character preview.",
+        "3. Swap away and back, enter an Adventure mission, and inspect all three views again.",
+        "4. Run `/woc_pose_audit`, then run `/woc_regression_test`, exit normally, and attach the newest complete log.",
+        "5. If the pose audit reports that Weapon Tweaker owns a channel, run `/wt_dev_hp_reset`, swap away and back, inspect the weapon again, and rerun `/woc_pose_audit` before exiting."
+      ],
+      "assertions": [
+        "The single `[WOC:712] pose audit canonical offset=` summary records the canonical `-0.3` Z offset, `{-180,-90,-90}` rotation, 80% first-person scale multiplier and 90% third-person scale multiplier. At most eight `[WOC:712] pose audit row=` live rows identify their view, retained state and Weapon Tweaker tuner ownership; successful retained state is `retained=true`. Their `current=`/`target=` snapshots contain composed baseline position/scale and quaternion rotation, not direct Euler or percentage values. The regression test no longer falsely reports the old rotation or missing intrinsic traits/properties. If the weapon still looks wrong, the attached audit must distinguish an active tuner override from a retained asset-space visual mismatch.",
+        "Automatable part: read retained local pose on 1P, 3P, preview and husk after swap and transition; equals canonical values. Whether the sword looks right needs a screenshot review."
+      ],
+      "pass_closes": false
+    }
+  ],
+  "left_for_humans": [
+    "The single `[WOC:712] pose audit canonical offset=` summary records the canonical `-0.3` Z offset, `{-180,-90,-90}` rotation, 80% first-person scale multiplier and 90% third-person scale multiplier. At most eight `[WOC:712] pose audit row=` live rows identify their view, retained state and Weapon Tweaker tuner ownership; successful retained state is `retained=true`. Their `current=`/`target=` snapshots contain composed baseline position/scale and quaternion rotation, not direct Euler or percentage values. The regression test no longer falsely reports the old rotation or missing intrinsic traits/properties. If the weapon still looks wrong, the attached audit must distinguish an active tuner override from a retained asset-space visual mismatch."
+  ],
+  "source": {
+    "card_comment_id": 5161336767,
+    "card_date": "2026-08-03T01:17:17Z",
+    "ledger": "D1_ledger.tsv"
+  }
+}

@@ -1,0 +1,36 @@
+{
+  "schema": 1,
+  "issue": 505,
+  "class": "R",
+  "status": "draft",
+  "vp": null,
+  "arena": "unknown",
+  "mods": [
+    {
+      "dir": "chaos_wastes_tweaker_dev",
+      "min_version": "0.7.354-beta",
+      "settings": null
+    }
+  ],
+  "cases": [
+    {
+      "script": "",
+      "steps": [
+        "1. Stand physically in the **Pilgrimage Chamber**, reached through the Chaos Wastes door in the keep. Open **Single Mission Loader** in Tweaker: Chaos Wastes.",
+        "2. Choose a mission under **Mission**, select **Deepest (99.9%)** under **Run Progress**, and launch using the assigned **Load Selected Mission Now (hotkey)**.",
+        "3. In that mission, interact with an **upgrade weapon chest** and confirm the chest works without a weapon-rarity assertion or crash.",
+        "4. Run `/ct_regression_test`, retain the complete report including the single-mission loader check, exit normally, and attach the newest console log."
+      ],
+      "assertions": [
+        "The selected mission launches, the upgrade chest works, the full regression report has no failures, and `[ct:505] single_mission_load` records progress `0.999`, never `1.0`. If the chosen mission provides no upgrade chest, that chest boundary remains untested rather than passed.",
+        "From morris_hub invoke the loader for every catalog mission in a loop; assert level reaches in-game, progress 0.999, upgrade chest opens; outside hub refused."
+      ],
+      "pass_closes": true
+    }
+  ],
+  "source": {
+    "card_comment_id": 6693593196,
+    "card_date": "2026-11-06T19:31:43Z",
+    "ledger": "D3_ledger.tsv"
+  }
+}

@@ -1,0 +1,42 @@
+{
+  "schema": 1,
+  "issue": 604,
+  "class": "R",
+  "status": "draft",
+  "vp": null,
+  "arena": "unknown",
+  "mods": [
+    {
+      "dir": "weapon_tweaker",
+      "min_version": "",
+      "settings": null
+    },
+    {
+      "dir": "character_weapon_variants",
+      "min_version": "0.1.570-dev",
+      "settings": null
+    }
+  ],
+  "cases": [
+    {
+      "script": "",
+      "steps": [
+        "1. Refresh **Character Weapon Variants**, launch the game, and confirm the newest log contains `[cwv:LOAD] v0.1.570-dev`.",
+        "2. Start a solo mission as Sienna with her native **Crowbill**. Use its normal light-attack chain on an enemy that survives the first hit and confirm the burning stab still applies fire damage over time.",
+        "3. Use Weapon Special to switch the Crowbill to Hammer mode, attack again, then switch back to the normal face. Confirm Hammer mode uses its alternate impact behavior and the normal face regains Sienna's burning attack.",
+        "4. Repeat as Kruber with the **Imperial Crowbill** and as Bardin with the **Dawi Crowbill**, testing both normal and Hammer modes. Confirm neither weapon applies Sienna's burning damage-over-time effect.",
+        "5. Run `/cwv_regression_test` in chat."
+      ],
+      "assertions": [
+        "Sienna's native Crowbill retains its burning normal attack after switching to Hammer mode and back. Imperial and Dawi Crowbills remain non-burning in both modes. `/cwv_regression_test` passes `issue604_crowbill_template_ownership`. Cross-character third-person animation quality is tracked separately by #946.",
+        "Assert bw_1h_crowbill normal template carries a dot profile; Imperial and Dawi normal profiles have none; Weapon Special swaps the effective template and back."
+      ],
+      "pass_closes": true
+    }
+  ],
+  "source": {
+    "card_comment_id": 5386612108,
+    "card_date": "2026-08-23T14:49:30Z",
+    "ledger": "D1_ledger.tsv"
+  }
+}

@@ -1,0 +1,41 @@
+{
+  "schema": 1,
+  "issue": 490,
+  "class": "R",
+  "status": "draft",
+  "vp": null,
+  "arena": "unknown",
+  "mods": [
+    {
+      "dir": "general_tweaker_dev",
+      "min_version": "",
+      "settings": null
+    },
+    {
+      "dir": "general_tweaker",
+      "min_version": "0.2.180",
+      "settings": null
+    }
+  ],
+  "cases": [
+    {
+      "script": "",
+      "steps": [
+        "1. Enable public **Tweaker: General**, not the Dev stream, and turn on **Draw boss-event spheres** before entering an Adventure mission.",
+        "2. Host a mission, use **Leave Game** to return to the Keep, and start another mission.",
+        "3. Repeat the Keep-to-mission transition at least three times and include one mission restart if convenient.",
+        "4. Run `/gt_regression_test` after the final transition, exit normally, and attach the newest log."
+      ],
+      "assertions": [
+        "No crash, native access violation, missing GUI material, or dead `level_world` access occurs during transitions or teardown. The regression command passes. A one-time skipped-cleanup notice for an already-dead cached world is a successful fail-closed guard; repeated cleanup spam or any dereference afterward is a failure. Visible wireframes are outside this issue's scope.",
+        "Harness: Draw boss-event spheres on, 3x Keep-mission-Keep plus one restart; process alive, no \"Gui material not found\" or access violation in log."
+      ],
+      "pass_closes": true
+    }
+  ],
+  "source": {
+    "card_comment_id": 5356853029,
+    "card_date": "2026-08-20T13:54:13Z",
+    "ledger": "D5_ledger.tsv"
+  }
+}

@@ -1,0 +1,38 @@
+{
+  "schema": 1,
+  "issue": 999,
+  "class": "R",
+  "status": "draft",
+  "vp": null,
+  "arena": "unknown",
+  "mods": [
+    {
+      "dir": "career_tweaker",
+      "min_version": "0.4.34-beta",
+      "settings": null
+    }
+  ],
+  "cases": [
+    {
+      "script": "",
+      "steps": [
+        "1. Enable Career Tweaker and General Tweaker, select Zealot, equip Feel Nothing, and bind General Tweaker’s Ult Reset hotkey.",
+        "2. Turn on **Zealot: Refresh Feel Nothing**.",
+        "3. In a mission, use Holy Fervour and wait about three seconds while Feel Nothing is active.",
+        "4. Reset the ability, immediately use Holy Fervour again, and confirm Feel Nothing restarts at five seconds.",
+        "5. Turn **Zealot: Refresh Feel Nothing** off and repeat; confirm the buff expires at the first activation’s original endpoint.",
+        "6. Run the complete Career Tweaker regression report and retain its output."
+      ],
+      "assertions": [
+        "The second activation restarts Feel Nothing only while the option is enabled; disabling it restores vanilla timing. The complete regression report finishes with every expected check passing and no failures.",
+        "Setting on: template field refresh_durations is true; add the buff twice three seconds apart: remaining duration near five; off: field back to vanilla nil."
+      ],
+      "pass_closes": true
+    }
+  ],
+  "source": {
+    "card_comment_id": 5162032746,
+    "card_date": "2026-08-03T03:37:19Z",
+    "ledger": "D4_ledger.tsv"
+  }
+}

@@ -1,0 +1,41 @@
+{
+  "schema": 1,
+  "issue": 317,
+  "class": "V",
+  "status": "draft",
+  "vp": null,
+  "arena": "unknown",
+  "mods": [
+    {
+      "dir": "character_weapon_variants",
+      "min_version": "",
+      "settings": null
+    }
+  ],
+  "cases": [
+    {
+      "script": "",
+      "steps": [
+        "1. Refresh the two named builds through the normal authorized subscription path and fully restart VT2 into the Modded Realm. Confirm both loaded versions in the newest console log; do not enable both GUI streams. In GUI Tweaker (Dev), open **3rd-Person Camera > Enable Third-Person Camera** (or use `/tp`) and confirm the ordinary local player's body is visible. Do not use Free Camera or a forced-event command.",
+        "2. With CWV's **Dev Options > 3P Animation Picker** off, record short baseline light, charged-heavy, block/push and push-follow-up sequences on **Witch Hunter Captain > Dual Axes**, then **Mercenary > Dual Axes**. Run `/cwv_regression_test` once and retain the report.",
+        "3. Turn **3P Animation Picker** on and set the two dropdowns specified above, leaving all other rows at **(use baked/default event)**. Repeat the same ordinary attack sequences on both careers. Record whether the selected heavy release actually changes, whether charge/release chaining remains usable, and whether lights/pushes stay unaffected. A saved value or component PASS alone is not playback evidence.",
+        "4. For each career, swap to another ordinary weapon and back, then enter a normally accessible Adventure mission and repeat the sequence. Run `/cwv_dump_anim_picks` once after these checks and retain its `[cwv:317]` block with the video/screenshots.",
+        "5. Fully exit and restart VT2 normally, reconfirm both build versions, then repeat the two-career heavy sequences and `/cwv_dump_anim_picks` once. Confirm the two selections persisted and actual playback still follows them.",
+        "6. Set the two changed rows back to **(use baked/default event)**, repeat the two heavy sequences, then turn **3P Animation Picker** off and repeat. Compare with the recorded baked/default baseline. Check Bardin's native **Dual Axes** and an unrelated ordinary weapon as unchanged controls. Restore the original camera/picker settings after recording the result."
+      ],
+      "assertions": [
+        "The real component check `issue317_career_scoped_animation_picker` passes, both receiver-specific picks affect ordinary owner 3P playback immediately and persist through swap/mission/restart, and per-row baked/default plus master-off restore the baseline. No frozen body, broken charge/release sequence, new error/crash, or change to Bardin/native/unrelated controls. `[cwv:317]` is a settings receipt only, not proof that an animation played. Report each career separately, including any failing action and its video plus newest console log. This is not remote-husk acceptance or issue closure.",
+        "Automatable part: with a pick set, spy the 3P animation dispatch on heavy release; assert the picked event fired, Unit.has_animation_event is true and animation state changes."
+      ],
+      "pass_closes": false
+    }
+  ],
+  "left_for_humans": [
+    "The real component check `issue317_career_scoped_animation_picker` passes, both receiver-specific picks affect ordinary owner 3P playback immediately and persist through swap/mission/restart, and per-row baked/default plus master-off restore the baseline. No frozen body, broken charge/release sequence, new error/crash, or change to Bardin/native/unrelated controls. `[cwv:317]` is a settings receipt only, not proof that an animation played. Report each career separately, including any failing action and its video plus newest console log. This is not remote-husk acceptance or issue closure."
+  ],
+  "source": {
+    "card_comment_id": 6524992036,
+    "card_date": "2026-10-30T14:17:13Z",
+    "ledger": "D1_ledger.tsv"
+  }
+}

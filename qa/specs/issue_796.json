@@ -1,0 +1,43 @@
+{
+  "schema": 1,
+  "issue": 796,
+  "class": "V",
+  "status": "draft",
+  "vp": null,
+  "arena": "unknown",
+  "mods": [
+    {
+      "dir": "cosmetics_tweaker",
+      "min_version": "0.9.230-dev",
+      "settings": null
+    }
+  ],
+  "cases": [
+    {
+      "script": "",
+      "steps": [
+        "1. Equip a glow-capable Rune-Forged illusion, open its weapon customization screen, and choose **Edit Glow**.",
+        "2. Move Red, Green, Blue, and Intensity without choosing **Apply**. Confirm the standalone weapon preview changes during each adjustment.",
+        "3. Close the popup with the **X** button in its corner - the popup has **Apply**, **Restore Default**, and **X** only, with no Cancel - then confirm the preview returns to its last Applied glow or its original glow.",
+        "4. Reopen **Edit Glow**, change all four values, and choose **Apply**. Return to the Equipment screen without closing the inventory.",
+        "5. Confirm the weapon on the inventory character preview immediately shows the Applied glow.",
+        "6. Choose **Restore Default** and confirm the standalone weapon preview and the inventory character preview both return to the illusion's original glow without leaving inventory.",
+        "7. Repeat with one Weavebound or Shyish-Infused illusion. Switch to another illusion while its preview rebuilds and confirm the old color does not appear on the new selection.",
+        "8. Run `/cos_regression_test` and attach the newest log and screenshots if any step fails."
+      ],
+      "assertions": [
+        "Slider changes repaint only the exact standalone weapon preview; closing with X discards them; Apply and Restore Default immediately refresh the separate inventory character preview; no stale color crosses to another item or illusion; the regression command passes.",
+        "Automatable: slider change binds the exact preview unit, Apply and Restore increment loadout_sync_id exactly once, stale identity rejected. Visible repaint needs eyes or screenshot."
+      ],
+      "pass_closes": false
+    }
+  ],
+  "left_for_humans": [
+    "Slider changes repaint only the exact standalone weapon preview; closing with X discards them; Apply and Restore Default immediately refresh the separate inventory character preview; no stale color crosses to another item or illusion; the regression command passes."
+  ],
+  "source": {
+    "card_comment_id": 5165097763,
+    "card_date": "2026-08-03T10:17:21Z",
+    "ledger": "D2_ledger.tsv"
+  }
+}

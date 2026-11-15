@@ -79,3 +79,12 @@ end)
 mod:info("[regression-test-command] registered as /wt_regression_test")
 
 WT.rt_register = _rt_register
+
+-- WP-WT-08: fails when wt swallowed any vanilla-path error this session.
+_rt_register("wt_no_swallowed_errors", function()
+    local s = WT.swallowed or {}
+    if (s.create_equipment or 0) + (s.anim_event or 0) + (s.safe_hook or 0) > 0 then
+        return string.format("swallowed errors: create_equipment=%d anim_event=%d safe_hook=%d",
+            s.create_equipment or 0, s.anim_event or 0, s.safe_hook or 0)
+    end
+end)

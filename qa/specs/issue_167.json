@@ -1,0 +1,36 @@
+{
+  "schema": 1,
+  "issue": 167,
+  "class": "R",
+  "status": "draft",
+  "vp": null,
+  "arena": "unknown",
+  "mods": [
+    {
+      "dir": "gui_tweaker_dev",
+      "min_version": "",
+      "settings": null
+    }
+  ],
+  "cases": [
+    {
+      "script": "",
+      "steps": [
+        "1. In **Mod Tweaker**, choose an integer slider, a decimal slider and a numeric slider from another enabled Tweaker mod.",
+        "2. Drag each a meaningful distance, release over its track, then move the pointer without holding a button.",
+        "3. Repeat with a short drag and with release over another setting row. Listen for one release click; confirm the other row is not activated.",
+        "4. Repeat from the Keep and the in-mission pause menu. Press **Apply** once, reopen, and check the final values."
+      ],
+      "assertions": [
+        "A slider follows only while held, stops immediately on release, makes one release click and does not change the row under the release point. Final applied values persist in both views.",
+        "/gut_regression_test issue167_slider_release_edge PASS (held, released, latched-release frames; one commit, one sound call)."
+      ],
+      "pass_closes": true
+    }
+  ],
+  "source": {
+    "card_comment_id": 6591458781,
+    "card_date": "2026-11-02T23:48:57Z",
+    "ledger": "D4_ledger.tsv"
+  }
+}

@@ -1,0 +1,36 @@
+{
+  "schema": 1,
+  "issue": 146,
+  "class": "R",
+  "status": "draft",
+  "vp": null,
+  "arena": "unknown",
+  "mods": [
+    {
+      "dir": "chaos_wastes_tweaker_dev",
+      "min_version": "0.7.354-beta",
+      "settings": null
+    }
+  ],
+  "cases": [
+    {
+      "script": "",
+      "steps": [
+        "1. Enable **Disable Dominant-God Rule**, set **Finale God** to **Khorne**, and set **Citadel Approach God** to **Nurgle**. Keep **Disable all listed curses** off and leave the selected gods' curses available.",
+        "2. Start a new route to the **Citadel of Eternity** and play both Citadel sub-maps. Record the approach's theme and curse, the finale's theme and curse, and whether both maps load normally.",
+        "3. Start another run with **Citadel Approach God** set to **Same as Finale God**, leaving **Finale God** at **Khorne**. Play both sub-maps again.",
+        "4. In each run, run `/verify_ct_citadel` once the route graph exists. Retain its graph-readback result and the bounded before/after god, level, theme and curse rows. Then run `/ct_regression_test`, exit normally, and attach the newest console log."
+      ],
+      "assertions": [
+        "In the first run the approach uses Nurgle while the arena uses Khorne, with matching theme and curse families; both maps load. In the control run both sub-maps follow Khorne. The fresh graph verifier must agree with both selections when Citadel nodes are present; no applicable graph reports SKIP. Curse-pool membership in the apply row and actual map/theme/curse behavior must also agree. A graph or generic regression pass alone is not rendered-map acceptance.",
+        "Generate graph with finale Khorne and approach Nurgle; read sig_citadel and arena_citadel node level/god/theme/curse; load both levels without error."
+      ],
+      "pass_closes": true
+    }
+  ],
+  "source": {
+    "card_comment_id": 6693543872,
+    "card_date": "2026-11-06T19:29:05Z",
+    "ledger": "D3_ledger.tsv"
+  }
+}

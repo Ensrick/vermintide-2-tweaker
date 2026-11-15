@@ -1,0 +1,37 @@
+{
+  "schema": 1,
+  "issue": 247,
+  "class": "R",
+  "status": "draft",
+  "vp": null,
+  "arena": "unknown",
+  "mods": [
+    {
+      "dir": "general_tweaker_dev",
+      "min_version": "0.2.180",
+      "settings": null
+    }
+  ],
+  "cases": [
+    {
+      "script": "",
+      "steps": [
+        "1. Host a bot-filled Adventure mission and enable **Bot Takeover**.",
+        "2. Confirm a native bot drives your own hero while you observe. Turn Bot Takeover off and confirm control returns cleanly; this is not an arbitrary-bot selection feature.",
+        "3. Enable **AFK Bot Takeover**, wait without input for takeover, then use input to reclaim control. Repeat once.",
+        "4. Repeat the handoff in Chaos Wastes and one Weave if available. Record any unavailable mechanism as untested, not passed.",
+        "5. Run `/gt_regression_test`, exit normally, and attach the newest log."
+      ],
+      "assertions": [
+        "Exactly one temporary bot drives the affected hero, the human identity/party slot remains, and reclaim removes only the temporary bot and restores human control. No slot, despawn, or POSITION_LOOKUP error occurs. Client verification remains a later stage after this solo boundary.",
+        "Assert mod._gt_ai_takeover_disabled == false, toggle ai_takeover_enabled, assert a bot player controls the hero unit and party slot unchanged; toggle off restores human control."
+      ],
+      "pass_closes": true
+    }
+  ],
+  "source": {
+    "card_comment_id": 6681734459,
+    "card_date": "2026-11-06T09:32:28Z",
+    "ledger": "D5_ledger.tsv"
+  }
+}

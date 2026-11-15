@@ -1,0 +1,11 @@
+{
+  "schema": 1,
+  "issue": 9113,
+  "class": "S",
+  "status": "draft",
+  "vp": null,
+  "arena": "none",
+  "offline": [
+    { "class": "S", "command": "", "expect": "" }
+  ]
+}

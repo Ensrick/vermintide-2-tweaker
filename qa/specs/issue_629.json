@@ -1,0 +1,41 @@
+{
+  "schema": 1,
+  "issue": 629,
+  "class": "C",
+  "status": "draft",
+  "vp": null,
+  "arena": "unknown",
+  "mods": [
+    {
+      "dir": "cosmetics_tweaker",
+      "min_version": "0.9.230-dev",
+      "settings": null
+    }
+  ],
+  "cases": [
+    {
+      "script": "",
+      "steps": [
+        "1. On Grail Knight, equip **Couronne de la Lune**, **Midnight Purpure and Azure**, and **The Blood-Bloomed Bouclier**.",
+        "2. Confirm the same hat, outfit, and shield appear on the inventory character preview.",
+        "3. Enter an Adventure mission, swap away from and back to the shield weapon, and confirm all three cosmetics stay correct in first person and local third person.",
+        "4. Return to the Keep, reopen inventory, and confirm the complete set is still equipped rather than reverting or borrowing another career's cosmetics.",
+        "5. Run `/cos_regression_test` and attach the newest log if any check fails."
+      ],
+      "assertions": [
+        "The exact Grail Knight hat, outfit, and shield stay consistent across inventory, mission entry, weapon swaps, and the return to the Keep; no other career inherits any part of the set, and the regression command passes.",
+        "Solo: assert set keys equipped and resources resident across Keep-mission-Keep. Two clients: observer asserts hat, skin and shield records all arrive after peer-ready."
+      ],
+      "pass_closes": false
+    }
+  ],
+  "left_for_humans": [
+    "The exact Grail Knight hat, outfit, and shield stay consistent across inventory, mission entry, weapon swaps, and the return to the Keep; no other career inherits any part of the set, and the regression command passes.",
+    "needs two clients"
+  ],
+  "source": {
+    "card_comment_id": 5165090838,
+    "card_date": "2026-08-03T10:16:38Z",
+    "ledger": "D2_ledger.tsv"
+  }
+}

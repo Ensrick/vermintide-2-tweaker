@@ -1,5 +1,20 @@
 # Weapon Tweaker Changelog
 
+## 0.12.348-beta (2026-11-15) -- Count swallowed errors, call hooked originals once (WP-WT-08) [not-started]
+
+- `mod:safe_hook` no longer runs the hooked original a second time when a
+  handler raises after calling it (for example the weapon unit spawn wrapper):
+  the original's results are returned instead, and an error raised by the
+  original itself is passed on.
+- Errors Weapon Tweaker swallows on vanilla paths (safe_hook fallbacks, the
+  `create_equipment` empty-record fallback, the animation funnel) are counted.
+  The first three per kind print a `[wt:SWALLOW]` engine-log line, and the
+  in-mod check `wt_no_swallowed_errors` fails while any count is above zero.
+  Fallback behaviour is unchanged.
+- Mirrored in Dev 0.12.349-dev. Host test `test_wt_safe_hook_single_call`; rig
+  case `qa/runtime/wt/wp_wt_08_no_swallowed_errors.lua` is pending. No
+  in-game acceptance is claimed.
+
 ## 0.12.347-beta (2026-11-15) -- Public yields when Dev is enabled (WP-WT-03) [not-started]
 
 - When Weapon Tweaker and Weapon Tweaker (dev) are both enabled, the public

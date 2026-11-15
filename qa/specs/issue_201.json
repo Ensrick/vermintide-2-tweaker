@@ -1,0 +1,37 @@
+{
+  "schema": 1,
+  "issue": 201,
+  "class": "R",
+  "status": "draft",
+  "vp": null,
+  "arena": "unknown",
+  "mods": [
+    {
+      "dir": "weapon_tweaker",
+      "min_version": "0.12.344-dev",
+      "settings": null
+    }
+  ],
+  "cases": [
+    {
+      "script": "",
+      "steps": [
+        "1. Use an account that owns **Sister of the Thorn** and enable **Deepwood Staff** for **Huntsman** in **Mod Tweaker > Weapons > Weapon Availability**.",
+        "2. Equip Deepwood Staff, enter a mission, and use several primary attacks.",
+        "3. Fully charge and release the secondary attack at least five times so its vortex is requested repeatedly.",
+        "4. Return to the Keep, enter a mission again, and repeat one charged vortex cast.",
+        "5. Run `/wt_regression_test`, exit normally, and attach the newest console log."
+      ],
+      "assertions": [
+        "The staff is unavailable until its complete Sister of the Thorn runtime package is resident; primary and charged attacks work without a `Unit.node` fatal or nil-unit crash. `issue201_deepwood_runtime_package_resident` passes, and the log contains no non-resident plague-vortex spawn or `[cos-hat] SKIP` line naming that vortex.",
+        "Huntsman with Deepwood enabled: wield, five charged casts, Keep-mission-Keep; assert process alive, vortex unit spawned, package reference count stable, no SKIP or nil-unit lines."
+      ],
+      "pass_closes": true
+    }
+  ],
+  "source": {
+    "card_comment_id": 5356723579,
+    "card_date": "2026-08-20T13:43:20Z",
+    "ledger": "D2_ledger.tsv"
+  }
+}

@@ -1,0 +1,43 @@
+{
+  "schema": 1,
+  "issue": 798,
+  "class": "R",
+  "status": "draft",
+  "vp": null,
+  "arena": "unknown",
+  "mods": [
+    {
+      "dir": "weapon_tweaker",
+      "min_version": "",
+      "settings": null
+    },
+    {
+      "dir": "character_weapon_variants",
+      "min_version": "0.1.570-dev",
+      "settings": null
+    }
+  ],
+  "cases": [
+    {
+      "script": "",
+      "steps": [
+        "1. Confirm the old optional Sienna Crowbill hammer-mode checkbox is absent from Mod Tweaker.",
+        "2. Use Tweaker: Weapons to equip Sienna's `Crowbill` on Kruber. Enter the Keep or a mission and press Weapon Special; confirm it switches between the pick and hammer faces and switches back.",
+        "3. Repeat with the `Imperial Crowbill` and `Dawi Crowbill` on a career that is not their native owner.",
+        "4. If two owned Crowbill instances are available, leave one in pick mode and one in hammer mode, swap between them, and confirm each remembers its own mode.",
+        "5. Swap away and back, then disable and re-enable CWV. Confirm disabling restores pick mode/native behavior and re-enabling restores Weapon Special switching without a stuck action.",
+        "6. Run `/cwv_regression_test` and retain the newest console log."
+      ],
+      "assertions": [
+        "Every Crowbill supports Weapon Special switching on every eligible career, including Sienna's Crowbill on Kruber. Modes remain per owned weapon, no retired checkbox is required, ordinary attacks and career abilities remain usable, and the regression command passes.",
+        "For Sienna's Crowbill on Kruber and Imperial or Dawi on foreign careers assert the resolved template has the Weapon Special action and toggling swaps template; setting key absent."
+      ],
+      "pass_closes": true
+    }
+  ],
+  "source": {
+    "card_comment_id": 5086189004,
+    "card_date": "2026-07-27T00:37:10Z",
+    "ledger": "D1_ledger.tsv"
+  }
+}

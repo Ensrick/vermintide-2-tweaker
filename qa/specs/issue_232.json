@@ -1,0 +1,36 @@
+{
+  "schema": 1,
+  "issue": 232,
+  "class": "R",
+  "status": "draft",
+  "vp": null,
+  "arena": "unknown",
+  "mods": [
+    {
+      "dir": "gui_tweaker_dev",
+      "min_version": "0.2.290",
+      "settings": null
+    }
+  ],
+  "cases": [
+    {
+      "script": "",
+      "steps": [
+        "1. Give one bot career a victory pose visibly different from your human loadout for the same career.",
+        "2. Complete an Adventure mission with that bot present through the victory podium.",
+        "3. Compare the bot's pose with its designated bot loadout, and check its skin/frame cosmetics.",
+        "4. Return to the Keep and confirm the human loadout's pose did not change."
+      ],
+      "assertions": [
+        "The podium bot uses the bot-designated pose; its other cosmetics and the human loadout remain unchanged.",
+        "issue232_bot_designated_victory_pose PASS; at bot spawn assert the slot_pose lookup receives is_bot=true and returns the bot row's pose id."
+      ],
+      "pass_closes": true
+    }
+  ],
+  "source": {
+    "card_comment_id": 6591463561,
+    "card_date": "2026-11-02T23:49:16Z",
+    "ledger": "D4_ledger.tsv"
+  }
+}
