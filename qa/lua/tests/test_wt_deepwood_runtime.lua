@@ -204,8 +204,13 @@ return function(H, repo_root)
             local apply_pass = assert(entry:find("local function _wt_apply_all()", 1, true))
             local ensure = assert(entry:find(
                 "mod._force_load_deepwood_runtime_package(true)", apply_pass, true))
-            local apply = assert(entry:find("apply_weapon_unlocks()", apply_pass, true))
+            -- WP-WT-07: availability is the registry's first owner (order 10),
+            -- applied by the reconcile inside the apply pass.
+            local apply = assert(entry:find('_wt_reg.reconcile("game_state")', apply_pass, true))
             H.truthy(ensure < apply, "residency request must precede availability")
+            local owners = read(root .. "_wt_mutation_owners.lua")
+            H.truthy(owners:find('{ id = "availability", order = 10,', 1, true),
+                "availability must stay the first registry owner")
             local state_change = assert(entry:find("mod.on_game_state_changed = function", apply_pass, true))
             H.truthy(entry:find("    _wt_apply_all()\n", state_change, true),
                 "state change must run the apply pass")

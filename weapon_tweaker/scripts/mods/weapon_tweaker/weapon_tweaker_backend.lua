@@ -652,10 +652,7 @@ function M.install(mod, weapon_unlock_map, apply_weapon_unlocks, patch_career_ac
             M._last_cwv_active = owns_axe_shield
             M._last_cwv_axe_shield_ready = axe_shield_ready
             M._last_cwv_greataxe_ready = greataxe_ready
-            apply_weapon_unlocks()
-            patch_career_actions_on_weapons()
-            if mod._wt_apply_axe_balance then mod._wt_apply_axe_balance(nil, false) end
-            if mod._wt374_seed_energy_data then mod._wt374_seed_energy_data() end
+            mod._wt.registry.reconcile("cwv_transition")
             M.refresh_on_setting_change(mod)
             mod:info("[wt:593/597] CWV ownership transition active=%s axe_shield_ready=%s greataxe_ready=%s; native fallbacks reconciled",
                 tostring(owns_axe_shield), tostring(axe_shield_ready), tostring(greataxe_ready))

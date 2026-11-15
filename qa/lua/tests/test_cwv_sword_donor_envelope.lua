@@ -142,7 +142,11 @@ return function(H, root, F)
         local settings = c.T.run(read(root .. "/" .. dir .. "/" .. module_root .. "_wt_settings_runtime.lua"),
             c.env, "actual-WT-setting-callback-owner")
         local nop = function() end
+        -- WP-WT-07: the owner batch applies through the real ordered registry.
+        local reg = dofile(root .. "/qa/lua/fixtures/wt_registry_harness.lua")(
+            root .. "/" .. dir .. "/" .. module_root, mod, {})
         settings.install({ mod = mod, history_runtime = runtime,
+            reconcile = function(reason) return reg.reconcile(reason) end,
             rework_runtime = { is_batching = function() return false end, on_master_changed = function() return false end,
                 sync_for_leaf = function() calls.sync = calls.sync + 1 end, prepare_batch = function() return true end },
             balance_policy = {}, bolt_policy = { SETTING_ID = "qa_unused_bolt" }, bolt_runtime = { apply = nop },

@@ -156,6 +156,9 @@ if mod._wt_peer_parity then
     -- matches the load-time snapshot. Dropping any one conjunct would let a
     -- custom numeric id reach the wire on a catalog that had shifted under us.
     mod._wt431_profiles_allowed = function()
+        -- WP-WT-07: while wt is disabled every repoint reads "not allowed",
+        -- which turns the registry's repoint applies into reverts.
+        if not mod._wt.is_active() then return false end
         if not _peer_exact_confirmed() then return false end
         local lookup = rawget(_G, "NetworkLookup")
         lookup = lookup and lookup.damage_profiles
@@ -226,28 +229,10 @@ end
 -- the lib's settle window.
 -- ============================================================
 local function _wt431_reapply_profile_repoints()
-    local history_reconciled = false
-    if type(mod._wt_reconcile_history_owner_stack) == "function" then
-        local ok, applied = pcall(
-            mod._wt_reconcile_history_owner_stack, "peer_parity")
-        history_reconciled = ok and applied == true
-    end
-    if type(mod.wt_apply_priest_punch_buff) == "function" then
-        pcall(mod.wt_apply_priest_punch_buff)
-    end
-    if type(mod.wt_apply_brett_buff) == "function" then
-        pcall(mod.wt_apply_brett_buff)
-    end
-    if type(mod._wt431_brace_repoint) == "function" then
-        pcall(mod._wt431_brace_repoint)
-    end
-    -- #621: the 1H Axe cleave toggle points at private damage-profile clones
-    -- only while every human peer has WT. Re-run the existing bounded balance
-    -- transaction whenever that parity state changes; the other balance
-    -- toggles are idempotent and remain local template edits.
-    if not history_reconciled and type(mod._wt_apply_axe_balance) == "function" then
-        pcall(mod._wt_apply_axe_balance, nil, false)
-    end
+    -- WP-WT-07: the ordered registry (weapon_tweaker.lua) reapplies every
+    -- owner, history/axe (#621 cleave clones) and the profile repoints
+    -- included; each repoint reads _wt431_profiles_allowed() itself.
+    mod._wt.registry.reconcile("peer_parity")
     if mod._wt942_owner then mod._wt942_owner:reconcile() end
 end
 

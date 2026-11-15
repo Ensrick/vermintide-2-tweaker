@@ -1,5 +1,21 @@
 # Weapon Tweaker Changelog
 
+## 0.12.351-beta (2026-11-15) -- One ordered registry for weapon-table owners (WP-WT-07) [not-started]
+
+- Every lifecycle event (level change, re-enable, rework master, peer
+  parity flip, Character Weapon Variants transition, settings batch) now
+  applies the nine weapon-table owners through one ordered reconcile:
+  availability, career actions, energy, history and axe balance, Priest punch,
+  Bretonnian sword and shield, Brace repoint, Bolt Staff heat, Flame Sword.
+  The rework master, CWV transition and settings batch now also re-run the
+  history projection around the axe overlay, as the level change already did.
+- Disabling the mod reverts every owner in the reverse order, now including the
+  Priest punch, Bretonnian and Brace damage-profile repoints (their gate reads
+  "not allowed" while the mod is disabled).
+- Mirrored in Dev 0.12.352-dev. Host test `test_wt_mutation_registry`; rig case
+  `qa/runtime/wt/wp_wt_07_toggle_roundtrip.lua` is pending. No in-game
+  acceptance is claimed.
+
 ## 0.12.350-beta (2026-11-15) -- Pure 3P animation resolver (WP-WT-06) [not-started]
 
 - The cross-character 3P animation decision moved into a pure module,
