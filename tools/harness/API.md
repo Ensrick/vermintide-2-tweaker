@@ -59,6 +59,17 @@ Packs column: CONV = `docs/program/CONVENTIONS.md` section 3; D1 to D5 and CLOSE
 | `T.expect_rt(mod_id, check)` | driver | assertion on a row `/<mod>_regression_test` echoed earlier in this boot (PASS/XPASS pass; FAIL/XFAIL/BAD-SHAPE fail; SKIP or missing = INCONCLUSIVE) | VMF `echo` capture | CONV, all packs | issue cases (WP-H-03) |
 | `T.set(mod_id, setting, value)` | lib/settings.lua | changes one mod option with the mod's own setter and its `on_setting_changed`; the value before the case's first change is put back at cleanup; returns the old value (`SET`, `SET RESTORE` lines) | `VMFMod:set(id, value, notify_mod)` (`Vermintide-Mod-Framework/vmf/scripts/mods/vmf/modules/core/settings.lua:46-61`; event `modules/core/events.lua:79-84`) | CONV, all packs | api-selftest |
 
+## UI
+
+No OS input: views open and close through IngameUI transitions and a press sets a hotspot field, as the game's own test hooks do. A view the case opened and left open is closed at cleanup. Closing the hero view makes the game commit (`hero_view.lua:523`); the write shield holds the official rows.
+
+| Helper | Status | What it does | Wraps | Packs | Rig |
+|---|---|---|---|---|---|
+| `T.open_view(name, params, transition, timeout)` | lib/ui.lua | opens the view `name` (a key of `ingame_ui.views`, e.g. `"hero_view"`) through the `"<name>_force"` transition (or `transition`), waits until it is the current view and returns it; `params` go to the view's `on_enter` (hero view: `menu_state_name`, `menu_sub_state_name`); a missing UI, view or transition, or a refused transition, is INCONCLUSIVE (`VIEW OPEN` line) | `IngameUI.handle_transition` (`scripts/ui/views/ingame_ui.lua:919-974`), transitions `scripts/ui/views/ingame_ui_settings.lua:441-443`; as `scripts/tests/testify_snippets.lua:76-86`; UI from `UIManager.ingame_ui` (`scripts/managers/ui/ui_manager.lua:240`) | CONV, D1, D2, D3, D4 | api-selftest |
+| `T.close_view(timeout)` | lib/ui.lua | closes the current view with `exit_menu` and waits until none is current (`VIEW CLOSE` line) | `exit_menu` (`ingame_ui_settings.lua:506-518`), as `HeroView.exit` (`scripts/ui/views/hero_view/hero_view.lua:576-589`) | none | api-selftest |
+| `T.widget(owner, name)` | lib/ui.lua | a widget (with its `content` table) of an open view, one of its states or windows: `owner` is the view's name or any of those tables (`_widgets_by_name` or `widgets_by_name`); INCONCLUSIVE when missing | `_widgets_by_name` (e.g. `scripts/ui/views/hero_view/states/hero_view_state_overview.lua:177-190`; C1 row 39) | CONV, D1, D2, D3 | api-selftest |
+| `T.press(owner, widget, hotspot, field, frames)` | lib/ui.lua | sets `content[hotspot][field] = true` in the main update (`hotspot` defaults to `button_hotspot`, else `hotspot`; `field` to `on_release`), then waits up to `frames` updates (10) for it to go false again and returns whether it did; an unread press is reset. Also `T.press(widget, hotspot, field, frames)`. The case asserts the effect (`PRESS` line) | `UIUtils.is_button_pressed` reads and clears `on_release` (`scripts/helpers/ui_utils.lua:381-389`); the game's test hook sets `on_right_click` the same way (`scripts/ui/views/hero_view/windows/hero_window_cosmetics_inventory_testify.lua:7-9`; C1 row 40) | D2, D4 | api-selftest |
+
 ## Career and loadout
 
 Every change goes through the game's own setters (the ones the hero view and the game's test hooks call), never a backend commit; the change sits in the backend mirror and the write shield (WP-H-14) holds it back from the game's next commit. Each change is undone at cleanup.
@@ -82,10 +93,6 @@ Every change goes through the game's own setters (the ones the hero view and the
 
 | Helper | Status | What it does | Wraps | Packs | Rig |
 |---|---|---|---|---|---|
-| `T.open_view(name, params)` | planned: UI | opens a UI view and waits until it is active | `IngameUI.handle_transition` (`scripts/ui/views/ingame_ui.lua:919`; C1 row 39) | CONV, D1, D2, D3, D4 | none |
-| `T.widget(view, name)` | planned: UI | a widget's content table of an open view | widget `content` tables (C1 row 39) | CONV, D1, D2, D3 | none |
-| `T.press(view, widget, hotspot)` | planned: UI | sets a hotspot field (`on_pressed`, `on_right_click`) on an open view's widget | `scripts/ui/views/hero_view/windows/hero_window_cosmetics_inventory_testify.lua:7-9` (C1 row 40) | D2, D4 | none |
-| `T.close_view()` | planned: UI | closes the open view | not chosen yet | none | none |
 | `T.previewer()` | planned: UI | the live `MenuWorldPreviewer` of the open view (field path `[unverified]`, D2) | not chosen yet | D2 | none |
 | `T.score_previewers()` | planned: UI | the `TeamPreviewer.hero_previewers` list (field path `[unverified]`, D2) | not chosen yet | D2 | none |
 | `T.as_bot(unit)` | planned: actor input | drives a bot's input: `tap_attack`, `hold_attack`, `defend`, `fire`, `charge_shot`, `activate_ability`, `wield(slot)` | `PlayerBotInput` methods (`scripts/unit_extensions/human/player_bot_unit/player_bot_input.lua:262-325`) | CONV, D1, D3, D4, D5 | none |

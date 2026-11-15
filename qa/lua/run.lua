@@ -125,6 +125,7 @@ local suites = {
     "test_rig_driver",
     "test_rig_api_settings",
     "test_rig_api_inventory",
+    "test_rig_api_ui",
     "test_event_high_intensity_diagnostic",
     "test_event_mission_allowlist",
     "test_event_curse_join_policy",

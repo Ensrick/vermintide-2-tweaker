@@ -14,9 +14,9 @@ local NAMES = {
     "shield", "shared",
     "main", "spawn", "kill", "teleport", "invincible", "end_level", "return_to_keep", "expect_rt",
     -- helper groups in tools/harness/driver/lib/ (WP-H-06)
-    "set", "shot", "career", "equip", "loadout", "backend_items",
+    "set", "shot", "career", "equip", "loadout", "backend_items", "open_view", "close_view", "widget", "press",
     -- documented in docs/program/CONVENTIONS.md section 3, planned in tools/harness/API.md (WP-H-06)
-    "first_bot_unit", "pickup", "as_bot", "open_view", "widget",
+    "first_bot_unit", "pickup", "as_bot",
 }
 local FIELDS = { "case_id", "nonce" }
 

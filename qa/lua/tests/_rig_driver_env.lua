@@ -137,11 +137,15 @@ return function(H, repo_root)
         end
     end
 
-    local function run_to_end(object, env, max_ticks)
+    -- on_frame (optional) runs before every in-game update: a stub world's own per-frame work (a view's update).
+    local function run_to_end(object, env, max_ticks, on_frame)
         callback(object, "on_game_state_changed", "enter", "StateTitleScreen")
         callback(object, "update", 0.1)
         callback(object, "on_game_state_changed", "enter", "StateIngame")
         for _ = 1, max_ticks or 20000 do
+            if on_frame then
+                on_frame()
+            end
             callback(object, "update", 0.1)
             if env.Boot.quit_game then
                 return true
