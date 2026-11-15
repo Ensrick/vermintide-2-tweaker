@@ -1,6 +1,6 @@
 local mod = get_mod("WOC")
 
-local MOD_VERSION = "0.1.63-dev"
+local MOD_VERSION = "0.1.64-dev"
 
 mod:info("Weapons of Chaos v%s loading", MOD_VERSION)
 
@@ -122,11 +122,11 @@ mod:command("woc_regression_test", "Run WOC regression smoke checks for past bug
 	for _, c in ipairs(_RT_CHECKS) do
 		local ok, err = pcall(c.fn)
 		if ok and err == nil then
-			mod:echo("  PASS: %s", c.name); pass = pass + 1
+			mod:echo("  PASS: %s", c.name); pass = pass + 1; pcall(printf, "[regression] PASS %s", c.name)
 		elseif ok and type(err) == "string" and err:sub(1, 5) == "skip:" then
-			mod:echo("  SKIP: %s -- %s", c.name, err:sub(7)); skip = skip + 1
+			mod:echo("  SKIP: %s -- %s", c.name, err:sub(7)); skip = skip + 1; pcall(printf, "[regression] SKIP %s: %s", c.name, err:sub(7))
 		else
-			mod:echo("  FAIL: %s -- %s", c.name, tostring(err)); fail = fail + 1
+			mod:echo("  FAIL: %s -- %s", c.name, tostring(err)); fail = fail + 1; pcall(printf, "[regression] FAIL %s: %s", c.name, tostring(err))
 		end
 	end
 	mod:echo("=== %d passed, %d failed, %d skipped ===", pass, fail, skip)
@@ -1236,7 +1236,7 @@ _rt_register("issue422_wire_safety_unconditional_singleton", function()
 	if not ok or type(info) ~= "table" or not info.source then return end
 	local src_path = info.source:sub(1, 1) == "@" and info.source:sub(2) or info.source
 	local txt = _rt_src_read(src_path)  -- (#511) io-safe; nil in retail sandbox => skip
-	if not txt then return end
+	if not txt then return "skip: source text is not readable in the shipped game" end
 	local hook_needle = "mod:hook(LoadoutUtils, " .. '"sync_loadout_slot"'
 	local count, pos = 0, 1
 	while true do
@@ -1274,7 +1274,7 @@ _rt_register("no_unit_path_package_force_load", function()
 	if not ok or type(info) ~= "table" or not info.source then return end
 	local src_path = info.source:sub(1, 1) == "@" and info.source:sub(2) or info.source
 	local txt = _rt_src_read(src_path)  -- (#511) io-safe; nil in retail sandbox => skip
-	if not txt then return end
+	if not txt then return "skip: source text is not readable in the shipped game" end
 	local unsafe_needle = "load(_spirits.UNIT"
 	if txt:find(unsafe_needle, 1, true) then
 		return "Shyish unit path reached PackageManager load -- keep-entry C-fatal"

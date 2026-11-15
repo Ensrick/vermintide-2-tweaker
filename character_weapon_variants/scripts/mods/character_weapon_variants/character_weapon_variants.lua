@@ -1,7 +1,7 @@
 local mod = get_mod("character_weapon_variants")
 _MEM_PROBE_T0_CWV = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 
-local MOD_VERSION = "0.1.572-dev"
+local MOD_VERSION = "0.1.573-dev"
 mod._cwv_acquisition = mod:dofile("scripts/mods/character_weapon_variants/_cwv_acquisition")
 mod._cwv_old_musket_interrupt = mod:dofile("scripts/mods/character_weapon_variants/_cwv_old_musket_interrupt")
 mod._cwv_dev_anim_picker = mod:dofile("scripts/mods/character_weapon_variants/cwv_dev_anim_picker")
@@ -233,7 +233,7 @@ mod:command("cwv_regression_test", "Run regression smoke checks for past bugs", 
             mod:echo("  XPASS: %s -- open issue %s no longer reproduces; verify the fix or drop known_defect", c.name, d); fail = fail + 1
             pcall(printf, "[regression] XPASS %s -- open issue %s no longer reproduces; verify the fix or drop known_defect", c.name, d)
         elseif ok and err == nil then
-            mod:echo("  PASS: %s", c.name); pass = pass + 1; mod:info("[regression] PASS %s", c.name)
+            mod:echo("  PASS: %s", c.name); pass = pass + 1; mod:info("[regression] PASS %s", c.name); pcall(printf, "[regression] PASS %s", c.name)
         elseif ok and type(err) == "string" and err:sub(1, 5) == "skip:" then
             local why = err:sub(6):gsub("^%s+", "")
             mod:echo("  SKIP: %s -- %s", c.name, why); skip = skip + 1
@@ -243,7 +243,7 @@ mod:command("cwv_regression_test", "Run regression smoke checks for past bugs", 
             pcall(printf, "[regression] XFAIL %s (open issue %s): %s", c.name, d, tostring(err))
         else
             mod:echo("  FAIL: %s -- %s", c.name, tostring(err)); fail = fail + 1
-            mod:warning("[regression] FAIL %s: %s", c.name, tostring(err))
+            mod:warning("[regression] FAIL %s: %s", c.name, tostring(err)); pcall(printf, "[regression] FAIL %s: %s", c.name, tostring(err))
         end
     end
     mod:echo("=== %d passed, %d failed, %d xfail (known defects), %d skipped ===", pass, fail, xfail, skip)

@@ -1,5 +1,15 @@
 # Character Weapon Variants — Changelog
 
+## 0.1.573-dev (2026-11-15) -- Regression verdicts always reach the game log (WP-CWV-06)
+
+- `/cwv_regression_test` now writes PASS and FAIL to the game log with
+  `printf`, like SKIP, XFAIL and XPASS already did, so every check leaves one
+  `[regression] <VERDICT> <name>` line whatever VMF's logging settings are
+  (audit finding A2-F08, advances #1656).
+- `issue474_old_musket_hot_join_identity_and_remote_fire` removes its test
+  peer `rt474-peer` from the live identity table when it finishes. Not
+  confirmed in game.
+
 ## 0.1.572-dev (2026-11-15) -- Character Weapon Variants can no longer be switched off (WP-CWV-02)
 
 - The mod is no longer togglable from the VMF options menu (audit finding
