@@ -153,10 +153,21 @@ function OffhandStateRuntime.install(mod, deps)
     -- Receiver-side compatibility boundary for #583. A stale or malformed
     -- direct mesh payload may only override a registered dual hand when that
     -- exact unit remains in the item's compatible pool.
+    -- WP-COS-01 (A3-F04): every item type needs a real hand key (the only two
+    -- of BackendUtils.get_item_units, backend_utils.lua:144-146) and, for a
+    -- non-dual type, a unit that is in this receiver's own pool for that hand.
     mod._dual_offhand_unit_allowed = function(item_type, hand_field, unit_path)
+        if hand_field ~= "left_hand_unit" and hand_field ~= "right_hand_unit" then
+            return false
+        end
         if not (mod._independent_dual_item_types
                 and mod._independent_dual_item_types[item_type]) then
-            return true
+            if type(unit_path) ~= "string" or unit_path == "" then return false end
+            local pools = _get_offhand_options(item_type)
+            for _, opt in ipairs((pools and pools[hand_field]) or {}) do
+                if opt.unit == unit_path or opt.intended_unit == unit_path then return true end
+            end
+            return false
         end
         if hand_field ~= "left_hand_unit" then return false end
         local pools = mod._ensure_independent_dual_pool(item_type)

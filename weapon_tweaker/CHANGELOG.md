@@ -1,5 +1,17 @@
 # Weapon Tweaker Changelog
 
+## 0.12.347-beta (2026-11-15) -- Public yields when Dev is enabled (WP-WT-03) [not-started]
+
+- When Weapon Tweaker and Weapon Tweaker (dev) are both enabled, the public
+  mod turns itself off through the VMF mod options within one second, with one
+  chat line and one `[wt:SIBLING]` engine-log line, so only the dev stream
+  edits weapon availability. The dev stream never turns itself off.
+- The check runs only from the per-frame update, never inside the
+  enable/disable callbacks, so VMF saves the off state correctly.
+- Mirrored in Dev 0.12.348-dev. Host test `test_wt_sibling_guard`; rig case
+  `qa/runtime/wt/wp_wt_03_sibling_exclusion.lua` is pending. No in-game
+  acceptance is claimed.
+
 ## 0.12.346-beta (2026-11-15) -- Pin the 3P animation funnel (WP-WT-04) [not-started]
 
 - Export four existing funnel tables for tests (`anim_redirect`,
