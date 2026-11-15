@@ -198,9 +198,8 @@ return function(H, repo_root)
         local install = entry:sub(install_first, install_last + 2)
         for _, dependency in ipairs({
             "is_custom_forge_active", "get_forged_weapons",
-            "get_modded_loadout", "get_more_items_lib", "commit_craft",
+            "get_more_items_lib", "commit_craft",
             "forge_create_item", "forge_detect_mil", "forge_save",
-            "modded_loadout_save",
         }) do
             H.equal(count_plain(install, dependency .. " ="), 1,
                 "entry injects " .. dependency)
@@ -210,7 +209,9 @@ return function(H, repo_root)
         H.equal(count_plain(entry, "_forge_pending"), 0)
         H.truthy(owner:find("local _forge_pending = nil", 1, true))
         H.truthy(owner:find("_get_forged_weapons()", 1, true))
-        H.truthy(owner:find("_get_modded_loadout()", 1, true))
+        -- WP-CIM-11: the dormant modded-loadout store is gone.
+        H.equal(count_plain(install, "get_modded_loadout"), 0)
+        H.equal(count_plain(install, "modded_loadout_save"), 0)
     end)
 
     H.test("CIM-dev exact-owner deletion surface remains flat and single-owned", function()
@@ -222,7 +223,7 @@ return function(H, repo_root)
             "delete_owned_ids = mod._cim277_delete_owned_ids"), 1)
         H.truthy(owner:find("deletion.execute({", 1, true))
         H.truthy(owner:find("inventory_items = mirror._inventory_items", 1, true))
-        H.truthy(owner:find("persist_loadouts = _modded_loadout_save", 1, true))
+        H.truthy(owner:find("persist_loadouts = function() return true end", 1, true))
         H.equal(owner:find("items:_refresh()", 1, true), nil)
     end)
 end

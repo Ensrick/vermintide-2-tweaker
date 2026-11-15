@@ -18,16 +18,10 @@ return function(context)
         "CIM forge-surface ensure_item_adventure_visible is required")
     assert(type(context.is_in_keep) == "function", "CIM forge-surface is_in_keep is required")
     assert(type(context.rpc_schema) == "number", "CIM forge-surface rpc_schema is required")
-    assert(type(context.with_loadout_sandbox) == "function",
-        "CIM forge-surface with_loadout_sandbox is required")
     assert(type(context.get_custom_forge_active) == "function",
         "CIM forge-surface get_custom_forge_active is required")
     assert(type(context.get_forged_weapons) == "function",
         "CIM forge-surface get_forged_weapons is required")
-    assert(type(context.get_modded_loadout) == "function",
-        "CIM forge-surface get_modded_loadout is required")
-    assert(type(context.set_modded_loadout) == "function",
-        "CIM forge-surface set_modded_loadout is required")
 
     local mod = context.mod
     local _rt_register = context.rt_register
@@ -36,24 +30,9 @@ return function(context)
     local _is_in_keep = context.is_in_keep
     local _AccessoryPanel = context.accessory_panel
     local CIM_RPC_SCHEMA = context.rpc_schema
-    local _rt_with_loadout_sandbox = context.with_loadout_sandbox
     local _forge_ui_source_anchor = mod._cim_forge_ui_owner
         and mod._cim_forge_ui_owner.apply_ui_polish
 
-    -- #1656: the forge-surface split left these as undeclared globals (nil), so
-    -- the gate-off check registered and equipped nothing. Same values as the
-    -- core checks' fixture ids.
-    local _RT_FAKE_BID    = "rt_test_bid_dont_ship_me"
-    local _RT_FAKE_CAREER = "_rt_test_career"
-    local _RT_FAKE_SLOT   = "_rt_test_slot"
-
-    -- #1656: pure fixtures, loaded per run (same loader as the core checks).
-    local function _rt_fixtures()
-        local ok, fixtures = pcall(mod.dofile, mod,
-            "scripts/mods/crafting_in_modded_dev/_cim_regression_fixtures")
-        if ok and type(fixtures) == "table" then return fixtures end
-        return nil, "regression fixtures did not load: " .. tostring(fixtures)
-    end
 
 _rt_register("morris_hub_passes_open_forge_gate", function()
     -- v0.7.47-alpha removed the blanket `mech == "deus" -> block` early return
@@ -364,99 +343,6 @@ _rt_register("accessory_panel_built_when_accessories_opened", function()
     local n = _AccessoryPanel._widgets and #_AccessoryPanel._widgets or 0
     if n ~= _AccessoryPanel.NUM_BUTTONS then
         return string.format("accessory panel built %d widgets, expected %d", n, _AccessoryPanel.NUM_BUTTONS)
-    end
-end)
-
-_rt_register("backendutils_capture_installed", function()
-    -- v0.7.68-dev (issue #22): with Loremaster's Armoury active, menu equips
-    -- dispatch through BackendUtils.set_loadout_item, bypassing the
-    -- BackendInterfaceItemPlayfab hook. The deferred BackendUtils capture is THE
-    -- fix that records the player's equips into _modded_loadout. It installs from
-    -- mod.update once the backend is up. nil = backend not up yet this session
-    -- (e.g. tests run at main menu) → skip. false should never persist once in
-    -- the keep — if it does, equips aren't being captured and won't be restored.
-    if mod._cim_backendutils_capture_installed == nil then
-        return "skip: BackendUtils capture not installed yet (backend not ready / not in keep)"
-    end
-    if mod._cim_backendutils_capture_installed ~= true then
-        return "BackendUtils.set_loadout_item capture FAILED to install — menu equips won't be saved/restored"
-    end
-end)
-
-_rt_register("persist_loadouts_gate_off_is_passthrough", function()
-    -- v0.8.15-dev: the `persist_modded_loadouts` master toggle defaults OFF, and
-    -- when OFF cim must NOT touch the loadout path — _capture_loadout_equip records
-    -- nothing and _restore_modded_loadout no-ops, so vanilla player AND bot loadouts
-    -- are byte-identical to not having cim. Pin both invariants:
-    --   1. the gate helper reflects the live setting value, and
-    --   2. with the toggle forced OFF, a real set_loadout_item call for a modded
-    --      bid leaves _modded_loadout empty (no capture).
-    if type(mod._cim_persist_loadouts_enabled) ~= "function" then
-        return "persist-loadouts gate helper missing"
-    end
-    local cls = rawget(_G, "BackendInterfaceItemPlayfab")
-    if not cls or type(cls.set_loadout_item) ~= "function" then
-        return "skip: BackendInterfaceItemPlayfab.set_loadout_item not loaded (run in-keep)"
-    end
-    local hook_fn = cls.set_loadout_item
-    local fixtures, fixtures_err = _rt_fixtures()
-    if not fixtures then return fixtures_err end
-
-    local result_err
-    -- The sandbox forces the toggle ON for its body; we deliberately flip it OFF
-    -- INSIDE to assert the OFF behavior, and the sandbox restores everything.
-    _rt_with_loadout_sandbox(function()
-        mod:set("persist_modded_loadouts", false, false)
-        if mod._cim_persist_loadouts_enabled() ~= false then
-            result_err = "gate helper says enabled while setting is OFF"
-            return
-        end
-        -- #1656: a rejected registration leaves the bid unmodded, so nothing is
-        -- captured whatever the gate does. Fail like the round-trip twin.
-        local registered, register_err = mod._cim_register_craft(_RT_FAKE_BID, {
-            item_key = "es_1h_falchion", properties = {}, traits = {}, power_level = 300, rarity = "modded",
-        })
-        if not registered then
-            result_err = "fixture craft registration rejected: " .. tostring(register_err)
-            return
-        end
-        -- #1656: the old all-no-op stub made vanilla raise before the capture,
-        -- so "nothing captured" held for the wrong reason. With a stub vanilla
-        -- accepts, the capture really runs and the gate must stop it.
-        local fake_items, mirror_writes = fixtures.loadout_interface_stub({ _RT_FAKE_BID })
-        context.set_modded_loadout({})
-        -- Equip a MODDED bid while the master toggle is OFF.
-        local call_ok, call_err = pcall(hook_fn, fake_items, _RT_FAKE_BID, _RT_FAKE_CAREER, _RT_FAKE_SLOT, 1)
-        if not call_ok then
-            result_err = "skip: set_loadout_item chain raised before the cim capture: " .. tostring(call_err)
-            return
-        end
-        -- One mirror write proves vanilla ran (backend_interface_item_playfab.lua:665),
-        -- so the hook_safe capture was reached and the gate really was exercised.
-        if #mirror_writes ~= 1 then
-            result_err = "skip: set_loadout_item chain never reached vanilla's mirror write ("
-                .. #mirror_writes .. " writes), gate not exercised"
-            return
-        end
-        local captured = context.get_modded_loadout()[_RT_FAKE_CAREER]
-        if captured ~= nil and next(captured) ~= nil then
-            result_err = "OFF gate leaked a capture into _modded_loadout (should be untouched)"
-            return
-        end
-    end)
-    if result_err then return result_err end
-end)
-
-_rt_register("reequip_live_api_ok", function()
-    -- v0.7.67-dev (issue #22): _reequip_live_avatar re-equips the keep avatar
-    -- after restore via the vanilla create_equipment_in_slot /
-    -- create_attachment_in_slot API. If that API errored this session (wrong
-    -- signature, called at a bad time), _cim_reequip_last_err captures it — a
-    -- state-witness that the live-unit re-equip is misbehaving. nil = no error
-    -- (either it worked or never ran) → pass.
-    local err = mod._cim_reequip_last_err
-    if err then
-        return "live re-equip API errored this session: " .. tostring(err)
     end
 end)
 

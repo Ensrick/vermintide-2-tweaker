@@ -73,12 +73,6 @@ return function(context)
     end
     mod._cim_apply_modded_slot_metadata = apply_modded_slot_metadata
 
-    mod:set("persist_modded_loadouts", false, false)
-    local function persist_loadouts_enabled()
-        return mod:get("persist_modded_loadouts") == true
-    end
-    mod._cim_persist_loadouts_enabled = persist_loadouts_enabled
-
     local function wire_safe_rarity(rarity)
         if rarity == "modded" then return "unique" end
         return rarity
@@ -171,7 +165,6 @@ return function(context)
     return {
         apply_modded_slot_metadata = apply_modded_slot_metadata,
         get_modded_slot_state = function() return modded_slot_state end,
-        persist_loadouts_enabled = persist_loadouts_enabled,
         rpc_modded_slot = rpc_modded_slot,
         wire_safe_rarity = wire_safe_rarity,
     }

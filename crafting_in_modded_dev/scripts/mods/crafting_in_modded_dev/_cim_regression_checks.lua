@@ -19,7 +19,6 @@ return function(context)
     local _cap_grid_property_arrays = context.cap_grid_property_arrays
     local _forge_load = context.forge_load
     local _store_property_slot = context.store_property_slot
-    local _modded_loadout_load = context.modded_loadout_load
     local _weave_loadout = context.weave_loadout
     local _weave_economy_source_anchor = mod._cim_weave_economy_source_anchor
     local _accessory_property_source_anchor = mod._cim_accessory_property_source_anchor
@@ -239,8 +238,8 @@ end)
 
 _rt_register("wire_rarity_rewrite_ungated", function()
     -- (issue 278 regression / issue 371 mandate) The "modded"->vanilla rarity coercion
-    -- on the loadout wire is a CRASH-SAFETY invariant and must NOT be gated by
-    -- persist_modded_loadouts. The v0.8.15 master gate wrongly bundled them, so a
+    -- on the loadout wire is a CRASH-SAFETY invariant and must NOT be gated by any
+    -- persistence toggle. The v0.8.15 master gate wrongly bundled them, so a
     -- default-OFF host CTD'd every non-cim client the instant a crafted (always-"modded")
     -- item equipped. The coercion is single-sourced in _cim_wire_safe_rarity, which takes
     -- NO persistence argument — so by construction it cannot be toggle-gated.
@@ -252,9 +251,6 @@ _rt_register("wire_rarity_rewrite_ungated", function()
     end
     if mod._cim_wire_safe_rarity("unique") ~= "unique" then
         return "a vanilla rarity must pass through the wire coercion unchanged"
-    end
-    if type(mod._cim_persist_loadouts_enabled) ~= "function" then
-        return "persist gate helper missing — cannot confirm wire safety is separated from persistence"
     end
 end)
 
@@ -286,158 +282,36 @@ _rt_register("weave_forge_hides_cost_readout", function()
 end)
 
 -- ============================================================
--- Save/restore invariants (added 2026-05-23 after user reported
--- equipped accessories + last weapons didn't restore on fresh
--- load). These exercise the VMF settings round-trip so a future
--- regression of the "stale modded_loadout entry overwrites vanilla
--- restore" bug fails the test instead of silently shipping.
+-- Save/restore invariants: exercise the VMF settings round-trip of the
+-- crafted-item store (forged_weapons). The modded-loadout round-trip,
+-- stale-entry and restore-timing checks were removed with the dormant
+-- loadout-persistence path (WP-CIM-11).
 -- ============================================================
 
 -- Test bid pattern: must look like a real cim craft to _cim_is_modded_backend_id.
--- We INJECT the fake bid into _forged_weapons during the test so the modded
--- check passes, then remove on teardown via _rt_with_loadout_sandbox.
+-- Checks INJECT the fake bid into _forged_weapons and remove it on teardown via
+-- _rt_with_loadout_sandbox, which (since WP-CIM-11 removed the dormant
+-- modded-loadout store) snapshots and restores only the forge store.
 local _RT_FAKE_BID         = "rt_test_bid_dont_ship_me"
-local _RT_FAKE_VANILLA_BID = "rt_test_vanilla_bid"
-local _RT_FAKE_CAREER      = "_rt_test_career"
-local _RT_FAKE_SLOT        = "_rt_test_slot"
 
 _rt_with_loadout_sandbox = function(body)
-    -- Snapshot real state via deep-copy of both the on-disk SETTINGS payload
-    -- AND the in-memory tables so any failed assertion in `body` doesn't
-    -- leave fake entries in the player's save.
+    -- Snapshot real state (the on-disk SETTINGS payload and the in-memory
+    -- table) so any failed assertion in `body` doesn't leave fake entries in
+    -- the player's save.
     local saved_forged      = mod:get("forged_weapons")
-    local saved_loadout     = mod:get("modded_loadout")
-    -- v0.8.15-dev: the loadout capture/persist path is now gated OFF by default
-    -- via `persist_modded_loadouts`. These tests EXERCISE that path, so force the
-    -- toggle ON for the duration of the body and restore the user's real value on
-    -- teardown. (Without this, the default-OFF capture no-ops and the round-trip
-    -- assertions would fail spuriously.)
-    local saved_persist     = mod:get("persist_modded_loadouts")
-    mod:set("persist_modded_loadouts", true, false)
     local snap_forged_mem   = {}
     for k, v in pairs(context.get_forged_weapons()) do snap_forged_mem[k] = v end
-    -- Indexed schema: career -> index -> slot -> bid (3-level deep copy).
-    local snap_loadout_mem  = {}
-    for c, indices in pairs(context.get_modded_loadout()) do
-        snap_loadout_mem[c] = {}
-        if type(indices) == "table" then
-            for idx, slots in pairs(indices) do
-                snap_loadout_mem[c][idx] = {}
-                if type(slots) == "table" then
-                    for s, b in pairs(slots) do snap_loadout_mem[c][idx][s] = b end
-                end
-            end
-        end
-    end
 
     local ok, err = pcall(body)
 
-    -- Always teardown — restore in-memory tables AND on-disk payload.
+    -- Always teardown: restore the in-memory table AND the on-disk payload.
     context.set_forged_weapons({})
     local forged_weapons = context.get_forged_weapons()
     for k, v in pairs(snap_forged_mem) do forged_weapons[k] = v end
-    context.set_modded_loadout({})
-    local modded_loadout = context.get_modded_loadout()
-    for c, indices in pairs(snap_loadout_mem) do
-        modded_loadout[c] = {}
-        if type(indices) == "table" then
-            for idx, slots in pairs(indices) do
-                modded_loadout[c][idx] = {}
-                if type(slots) == "table" then
-                    for s, b in pairs(slots) do modded_loadout[c][idx][s] = b end
-                end
-            end
-        end
-    end
     mod:set("forged_weapons", saved_forged)
-    mod:set("modded_loadout", saved_loadout)
-    -- Restore the user's real persist-loadouts toggle (default OFF).
-    mod:set("persist_modded_loadouts", saved_persist, false)
 
     if not ok then error(err, 0) end
 end
-
-_rt_register("modded_loadout_round_trip_save_then_clear", function()
-    -- Validates the v0.7.33-alpha fix for the 2026-05-23 user report.
-    -- Step 1: equip a modded item -> _modded_loadout gets the entry, and
-    --         round-tripping via mod:get/set preserves it.
-    -- Step 2: equip a NON-modded item at the same (career, slot) -> the cim
-    --         entry MUST be cleared. Pre-fix code only saved, never cleared,
-    --         so stale entries clobbered vanilla restore on next session.
-    local cls = rawget(_G, "BackendInterfaceItemPlayfab")
-    if not cls or type(cls.set_loadout_item) ~= "function" then
-        return "skip: BackendInterfaceItemPlayfab.set_loadout_item not loaded (run in-keep)"
-    end
-    local hook_fn = cls.set_loadout_item
-    local fixtures, fixtures_err = _rt_fixtures()
-    if not fixtures then return fixtures_err end
-
-    local result_err
-    _rt_with_loadout_sandbox(function()
-        -- Pretend rt_test_bid is a real cim craft so _cim_is_modded_backend_id
-        -- returns true. We register/unregister via the public API to mirror
-        -- the real craft path.
-        local registered, register_err = mod._cim_register_craft(_RT_FAKE_BID, {
-            item_key = "es_1h_falchion", properties = {}, traits = {}, power_level = 300, rarity = "modded",
-        })
-        if not registered then
-            result_err = "fixture craft registration rejected: " .. tostring(register_err)
-            return
-        end
-
-        -- #1656: the capture is a hook_safe, which VMF runs only after vanilla
-        -- returns. The old all-no-op stub made vanilla raise at
-        -- backend_interface_item_playfab.lua:640 first, so the capture never
-        -- fired. This stub serves the rows vanilla reads and records its mirror
-        -- write instead of touching the real backend.
-        local fake_items = fixtures.loadout_interface_stub({ _RT_FAKE_BID, _RT_FAKE_VANILLA_BID })
-
-        -- v0.8.13-dev: pass an EXPLICIT loadout index (4th arg) so the test is
-        -- deterministic without a live mirror, and assert the INDEXED schema
-        -- (career -> index -> slot -> bid). Use a non-1 index to also prove the
-        -- capture honors the passed index rather than defaulting to the selected.
-        local _RT_FAKE_INDEX = 2
-
-        -- Step 1: equip modded. A raise means the chain never reached the
-        -- capture, so the round trip cannot be judged on this build.
-        local call_ok, call_err = pcall(hook_fn, fake_items, _RT_FAKE_BID, _RT_FAKE_CAREER, _RT_FAKE_SLOT, _RT_FAKE_INDEX)
-        if not call_ok then
-            result_err = "skip: set_loadout_item chain raised before the cim capture: " .. tostring(call_err)
-            return
-        end
-
-        -- Round-trip via VMF settings: clear in-memory, reload from disk, check.
-        context.set_modded_loadout({})
-        _modded_loadout_load()
-        local modded_loadout = context.get_modded_loadout()
-        local saved_idx = modded_loadout[_RT_FAKE_CAREER] and modded_loadout[_RT_FAKE_CAREER][_RT_FAKE_INDEX]
-        if not (saved_idx and saved_idx[_RT_FAKE_SLOT] == _RT_FAKE_BID) then
-            result_err = "modded equip not persisted at index " .. _RT_FAKE_INDEX .. ": expected bid=" .. _RT_FAKE_BID
-            return
-        end
-
-        -- Step 2: equip vanilla (non-modded) at the same career/slot/index.
-        call_ok, call_err = pcall(hook_fn, fake_items, _RT_FAKE_VANILLA_BID, _RT_FAKE_CAREER, _RT_FAKE_SLOT, _RT_FAKE_INDEX)
-        if not call_ok then
-            result_err = "skip: set_loadout_item chain raised before the cim capture: " .. tostring(call_err)
-            return
-        end
-
-        context.set_modded_loadout({})
-        _modded_loadout_load()
-        modded_loadout = context.get_modded_loadout()
-        local stale_idx = modded_loadout[_RT_FAKE_CAREER] and modded_loadout[_RT_FAKE_CAREER][_RT_FAKE_INDEX]
-        local stale = stale_idx and stale_idx[_RT_FAKE_SLOT]
-        if stale ~= nil then
-            result_err = "STALE modded entry not cleared on vanilla equip: still " .. tostring(stale)
-                .. " (this is the 2026-05-23 user-report bug)"
-            return
-        end
-
-        mod._cim_unregister_craft(_RT_FAKE_BID)
-    end)
-    if result_err then return result_err end
-end)
 
 -- #1654: every saved mirror-path craft whose ItemMasterList row exists must be
 -- in the live inventory. A restore that fails its postcondition used to keep
@@ -535,28 +409,6 @@ _rt_register("forged_weapons_round_trip", function()
         end
     end)
     if result_err then return result_err end
-end)
-
-_rt_register("restore_after_playfab_inventory_populated", function()
-    -- _restore_modded_loadout must run AFTER vanilla PlayFab inventory sync
-    -- finishes, otherwise set_loadout_item targets an empty mirror and the
-    -- restore silently no-ops. We can't intercept the call ordering after
-    -- the fact, so we check the current state at /cim_regression_test time:
-    -- if the mirror's _inventory_items is empty AND we're past
-    -- _create_interfaces, restore would have just no-op'd.
-    local backend = Managers and Managers.backend
-    if not backend then return "skip: Managers.backend not ready (run in-keep)" end
-    local items_iface = backend.get_interface and backend:get_interface("items")
-    local mirror = items_iface and items_iface._backend_mirror
-    local inv = mirror and mirror._inventory_items
-    if type(inv) ~= "table" then
-        return "skip: backend_mirror._inventory_items not populated yet"
-    end
-    local count = 0
-    for _ in pairs(inv) do count = count + 1; if count > 0 then break end end
-    if count == 0 then
-        return "PlayFab inventory empty at restore time -- _restore_modded_loadout would silently no-op"
-    end
 end)
 
 _rt_register("issue563_vanilla_skin_override_exact_backend_id", function()
@@ -959,37 +811,6 @@ _rt_register("issue787_cim_dual_axes_authored_icon", function()
         if registry.FALLBACKS[change.original] and change.replacement ~= change.original then
             return "#787 live CWV paired icon fell back: " .. tostring(change.original)
         end
-    end
-end)
-
-_rt_register("modded_loadout_has_no_stale_entries", function()
-    -- Every saved _modded_loadout entry must reference a live, exact
-    -- _forged_weapons bid. Stale entries (bid no
-    -- longer registered anywhere) are exactly the overwrite-bug substrate:
-    -- on next session they restore-clobber the vanilla loadout with an item
-    -- that no longer exists OR was already deleted.
-    local stale = {}
-    -- Indexed schema: career -> index -> slot -> bid.
-    for career_name, indices in pairs(context.get_modded_loadout()) do
-        if type(indices) == "table" then
-            for index, slots in pairs(indices) do
-                if type(slots) == "table" then
-                    for slot_name, bid in pairs(slots) do
-                        local live = (type(bid) == "string") and context.get_forged_weapons()[bid]
-                        if not live then
-                            stale[#stale + 1] = string.format("%s[%s]/%s=%s",
-                                tostring(career_name), tostring(index), tostring(slot_name), tostring(bid))
-                            if #stale >= 5 then break end
-                        end
-                    end
-                end
-                if #stale >= 5 then break end
-            end
-        end
-        if #stale >= 5 then break end
-    end
-    if #stale > 0 then
-        return "stale modded_loadout entries (will clobber vanilla restore): " .. table.concat(stale, ", ")
     end
 end)
 

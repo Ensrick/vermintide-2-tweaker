@@ -17,8 +17,6 @@ return function(context)
     local get_item_helper = context.get_item_helper or function() return ItemHelper end
     local get_athanor_inject_all = context.get_athanor_inject_all
         or function() return nil end
-    local get_restore_modded_loadout = context.get_restore_modded_loadout
-        or function() return nil end
     local get_user_setting = context.get_user_setting
         or function(key) return Application.user_setting(key) end
 
@@ -627,8 +625,6 @@ return function(context)
         inject_all()
         local athanor_inject_all = get_athanor_inject_all()
         if athanor_inject_all then athanor_inject_all() end
-        local restore_modded_loadout = get_restore_modded_loadout()
-        if restore_modded_loadout then restore_modded_loadout() end
         -- Belt-and-suspenders: the post-_refresh hook already restored after
         -- each injection pass above; a direct sweep here is idempotent and
         -- catches an interface rebuild that surfaced rows without a refresh.
