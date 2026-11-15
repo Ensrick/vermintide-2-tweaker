@@ -56,6 +56,13 @@ function Test-VtCwv719ReceiptRouteContract {
             return $text
         }finally{$process.Dispose()}
     }
+    # An unshipped change to a witness file drops the pinned (deployed) blob
+    # from a blob:none CI checkout. Hydrate the pinned tree first with the
+    # deployed-source authority's explicit, bounded batch prefetch
+    # (live_test_source_authority.ps1:652); it is a no-op outside a promisor
+    # partial clone. The reader above keeps GIT_NO_LAZY_FETCH=1 and still
+    # fails closed if a witness is absent.
+    Invoke-VtContractDeployedBlobPrefetch -RepoRoot $Root -DeployedTrees @([pscustomobject]@{Commit=$tree;Root=''})
     $sources=@{}
     foreach($path in @($helper,$entry,$check)){$sources[$path]=& $read $path}
     $apply={param($Texts=$sources,$Items=$rows,[string]$Tree=$tree)

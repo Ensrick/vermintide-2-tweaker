@@ -79,6 +79,10 @@ function Test-VtWt942ReceiptRouteContract {
         foreach($pin in @(Get-VtConsumedModTreePins -Exceptions $exceptions -ModId $id)){
             & $assert (@($pin.Trees) -ccontains $tree) 'consumed sibling pin disagreement'
         }
+        # Same explicit batch prefetch of the pinned tree as the CWV719
+        # contract (live_test_source_authority.ps1:652); the reader keeps
+        # GIT_NO_LAZY_FETCH=1 and fails closed on an absent witness.
+        Invoke-VtContractDeployedBlobPrefetch -RepoRoot $Root -DeployedTrees @([pscustomobject]@{Commit=$tree;Root=''})
         $sources=@{}
         foreach($name in @('_wt_diagnostics.lua','_wt_fire_sword_heat_runtime.lua','_wt_fire_sword_owner.lua')){
             $sources[$prefix+$name]=& $read $tree $directory $name;$witnesses++
