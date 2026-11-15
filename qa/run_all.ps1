@@ -425,6 +425,9 @@ Run-Check "check_event_register_signature"    { & (Join-Path $here "check_event_
 Run-Check "check_loc_description_titles"      { & (Join-Path $here "check_loc_description_titles.ps1")      -Quiet:$Quiet }
 Run-Check "check_ci_hardening"                { & (Join-Path $here "check_ci_hardening.ps1")                -Quiet:$Quiet }
 Run-Check "check_publication_doctrine"         { & (Join-Path $here "check_publication_doctrine.ps1")         -Quiet:$Quiet }
+# WP-G-04: one verification spec per issue under qa/specs/ (format in
+# qa/specs/README.md). Offline, no GitHub; "0 specs" until specs are added.
+Run-Check "check_verify_specs" { & (Join-Path $here "check_verify_specs.ps1") -Quiet:$Quiet }
 Run-Check "check_local_deployment_receipt"     { & (Join-Path $here "check_local_deployment_receipt.ps1")     -Quiet:$Quiet }
 Run-Check "check_workshop_upload_evidence"     { & (Join-Path $here "check_workshop_upload_evidence.ps1")     -Quiet:$Quiet }
 Run-Check "check_workshop_upload_result"       { & (Join-Path $here "check_workshop_upload_result.ps1")        -Quiet:$Quiet }
