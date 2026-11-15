@@ -1,5 +1,20 @@
 # Tweaker: Events — Changelog
 
+## 0.4.55-dev (2026-11-14) -- Curse join lock reaches live game modes (WP-CW-01, #430, #413)
+
+- The issue-430 hot-join lock hooked `GameModeBase.is_joinable`, but vanilla
+  `class()` copies parent methods into each subclass when it is defined
+  (`foundation/scripts/util/class.lua`), and `PeerStates.Connecting` calls
+  `game_mode:is_joinable()` on the live instance (`peer_states.lua:116`). The
+  hook never ran, so a cursed session stayed joinable.
+- `JoinPolicy.install_join_lock` now hooks `is_joinable` on `GameModeAdventure`,
+  `GameModeDeus`, `GameModeMapDeus` and `GameModeWeave`; a missing class is
+  logged as `[et:430] join lock class missing: <name>` instead of hooked.
+- New regression check `issue430_join_lock_reaches_instances` forces the lock
+  both ways on each class and restores it. New offline suite
+  `test_event_join_lock_reach` models the vanilla copy-at-definition class.
+- No change to `can_arm`, `has_pending_remote`, the beacon or curse selection.
+
 ## 0.4.54-dev (2026-10-25) -- Canonical publication guidance (#1025) [tooling]
 
 - Replace conflicting upload-before-commit and machine-local launcher recipes

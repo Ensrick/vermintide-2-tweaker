@@ -50,7 +50,7 @@ are covered in the subsystem notes, not this table.
 
 | Class.method (kind) | Vanilla behavior | Why evt hooks it | Trap / invariant |
 |---|---|---|---|
-| `GameModeBase.is_joinable` [hook] `_evt_guard430_curse_parity.lua` | Returns true for Adventure. `PeerStates.Connecting` consults it before sending `rpc_notify_connected`; only much later does `WaitingForEnterGame` call `GameSession.add_peer`, which begins game-object replication [src: `game_mode_base.lua:570-572`; `peer_states.lua:114-120`, `:389-395`] | Return false while a managed package-bearing curse is selected or active, preventing a new peer from reaching replication without package proof | Preserve a vanilla false result. The lock is armed before selection can inject and again before the mutator start function. Do not special-case ET peers: the ordinary VMF roster handshake occurs after `PlayerManager.add_remote_player` (`peer_states.lua:450`), too late to authorize game-object sync |
+| `GameModeAdventure` / `GameModeDeus` / `GameModeMapDeus` / `GameModeWeave` `.is_joinable` [hook x4, `JoinPolicy.install_join_lock`] `_evt_guard430_curse_parity.lua` | Inherited copy of `GameModeBase.is_joinable`, returns true. Vanilla `class()` copies parent methods into the child at definition, so a `GameModeBase` hook never reaches these instances (WP-CW-01) [src: `foundation/scripts/util/class.lua:50-56`; `game_mode_adventure.lua:8`, `game_mode_deus.lua:23`, `game_mode_map_deus.lua:70`, `game_mode_weave.lua:7`]. `PeerStates.Connecting` consults it before sending `rpc_notify_connected`; only much later does `WaitingForEnterGame` call `GameSession.add_peer`, which begins game-object replication [src: `game_mode_base.lua:570-572`; `peer_states.lua:114-120`, `:389-395`] | Return false while a managed package-bearing curse is selected or active, preventing a new peer from reaching replication without package proof | Preserve a vanilla false result. The lock is armed before selection can inject and again before the mutator start function. Do not special-case ET peers: the ordinary VMF roster handshake occurs after `PlayerManager.add_remote_player` (`peer_states.lua:450`), too late to authorize game-object sync |
 | `MutatorHandler._activate_mutator` [hook] `_evt_cursed_adventure.lua:93` | The per-mutator activation chokepoint, hit on the HOST (via `activate_mutators`) AND every CLIENT (via `rpc_activate_mutator_client` -> `_activate_mutator`) [src: `mutator_handler.lua:782` (client RPC path)] | SYNC-load each curse's resource `packages` entry BEFORE `func` runs the mutator's `start_function`; refresh the god-lighting cache (`:93`) | Package-bearing CW/Deus curses normally crash in Adventure because only `DeusRunState.set_event_mutators` loads their package [src: `deus_run_state.lua:438-453`]; the mechanics themselves use standard managers. Idempotent (`has_loaded` + `_loaded_curse_packages`). All four curse hooks no-op unless mechanism is `"adventure"` so real CW runs are untouched |
 | `MutatorHandler._deactivate_mutator` [hook] `_evt_cursed_adventure.lua:104` | Per-mutator deactivation [src: `mutator_handler.lua`, `[unverified]` exact line] | Keep the active-god lighting cache current on deactivate (`:104`) | Distinct method from `_activate_mutator` - no hook collision |
 | `MutatorHandler.init` [safe] `_evt_cursed_adventure.lua:119` | Constructs the handler; on the server it initializes the supplied mutator names, while a client reads the network state's initialized map [src: `mutator_handler.lua:27-55`] | Defense-in-depth preload for an Event-Tweaker peer during normal level construction/transition; also reassert the cursed-session lock when a managed name is present | Not a hot-join authorization boundary. A non-ET peer has no hook, and game-object replication precedes the ordinary VMF roster handshake. `_initialized_mutator_map` shape is engine-internal, so harvest any string key or value as a candidate name |
@@ -95,7 +95,7 @@ The issue-532 Tab preview is a read-only projection, not an injection route.
 `selected_curse_candidates()` collects checkbox/DLC/registration state for both
 consumers, while only `selected_curse_mutators()` may arm or release the issue-430
 session lock. Calling the injection selector from a UI preview changes
-`GameModeBase.is_joinable` merely by rendering the panel, so that dependency is
+the live game-mode `is_joinable` lock merely by rendering the panel, so that dependency is
 forbidden and covered by the offline curse-policy test.
 
 ### The four injected-mutator crash guards (owner: `docs/engine/07`)
@@ -136,7 +136,7 @@ base game loads only in Deus. `_activate_mutator` and `init` preload for peers t
 already have the mod. They do not make a late non-ET peer safe: vanilla adds that
 peer to `GameSession` at `peer_states.lua:393`, but only exposes it through
 `PlayerManager` at `:450`. The issue-430 lock therefore returns false from
-`GameModeBase.is_joinable` for the complete selected/active cursed session, before
+`is_joinable` on the four live game-mode classes for the complete selected/active cursed session, before
 the connecting state can advance. An already-pending server peer also fails the
 selection preflight. Unload remains ref-balanced on `StateIngame.on_exit`.
 
