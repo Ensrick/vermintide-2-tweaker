@@ -1,5 +1,19 @@
 # Weapon Tweaker Changelog
 
+## 0.12.350-beta (2026-11-15) -- Pure 3P animation resolver (WP-WT-06) [not-started]
+
+- The cross-character 3P animation decision moved into a pure module,
+  `_wt_anim_resolver.lua`: the redirect and remap tables (values unchanged)
+  and one `decide` function that runs the funnel's ordered steps. The
+  `Unit.animation_event` hook now only builds the context and performs the
+  call, with the same call style per outcome as before.
+- No behaviour change: the 1092-line golden decision table of
+  `test_wt_anim_funnel_golden` is byte-identical. New host test
+  `test_wt_anim_resolver` covers the resolver alone.
+- Mirrored in Dev 0.12.351-dev. Rig case
+  `qa/runtime/wt/wp_wt_06_funnel_contracts.lua` is pending. No in-game
+  acceptance is claimed.
+
 ## 0.12.349-beta (2026-11-15) -- Remove the dead preview node guard (WP-WT-12) [not-started]
 
 - Remove the pre-spawn attachment-source validator from the inventory preview
