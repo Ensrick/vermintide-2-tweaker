@@ -1,5 +1,18 @@
 # Crafting in Modded Changelog
 
+## 0.8.156-dev (2026-11-15) -- Regression suite results on the engine log (WP-CIM-05)
+
+- `/cim_regression_test` runs through the new shared runner
+  `_lib_rt_runner.lua`: PASS, FAIL or SKIP per check on chat and as
+  `[cim:RT] <verdict> <check> <detail>` on the engine log, then
+  `[cim:RT] SUMMARY pass=N fail=N skip=N version=...`. The last results are
+  kept in `mod._cim_rt_last` for the unattended test rig.
+- The localization-format check now reports SKIP instead of PASS when the
+  localization file cannot be read.
+- The load marker `[cim:LOAD]` is also printed to the engine log, so it shows
+  even with mod logging off.
+- Not confirmed in game.
+
 ## 0.8.155-dev (2026-11-15) -- Import crafted items from the other Crafting in Modded stream (#1654, #277)
 
 - Crafting in Modded (dev) and Crafting in Modded (public) keep separate

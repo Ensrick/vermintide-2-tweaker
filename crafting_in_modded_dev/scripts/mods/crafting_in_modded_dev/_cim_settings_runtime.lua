@@ -27,7 +27,7 @@ function M.install(mod, apply_movespeed, printf)
         mod._cim_rt_register("issue1530_base_power_step_wording", function()
             local ok, loc = pcall(mod.dofile, mod,
                 "scripts/mods/crafting_in_modded_dev/crafting_in_modded_dev_localization")
-            if not ok or type(loc) ~= "table" then return end  -- loc unreachable; skip
+            if not ok or type(loc) ~= "table" then return "skip: localization file unreachable" end
             local entry = loc.base_power_level_description
             local text = type(entry) == "table" and entry.en or nil
             if type(text) ~= "string" then return "base_power_level_description is missing" end
