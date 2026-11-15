@@ -1,5 +1,17 @@
 # General Tweaker Changelog
 
+## 0.2.181 (2026-11-14) -- Host opt-in for client-requested host actions (WP-GT-01)
+
+- Any peer running this mod could make the host win, fail or restart the
+  level, respawn them, or honour their godmode (audit finding A6-F01). The
+  host now refuses all of these unless it ticks the new option "Allow Client
+  Requests" (off by default). A refusal logs
+  `[gt:host-request] refused kind=... peer=... reason=...` once per peer.
+- The level-control and respawn requests now carry a schema number, so a
+  request from an older build is refused instead of acted on. The host's own
+  commands and keybinds are unchanged. Same change as General Tweaker Dev
+  0.2.280-dev. Not confirmed in game.
+
 ## 0.2.180 (2026-11-05) -- Selected official verification-queue promotion
 
 - Promote the current functional Godmode candidates: exact fly/Bile protection

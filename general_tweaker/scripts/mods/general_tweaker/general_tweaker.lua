@@ -1,6 +1,6 @@
 local mod = get_mod("gt")
 
-local MOD_VERSION = "0.2.180"
+local MOD_VERSION = "0.2.181"
 _MEM_PROBE_T0_GT = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 -- Public field so cross-mod code (e.g. bt's /bug_report walker, the
 -- gt_lobby_* manifest broadcaster below) can read the version without
@@ -719,6 +719,7 @@ mod:network_register(_GT_GODMODE_RPC, function(sender_peer_id, schema, on, strik
     if sender_peer_id == nil or schema ~= _GT_GODMODE_RPC_SCHEMA then
         return
     end
+    if mod._gt_host_request_policy and mod._gt_host_request_policy.ignore_remote_godmode(Managers.player and Managers.player.is_server, mod:get("gt_host_allow_client_requests")) then return end  -- WP-GT-01
     -- Store the local clock at receipt; _gt_godmode_active expires the entry if
     -- the sender stops heartbeating (clean godmode-off even if its send dropped).
     _gt_godmode_peers[sender_peer_id] = (on == true) and _gt_net_clock or nil
