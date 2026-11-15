@@ -1,5 +1,11 @@
 # Changelog — Dynamic Cosmetic Portraits
 
+## 0.1.34-dev (2026-11-15) -- Release-train re-version, no code change
+
+- Release-train re-version, no code change. Same source as 0.1.33-dev
+  below. Its version claim was released before it shipped, so the claim
+  broker allocated this fresh version (tools/ship/CLAIMS.md).
+
 ## 0.1.33-dev (2026-11-15) -- Source-text checks report SKIP, not PASS (WP-COS-02)
 
 - In the shipped game the mod cannot read its own source files, so the
