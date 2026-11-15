@@ -64,30 +64,6 @@ function M.install(mod, deps)
             return func(self, unit, event_name, variable_name, variable_value, skip_sync)
         end)
 
-    local function validate_attachment_sources(body_unit, attachment_node_linking)
-        if not attachment_node_linking
-                or type(attachment_node_linking.third_person) ~= "table"
-                or not body_unit or not Unit.has_node then
-            return
-        end
-        local substituted = 0
-        for _, phase in ipairs({ "display", "wielded", "unwielded" }) do
-            local links = attachment_node_linking.third_person[phase]
-            if type(links) == "table" then
-                for _, link in ipairs(links) do
-                    if type(link) == "table" and type(link.source) == "string"
-                            and not Unit.has_node(body_unit, link.source) then
-                        link.source = "j_hips"
-                        substituted = substituted + 1
-                    end
-                end
-            end
-        end
-        if substituted > 0 then
-            dbg("[wt:body_attach_safe] substituted %d missing-node source(s) at spawn", substituted)
-        end
-    end
-
     -- WT_LINK_UNITS_NODE_GUARD_MARKER
     mod._wt_link_filter = function(linking, source_has_node, target_has_node)
         local safe, dropped, substituted = nil, 0, 0
@@ -141,7 +117,7 @@ function M.install(mod, deps)
             end)
     end
 
-    return { validate_attachment_sources = validate_attachment_sources }
+    return {}
 end
 
 return M
