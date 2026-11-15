@@ -1,7 +1,9 @@
 -- _cim_command_owner.lua -- CIM-dev forge diagnostics and maintenance commands.
 --
 -- Behavior-neutral extraction from the entry. This owner retains the original
--- 13 command registration order, the private pending-forge transaction, the
+-- 13 command registration order (plus /cim_restore_backup and
+-- /cim_import_other_stream, WP-CIM-06), the
+-- private pending-forge transaction, the
 -- public exact-owner deletion surface, and the existing bulk-cleanup adapter.
 -- Reassigned entry stores arrive through accessors so no module can retain a
 -- stale table after load/restore.
@@ -23,8 +25,16 @@ return function(ctx)
         "CIM command owner requires legacy entry builder")
     local _forge_detect_mil = assert(ctx.forge_detect_mil,
         "CIM command owner requires MIL detector")
-    local _forge_save = assert(ctx.forge_save,
+    local _forge_save_checked = assert(ctx.forge_save,
         "CIM command owner requires craft persistence")
+    -- WP-CIM-06: the owner's save reports a refused write as `false, reason`
+    -- instead of raising. Owned deletion detects a failed write by a raise, so
+    -- turn the result back into one here.
+    local function _forge_save(source)
+        local saved, save_err = _forge_save_checked(source)
+        if saved == false then error(save_err, 0) end
+        return saved
+    end
     local _modded_loadout_save = assert(ctx.modded_loadout_save,
         "CIM command owner requires loadout persistence")
 
@@ -674,6 +684,72 @@ mod:command("forge_delete", "Delete a forged weapon or accessory (usage: /forge_
     else
         mod:echo("Forge: item was no longer owned by CIM; nothing was deleted")
     end
+end)
+
+-- WP-CIM-06: put back crafted items that the session-start backup holds and the
+-- live collection lacks. Additive only: never removes or overwrites an id.
+mod:command("cim_restore_backup", "Re-add crafted items missing since session start (usage: /cim_restore_backup [CONFIRM])", function(confirm)
+    local backup = mod:get("forged_weapons_backup")
+    if type(backup) ~= "table" or next(backup) == nil then
+        mod:echo("[cim] No crafted-item backup for this session.")
+        return
+    end
+    local live = _get_forged_weapons() or {}
+    local missing, count = {}, 0
+    for backend_id, record in pairs(backup) do
+        if live[backend_id] == nil then
+            missing[backend_id] = record
+            count = count + 1
+        end
+    end
+    if confirm ~= "CONFIRM" then
+        mod:echo("[cim] The session-start backup holds %d crafted item(s) missing from your collection. Run /cim_restore_backup CONFIRM to add them back; nothing is removed or overwritten.", count)
+        return
+    end
+    if count == 0 then
+        mod:echo("[cim] Nothing to restore: every backed-up item is in your collection.")
+        return
+    end
+    local ok, err = mod._cim_register_crafts_batch(missing)
+    if not ok then
+        mod:echo("[cim] Restore refused: %s", tostring(err))
+        return
+    end
+    if mod._cim_run_restore_loop then mod._cim_run_restore_loop() end
+    mod:echo("[cim] Restored %d crafted item(s) from the session-start backup.", count)
+end)
+
+-- WP-CIM-06 step 8: copy crafted items from the other Crafting in Modded
+-- stream (cim) that this stream lacks. Additive only, never automatic.
+mod:command("cim_import_other_stream", "Copy crafted items from Crafting in Modded (public) that are missing here (usage: /cim_import_other_stream [CONFIRM])", function(confirm)
+    local other = mod._cim_other_stream_store and mod._cim_other_stream_store()
+    if type(other) ~= "table" or next(other) == nil then
+        mod:echo("[cim] The other Crafting in Modded stream has no saved crafted items.")
+        return
+    end
+    local live = _get_forged_weapons() or {}
+    local missing, count = {}, 0
+    for backend_id, record in pairs(other) do
+        if live[backend_id] == nil then
+            missing[backend_id] = record
+            count = count + 1
+        end
+    end
+    if confirm ~= "CONFIRM" then
+        mod:echo("[cim] The other Crafting in Modded stream holds %d crafted item(s) that are not here. Run /cim_import_other_stream CONFIRM to copy them; nothing is removed or overwritten.", count)
+        return
+    end
+    if count == 0 then
+        mod:echo("[cim] Nothing to import: every item of the other stream is already here.")
+        return
+    end
+    local ok, err = mod._cim_register_crafts_batch(missing)
+    if not ok then
+        mod:echo("[cim] Import refused: %s", tostring(err))
+        return
+    end
+    if mod._cim_run_restore_loop then mod._cim_run_restore_loop() end
+    mod:echo("[cim] Imported %d crafted item(s) from the other stream.", count)
 end)
 
 local _install_bulk_cleanup_command = mod:dofile(

@@ -1,0 +1,11 @@
+{
+  "name": "slot-marker-vdl",
+  "purpose": "WP-H-07 acceptance: Verminious Dreams Lighting (Dev) built from a worktree with a marker MOD_VERSION and staged into rig slot 1 by tools/harness/stage-build.ps1. Passes when the marker version loads and the real Workshop folder 3733366748 is unchanged.",
+  "mods": ["1369573612", "3733366748"],
+  "expect_mods": ["VMF", "verminious_dreams_lighting_dev"],
+  "local_builds": [ { "mod": "verminious_dreams_lighting_dev", "slot": 1 } ],
+  "timeout": 300,
+  "cases": [
+    { "id": "smoke-keep", "arena": "keep", "file": "../_rig/smoke_keep.lua" }
+  ]
+}

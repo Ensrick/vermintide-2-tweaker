@@ -9,6 +9,15 @@ The common engine surface is owned by
 Runtime owners are mirrored with the `weapon_tweaker_dev` namespace; Dev-only
 diagnostic and Hold-Pose overlays do not redefine the common contracts.
 
+## Hook count (this stream)
+
+46 live engine registration sites (recounted 2026-11-15 with the public
+reference's command over `weapon_tweaker_dev/scripts/mods/weapon_tweaker_dev/`,
+same exclusions, Moonfire loop counted as 6): the public stream's 44 plus
+two Dev-only Hold-Pose re-apply hooks, `StateInGameRunning.update` and
+`IngameHud.update` [safe] (`wt_dev_hold_pose.lua`). Every common row of the
+public reference applies here with the `weapon_tweaker_dev` paths.
+
 The **Priest punch profile transaction (#428, both WT streams)** section in
 that reference applies to `_wt_priest_punch_owner.lua` here at the identical
 balance-module registration position. It adds no hook, RPC, lookup name or
