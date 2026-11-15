@@ -59,4 +59,12 @@ function P.cancel_reason(context)
     return nil
 end
 
+-- WP-GT-02 (A6-F02): one-time reset of the saved value to off. VMF stored the
+-- old `true` default for existing users (VMF options.lua:603-604); after the
+-- migration flag is set, the user's own choice is kept.
+function P.migrate_default_off(saved_value, migrated)
+    if migrated == true then return saved_value, true end
+    return false, true
+end
+
 return P

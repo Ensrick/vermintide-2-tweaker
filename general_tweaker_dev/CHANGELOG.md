@@ -1,5 +1,13 @@
 # General Tweaker Changelog
 
+## 0.2.281-dev (2026-11-15) -- Host melee latency compensation off by default (WP-GT-02)
+
+- "Host-side Melee Latency Compensation" is now off by default (audit finding
+  A6-F02). It has never been verified with two clients (#1034). Players who
+  had the old default saved get it switched off once on the first load of
+  this version; turning it back on afterwards sticks. The feature, its
+  setting and its command are unchanged. Not confirmed in game.
+
 ## 0.2.280-dev (2026-11-14) -- Host opt-in for client-requested host actions (WP-GT-01)
 
 - Any peer running this mod could make the host win, fail or restart the
