@@ -38,8 +38,11 @@ rules specific to this mod; architecture and recipes live in `DEVELOPMENT.md`.
   desktop/controller area/area-copy/mission-menu hooks, issues 626/802; plus the two `IngamePlayerListUI`
   `_setup_deed_reward_data` + `_draw` hooks, issue 532) — grep all `_evt_*` files
   before adding any hook.
-  `_evt_guard430_curse_parity` owns the singleton `GameModeBase.is_joinable`
-  wrapper for its pre-game-session hot-join lock and the singleton
+  `_evt_guard430_curse_parity` owns the singleton `is_joinable` wrappers on
+  `GameModeAdventure`, `GameModeDeus`, `GameModeMapDeus` and `GameModeWeave`
+  (`JoinPolicy.JOIN_LOCK_CLASSES`; a `GameModeBase` hook never reaches them
+  because vanilla `class()` copies methods at definition, WP-CW-01) for its
+  pre-game-session hot-join lock and the singleton
   `GameNetworkManager.remove_peer` hook for exact-proof retirement. Its
   peer-parity beacon polls the player roster and owns the first `mod.update`
   wrapper via the shared lib's `install()`. Managed curses stay inert unless
