@@ -1,0 +1,42 @@
+{
+  "schema": 1,
+  "issue": 332,
+  "class": "C",
+  "status": "draft",
+  "vp": null,
+  "arena": "unknown",
+  "mods": [
+    {
+      "dir": "general_tweaker_dev",
+      "min_version": "0.2.180",
+      "settings": null
+    }
+  ],
+  "cases": [
+    {
+      "script": "",
+      "steps": [
+        "1. Both players run the official General build above. Before changes, record both peers' **Disable mutator death explosions** and **Max Ragdolls** settings. Set the host to OFF and 24, and the client to ON and 50.",
+        "2. Host a Chaos Wastes expedition with a Tzeentch splitting-enemy curse. When enemies die, note whether their purple burst appears on the client. Throw an ordinary bomb as an unrelated-effect control.",
+        "3. The client turns **Disable mutator death explosions** off, presses **Apply**, and repeats an encounter. Record whether the received purple bursts now appear.",
+        "4. The client sets **Max Ragdolls** to 0 and kills a few enemies: retained bodies must clear. Then set it to 50 and kill more than 24 in view: additional client-only corpses should remain up to the cap.",
+        "5. Lower the cap while no new enemy dies and wait at least one second; excess retained visuals must clear without waiting for another death.",
+        "6. Both run `/gt_regression_test`, exit normally, and attach both logs plus the initial setting states."
+      ],
+      "assertions": [
+        "With the host's suppression OFF, the client's ON/OFF setting hides or shows received mutator bursts without hiding ordinary bomb/grenadier effects. This candidate does not make a client restore a burst the host never transmitted: host ON may still suppress it for everyone. Zero retains nothing; a raised cap retains bounded non-interactable, non-colliding local corpse visuals, and lowering the cap reconciles without a new death.",
+        "On a joined client: count retained corpse units against cap after N kills and after lowering cap; log filtered explosion template names. Needs a host peer; corpse look is visual."
+      ],
+      "pass_closes": false
+    }
+  ],
+  "left_for_humans": [
+    "With the host's suppression OFF, the client's ON/OFF setting hides or shows received mutator bursts without hiding ordinary bomb/grenadier effects. This candidate does not make a client restore a burst the host never transmitted: host ON may still suppress it for everyone. Zero retains nothing; a raised cap retains bounded non-interactable, non-colliding local corpse visuals, and lowering the cap reconciles without a new death.",
+    "needs two clients"
+  ],
+  "source": {
+    "card_comment_id": 6681739775,
+    "card_date": "2026-11-06T09:32:46Z",
+    "ledger": "D5_ledger.tsv"
+  }
+}

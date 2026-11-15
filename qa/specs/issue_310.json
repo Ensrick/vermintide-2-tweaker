@@ -1,0 +1,37 @@
+{
+  "schema": 1,
+  "issue": 310,
+  "class": "R",
+  "status": "draft",
+  "vp": null,
+  "arena": "unknown",
+  "mods": [
+    {
+      "dir": "gui_tweaker_dev",
+      "min_version": "0.2.369-dev",
+      "settings": null
+    }
+  ],
+  "cases": [
+    {
+      "script": "",
+      "steps": [
+        "1. In Mod Tweaker, bind **Enter HUD Edit Mode** and start an Adventure mission.",
+        "2. Press the key once and confirm normal character and camera input stops while the mouse controls the editor.",
+        "3. Drag the visible Equipment display and Career Ability display a short distance, then exit and re-enter edit mode.",
+        "4. Repeat on a career with a visible Overcharge or Energy bar if available.",
+        "5. Run `/gut_regression_test`, exit normally, and attach the newest console log plus screenshots of any element whose edit box is missing or misaligned."
+      ],
+      "assertions": [
+        "Each deliberate entry produces one bounded coverage snapshot, never per-frame spam. Visible registered elements report enough scenegraph and bounds evidence to distinguish ready, fallback, and missing geometry; Equipment and Career Ability displays move without jumping away from the cursor. The log identifies the remaining resize-handle and hidden-element work without altering gameplay outside edit mode.",
+        "Enter edit mode via keybind callback; one [gut:310] coverage snapshot; simulate drag per registered element, assert offset saved and reloaded; resize has nothing to test."
+      ],
+      "pass_closes": true
+    }
+  ],
+  "source": {
+    "card_comment_id": 5356974652,
+    "card_date": "2026-08-20T14:04:20Z",
+    "ledger": "D4_ledger.tsv"
+  }
+}

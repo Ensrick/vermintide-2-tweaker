@@ -1,0 +1,36 @@
+{
+  "schema": 1,
+  "issue": 256,
+  "class": "R",
+  "status": "draft",
+  "vp": null,
+  "arena": "unknown",
+  "mods": [
+    {
+      "dir": "chaos_wastes_tweaker_dev",
+      "min_version": "0.7.354-beta",
+      "settings": null
+    }
+  ],
+  "cases": [
+    {
+      "script": "",
+      "steps": [
+        "1. In a Chaos Wastes run, use a ranged weapon with a separate clip and reserve. Fire to a partial clip, then refill so the clip exceeds the amount carried at mission start.",
+        "2. Acquire **Quiver Cascade** and more boons to refresh its ammo-per-boon effect more than once if available.",
+        "3. Watch current/clip and reserve ammo before and after each refresh. Fire, reload, and swap weapons, checking again after every action.",
+        "4. At each partial-clip/refill/boon-refresh/fire/reload/swap sample, run `/verify_ct_ammo_bounds`. Keep the native current-minus-shots, reserve and clip-size readbacks plus the pre/post refresh rows. Run `/ct_regression_test`, exit normally, and attach the newest complete log with the weapon and lowest values."
+      ],
+      "assertions": [
+        "Reserve ammunition never becomes negative, current/clip ammunition remains between zero and its valid maximum, and boon gain/refresh never reduces usable ammo below zero. `ct_meta_ammo_current_floor_256` must pass for an eligible conventional ranged extension; missing or non-conventional ammo reports SKIP. Clip size is not the weapon's total ammo capacity. A pass at one sample does not exercise every refresh path. This is separate from a teammate HUD showing a different positive value.",
+        "Give a ranged weapon partial spawn ammo, refill clip, grant a meta-ammo stack; assert reserve >= 0 and 0 <= clip <= max after refresh."
+      ],
+      "pass_closes": true
+    }
+  ],
+  "source": {
+    "card_comment_id": 6693547928,
+    "card_date": "2026-11-06T19:29:18Z",
+    "ledger": "D3_ledger.tsv"
+  }
+}

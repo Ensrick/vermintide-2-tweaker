@@ -1,0 +1,36 @@
+{
+  "schema": 1,
+  "issue": 367,
+  "class": "R",
+  "status": "draft",
+  "vp": null,
+  "arena": "unknown",
+  "mods": [
+    {
+      "dir": "career_tweaker",
+      "min_version": "0.4.34-beta",
+      "settings": null
+    }
+  ],
+  "cases": [
+    {
+      "script": "",
+      "steps": [
+        "1. As Ranger Veteran, leave **Ale stacks expire independently** off and enable **Faster Ale Drinking Animation**.",
+        "2. Drink Survival Ale. The visible bottle animation and control lock must end together near 0.75 seconds, and exactly one normal ale buff must be granted.",
+        "3. Disable **Faster Ale Drinking Animation**, drink again, and confirm the stock animation/control lock returns near 1.9 seconds with one buff grant.",
+        "4. Run `/crt_regression_test` and retain the complete report."
+      ],
+      "assertions": [
+        "Enabled and disabled timing are visibly distinct at about 0.75 and 1.9 seconds, the visible animation and control lock stay synchronized, buff behavior is unchanged, and the full regression report passes.",
+        "Enable setting: assert [crt:367] applied receipt and anim_time_scale == 1.9/0.75; trigger drink, measure action end near 0.75 s, one buff; disable: 1.9 s."
+      ],
+      "pass_closes": true
+    }
+  ],
+  "source": {
+    "card_comment_id": 5163735974,
+    "card_date": "2026-08-03T07:56:33Z",
+    "ledger": "D4_ledger.tsv"
+  }
+}

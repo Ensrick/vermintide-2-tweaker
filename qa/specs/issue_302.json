@@ -1,0 +1,38 @@
+{
+  "schema": 1,
+  "issue": 302,
+  "class": "V",
+  "status": "draft",
+  "vp": null,
+  "arena": "unknown",
+  "mods": [
+    {
+      "dir": "general_tweaker_dev",
+      "min_version": "0.2.279-dev",
+      "settings": null
+    }
+  ],
+  "cases": [
+    {
+      "script": "",
+      "steps": [
+        "1. Enable each available developer geometry highlight category one at a time.",
+        "2. Visit interactables, item pickups, enemies, players, and empty pickup locations and compare the overlay with the object.",
+        "3. Move the camera through near, far, and edge-of-screen positions, then run `/gt_regression_test`."
+      ],
+      "assertions": [
+        "Implemented categories draw stable, correctly colored screen overlays in the retail game without chat or log spam. Record every absent, approximate, or misaligned category so unsupported geometry can be implemented or explicitly split from this issue.",
+        "Automatable part: per-category draw counter above zero when matching units exist and no error spam; overlay alignment and colour need eyes."
+      ],
+      "pass_closes": false
+    }
+  ],
+  "left_for_humans": [
+    "Implemented categories draw stable, correctly colored screen overlays in the retail game without chat or log spam. Record every absent, approximate, or misaligned category so unsupported geometry can be implemented or explicitly split from this issue."
+  ],
+  "source": {
+    "card_comment_id": 5161342993,
+    "card_date": "2026-08-03T01:18:39Z",
+    "ledger": "D5_ledger.tsv"
+  }
+}

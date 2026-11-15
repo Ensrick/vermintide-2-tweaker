@@ -1,0 +1,39 @@
+{
+  "schema": 1,
+  "issue": 1108,
+  "class": "R",
+  "status": "draft",
+  "vp": null,
+  "arena": "unknown",
+  "mods": [
+    {
+      "dir": "character_weapon_variants",
+      "min_version": "0.1.570-dev",
+      "settings": null
+    }
+  ],
+  "cases": [
+    {
+      "script": "",
+      "steps": [
+        "1. Refresh **Character Weapon Variants** from the Workshop and confirm the newest log contains `[cwv:LOAD] v0.1.570-dev`.",
+        "2. Equip the **Old Musket** in the Primary/melee slot and an ordinary ammunition weapon, such as a **Handgun**, in the Secondary/ranged slot.",
+        "3. Spend a different amount of ammunition from each weapon.",
+        "4. Wield the Old Musket in ranged stance. Confirm the HUD ammo counter shows the Musket's loaded and reserve ammunition.",
+        "5. Switch to the ordinary ranged weapon. Confirm the HUD immediately returns to that weapon's native count and focus, with no stale Musket value.",
+        "6. Switch back, toggle the Musket to melee stance and back to ranged stance, then repeat steps 4-5 once with controller HUD/input if available.",
+        "7. Run `/cwv_regression_test`, exit normally, and attach the newest console log."
+      ],
+      "assertions": [
+        "The counter follows the exact wielded ammunition weapon; leaving the Old Musket restores the native ranged counter and focus, melee stance leaves no stale Musket presentation, and `issue1108_primary_slot_musket_ammo_hud_contract` passes.",
+        "Wield the primary-slot musket: read the EquipmentUI ammo widget text, equals pool chamber and reserve; swap to handgun: widget equals handgun ammo."
+      ],
+      "pass_closes": true
+    }
+  ],
+  "source": {
+    "card_comment_id": 5356238302,
+    "card_date": "2026-08-20T13:01:26Z",
+    "ledger": "D1_ledger.tsv"
+  }
+}

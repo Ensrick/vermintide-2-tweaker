@@ -1,0 +1,41 @@
+{
+  "schema": 1,
+  "issue": 738,
+  "class": "C",
+  "status": "draft",
+  "vp": null,
+  "arena": "unknown",
+  "mods": [
+    {
+      "dir": "cosmetics_tweaker",
+      "min_version": "0.9.230-dev",
+      "settings": null
+    }
+  ],
+  "cases": [
+    {
+      "script": "",
+      "steps": [
+        "1. Before the client joins, the host equips a clearly distinct weapon, hat, or outfit cosmetic.",
+        "2. The client joins cold and checks the host before the host opens inventory or reapplies anything.",
+        "3. The host swaps weapons away and back, enters a mission, changes career after returning to the Keep, and Applies one cosmetic; the client checks each transition.",
+        "4. The client leaves and hot-joins while the host's cosmetic is already active.",
+        "5. Reverse host/client roles for one saved cosmetic, run `/cos_regression_test` on both peers, and attach both newest logs."
+      ],
+      "assertions": [
+        "Every remote record resolves the human wearer rather than a bot alias. The saved cosmetic appears after cold join, re-wield, mission transition, career change, Apply, hot join, and reversed roles without invisible or default fallback, repeated state-pull traffic, or a crash.",
+        "Unit-test human-wearer rule (local player id 1 versus 2-4); two clients with host bots: zero alias skips for id 1 and state pull acked within 8 attempts."
+      ],
+      "pass_closes": false
+    }
+  ],
+  "left_for_humans": [
+    "Every remote record resolves the human wearer rather than a bot alias. The saved cosmetic appears after cold join, re-wield, mission transition, career change, Apply, hot join, and reversed roles without invisible or default fallback, repeated state-pull traffic, or a crash.",
+    "needs two clients"
+  ],
+  "source": {
+    "card_comment_id": 5356977889,
+    "card_date": "2026-08-20T14:04:36Z",
+    "ledger": "D2_ledger.tsv"
+  }
+}

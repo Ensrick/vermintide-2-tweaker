@@ -1,0 +1,37 @@
+{
+  "schema": 1,
+  "issue": 749,
+  "class": "R",
+  "status": "draft",
+  "vp": null,
+  "arena": "unknown",
+  "mods": [
+    {
+      "dir": "crafting_in_modded_dev",
+      "min_version": "",
+      "settings": null
+    }
+  ],
+  "cases": [
+    {
+      "script": "",
+      "steps": [
+        "1. Open the Athanor and repeatedly browse craftable custom weapons. Rotate, scroll, select valid entries, back out, and reopen. Blightreaper is checked in Equipment below, not as an Athanor craft/edit target.",
+        "2. In Equipment customization, repeatedly browse Loremaster shield illusions and **Midnight Purpure and Azure**. Equip one, close and reopen, then swap away and back.",
+        "3. Equip a Character Weapon Variants weapon and Blightreaper. Inspect both in the inventory character preview, swap between them in third person, enter a mission, and repeat the inventory and weapon-swap checks.",
+        "4. Open and close Mod Tweaker several times. In General Dev, briefly exercise **Bot Teleport Lab** or its world-highlight preview, then disable it.",
+        "5. Return to the Keep, repeat the Athanor and Equipment preview checks once, and run `/cim_regression_test`. Record its visible passed/failed/skipped summary and first failure, if shown. The echo/info result is not guaranteed in a logging-OFF console; report unavailable output, not a pass. Exit normally and attach the complete log."
+      ],
+      "assertions": [
+        "No renderer, material, texture, or shading-environment crash/freeze on the tested active surfaces. Each custom surface renders normally or keeps its safe fallback; any residency refusal is bounded rather than continuously repeated. This samples the active combined boundary only: it is not proof of every latent or official consumer, and a CIM-only or tooling pass cannot satisfy this umbrella.",
+        "S: native resource census has zero uncensused rows; R smoke: in a mission open/close every borrowed-renderer surface N times with the six-mod set; process alive, no 'not found in Gui'."
+      ],
+      "pass_closes": true
+    }
+  ],
+  "source": {
+    "card_comment_id": 6693601492,
+    "card_date": "2026-11-06T19:32:10Z",
+    "ledger": "D4_ledger.tsv"
+  }
+}

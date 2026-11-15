@@ -1,0 +1,37 @@
+{
+  "schema": 1,
+  "issue": 288,
+  "class": "R",
+  "status": "draft",
+  "vp": null,
+  "arena": "unknown",
+  "mods": [
+    {
+      "dir": "chaos_wastes_tweaker_dev",
+      "min_version": "0.7.354-beta",
+      "settings": null
+    }
+  ],
+  "cases": [
+    {
+      "script": "",
+      "steps": [
+        "1. Equip a ranged weapon with **Anath Raema's Swiftness**. In **Tweaker: Chaos Wastes > Reworks > Reworks: Boons > Reworks: Existing Boons**, turn **Rework: Anath Raema's Swiftness, permanent reload speed** off.",
+        "2. Re-wield the weapon and time several full reloads without collecting ammunition. Keep the weapon, properties, and other reload effects unchanged for all timing samples.",
+        "3. Turn the rework on, re-wield the same weapon, and repeat the reload timing without collecting ammunition.",
+        "4. While wielding the weapon with the rework enabled, run `/verify_ct_anath_raema` (the old `/ct_verify_anath_raema` alias also works). Re-wield once and repeat. Keep the active-child readbacks and bounded `[ct:288]` rows, then run `/ct_regression_test`.",
+        "5. Turn the rework off, re-wield, and confirm the original control timing returns. Exit normally and attach the complete newest log with the disabled/enabled/disabled timings."
+      ],
+      "assertions": [
+        "Enabled reload time is roughly half the disabled control without an ammo pickup, with exactly one active permanent reload-speed child and no pickup-event trigger. Re-wielding neither duplicates nor loses the effect; disabling restores native timing. The regression report passes, including the reload-registry contract when its required registries are available. `ct_anath_raema_active_288` must read exactly one valid active permanent child while enabled and wielded, including the resolved multiplier, duration and additive-bonus controls. No active trait reports SKIP, not PASS. Registry-only success and total reload scale from unrelated buffs do not establish this trait's live effect.",
+        "Wield trait weapon with rework on; assert exactly one active reload_speed -0.5 buff with no duration; toggle off restores the vanilla template."
+      ],
+      "pass_closes": true
+    }
+  ],
+  "source": {
+    "card_comment_id": 6693559190,
+    "card_date": "2026-11-06T19:29:54Z",
+    "ledger": "D3_ledger.tsv"
+  }
+}

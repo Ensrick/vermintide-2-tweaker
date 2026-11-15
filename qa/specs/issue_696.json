@@ -1,0 +1,37 @@
+{
+  "schema": 1,
+  "issue": 696,
+  "class": "R",
+  "status": "draft",
+  "vp": null,
+  "arena": "unknown",
+  "mods": [
+    {
+      "dir": "cosmetics_tweaker",
+      "min_version": "0.9.230-dev",
+      "settings": null
+    }
+  ],
+  "cases": [
+    {
+      "script": "",
+      "steps": [
+        "1. Refresh **Tweaker: Cosmetics**, enable **Loremaster's Armoury**, launch Vermintide 2, and confirm `[cosmetics:LOAD] v0.9.230-dev` in the newest log.",
+        "2. Enter the keep once and visit the Loremaster message-board and quest-letter area so those objects are visibly loaded. Confirm their paper, board, and backing materials render normally.",
+        "3. Equip and inspect a Loremaster's Armoury Imperial shield illusion for Kruber. Check it on the inventory character preview and wield it in the keep; the shield must retain its intended material rather than falling back or appearing untextured.",
+        "4. Enter one mission with that shield, swap away and back, then return to the keep. Recheck both the shield and Loremaster objects after the transitions.",
+        "5. Run `/cos_regression_test`, exit normally, and attach the newest complete log."
+      ],
+      "assertions": [
+        "The Loremaster message board, board backing, quest letter, and Kruber Imperial shield load their declared parent materials before spawning across keep, inventory preview, and mission transitions. The prior repeatable `MeshObject` material-lookup warnings for those objects are absent, valid material binds remain intact, and the Cosmetics regression suite passes.",
+        "Harness with Loremaster Armoury installed: visit keep, preview, mission; grep log for warning hashes 5a0213f3, 6e98026a, c61ad6e5 equal zero; issue696_la_prespawn_parent_lease PASS."
+      ],
+      "pass_closes": true
+    }
+  ],
+  "source": {
+    "card_comment_id": 5468615563,
+    "card_date": "2026-08-30T12:13:58Z",
+    "ledger": "D5_ledger.tsv"
+  }
+}

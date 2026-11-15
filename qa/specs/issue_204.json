@@ -1,0 +1,36 @@
+{
+  "schema": 1,
+  "issue": 204,
+  "class": "R",
+  "status": "draft",
+  "vp": null,
+  "arena": "unknown",
+  "mods": [
+    {
+      "dir": "cosmetics_tweaker",
+      "min_version": "",
+      "settings": null
+    }
+  ],
+  "cases": [
+    {
+      "script": "",
+      "steps": [
+        "1. Open Cosmetics for **Imperial Axe and Shield**.",
+        "2. Preview and Apply several Imperial shield variants and several compatible Loremaster's Armoury shield variants.",
+        "3. Inspect the Cosmetics preview, inventory character preview, first person, and owner third person after swapping away and back.",
+        "4. Run `/cos_regression_test` and attach the newest console log."
+      ],
+      "assertions": [
+        "Every selection uses its authored shield mesh and material. A Bretonnian texture never wraps around an Imperial shield mesh, no two shields overlap, and changing the shield never changes the axe.",
+        "Unit-test mesh gate over every LA key x shield unit name; in game assert each paint target mesh matches the family or SKIP is logged. Husk leg needs two clients."
+      ],
+      "pass_closes": true
+    }
+  ],
+  "source": {
+    "card_comment_id": 5356899712,
+    "card_date": "2026-08-20T13:58:06Z",
+    "ledger": "D2_ledger.tsv"
+  }
+}

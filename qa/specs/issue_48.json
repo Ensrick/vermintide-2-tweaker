@@ -1,0 +1,37 @@
+{
+  "schema": 1,
+  "issue": 48,
+  "class": "R",
+  "status": "draft",
+  "vp": null,
+  "arena": "unknown",
+  "mods": [
+    {
+      "dir": "cosmetics_tweaker",
+      "min_version": "",
+      "settings": null
+    }
+  ],
+  "cases": [
+    {
+      "script": "",
+      "steps": [
+        "1. Enable **Show Weavebound and Shyish Illusions** in Tweaker: Cosmetics.",
+        "2. Customize a weapon crafted through Crafting in Modded, choose a Weavebound or Shyish-Infused illusion, and open **Edit Glow**. Confirm the editor does not open by itself.",
+        "3. Change RGB values, press Apply, close and reopen customization, swap weapons, enter a mission, and fully restart.",
+        "4. Confirm a second instance using the same illusion keeps its own default or separately assigned glow.",
+        "5. Disable only Tweaker: Cosmetics, restart with Crafting in Modded Dev still active, and attach the newest logs."
+      ],
+      "assertions": [
+        "The selected glow persists on the exact crafted weapon and exact illusion across every refresh and restart without bleeding to the control instance. With Cosmetics disabled, the item safely uses its native glow and Crafting in Modded reports the unavailable saved-glow provider once without corrupting the item or crashing.",
+        "Set glow blob for backend id A; assert glow store row and CIM backup, second instance default; restart; launch without Cosmetics asserts one CIM notice, no error. Colour V."
+      ],
+      "pass_closes": true
+    }
+  ],
+  "source": {
+    "card_comment_id": 5357037467,
+    "card_date": "2026-08-20T14:09:18Z",
+    "ledger": "D2_ledger.tsv"
+  }
+}

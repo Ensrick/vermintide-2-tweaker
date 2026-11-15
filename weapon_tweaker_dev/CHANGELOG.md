@@ -1,5 +1,12 @@
 # Weapon Tweaker Changelog
 
+## 0.12.349-dev (2026-11-15) -- Mirror swallowed-error counters (WP-WT-08) [not-started]
+
+- Mirror public 0.12.348-beta: safe_hook calls the hooked original once, and
+  swallowed vanilla-path errors are counted, printed and checked.
+- Runtime parity, Dev namespace and the friends-only overlay are unchanged.
+  No in-game acceptance is claimed.
+
 ## 0.12.348-dev (2026-11-15) -- Mirror sibling guard (WP-WT-03) [not-started]
 
 - Mirror public 0.12.347-beta: the shared guard turns public Weapon Tweaker

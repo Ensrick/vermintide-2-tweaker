@@ -1,0 +1,38 @@
+{
+  "schema": 1,
+  "issue": 840,
+  "class": "R",
+  "status": "draft",
+  "vp": null,
+  "arena": "unknown",
+  "mods": [
+    {
+      "dir": "modded_progression",
+      "min_version": "0.2.52-dev",
+      "settings": null
+    }
+  ],
+  "cases": [
+    {
+      "script": "",
+      "steps": [
+        "1. Enable Modded Progression after Vermintide Mod Framework for a fresh Modded Realm session, with other inventory/unlock providers disabled for this first check. Confirm the exact banner above.",
+        "2. In the Keep, open Mod Options -> Modded Progression. Set Starting State to Level 35, default inventory. Reopen Kruber's Mercenary inventory and note the currently equipped weapons, their power, outfit, hat and frame.",
+        "3. Set Starting State to Fresh (level 1), then reopen the same inventory. Confirm it changes to the locally seeded starter inventory/loadout, with item power 5 and base cosmetics. Hero level still showing the native value is expected. If nothing changes, stop and attach the log; do not reset.",
+        "4. Equip another weapon shown in this Fresh inventory that Mercenary can use. If no alternate weapon is selectable, stop and report that. Quit to desktop, relaunch Modded Realm with the same mods and return to the Keep. Confirm the changed weapon and the other Fresh items persisted.",
+        "5. KEEP Fresh (level 1) selected, reopen its inventory to confirm the Fresh items are still present, then run `/mp_regression_test` once BEFORE restoring the previous starting state. Copy or screenshot the four named chat results below if they are not in the console log.",
+        "6. Now set Starting State back to Level 35, default inventory. Reopen the same inventory and confirm the original loadout from step 2 returns unchanged. Exit normally and attach BOTH complete session logs plus the named chat evidence."
+      ],
+      "assertions": [
+        "the Fresh items/loadout differ from the native profile, a weapon change survives a full restart, and leaving Fresh restores the original native loadout. While Fresh remains selected, require explicit PASS results for `mp840_fresh_route_methods_resolved`, `mp840_fresh_profile_envelope_valid`, `mp840_fresh_route_write_never_touches_native` and `mp840_fresh_unavailable_slices_gated` in chat or the log. A general total, missing output, or a PASS after leaving Fresh is not sufficient. No setting-change, inventory-open or equip script error occurs.",
+        "Select Fresh: routed inventory equals the seeded starter set, a weapon change persists across relaunch, switching back restores the native loadout exactly; mp840_* checks while Fresh is active."
+      ],
+      "pass_closes": true
+    }
+  ],
+  "source": {
+    "card_comment_id": 6821895142,
+    "card_date": "2026-11-12T11:06:37Z",
+    "ledger": "D4_ledger.tsv"
+  }
+}

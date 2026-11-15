@@ -1,0 +1,31 @@
+{
+  "schema": 1,
+  "issue": 9101,
+  "class": "R",
+  "status": "ready",
+  "vp": "VP-D1-01",
+  "arena": "keep",
+  "mods": [
+    { "dir": "general_tweaker_dev", "min_version": "0.2.279-dev", "settings": { "fixture_toggle": true } }
+  ],
+  "boots": 1,
+  "depends_on": ["WP-H-01"],
+  "setup": "Fixture: keep, any career, default settings.",
+  "cases": [
+    {
+      "script": "qa/runtime/_rig/smoke_keep.lua",
+      "steps": ["T.step('fixture')"],
+      "assertions": ["fixture assertion"],
+      "pass_closes": true
+    }
+  ],
+  "offline": [
+    { "class": "S", "command": "pwsh -NoProfile -File qa/check_verify_specs.ps1", "expect": "exit 0" }
+  ],
+  "rt_checks": [
+    { "mod": "gt_dev", "check": "fixture_check", "behavioural": false }
+  ],
+  "left_for_humans": [],
+  "on_fail": "Fixture only.",
+  "source": { "card_comment_id": null, "card_date": null, "ledger": null }
+}

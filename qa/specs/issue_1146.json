@@ -1,0 +1,39 @@
+{
+  "schema": 1,
+  "issue": 1146,
+  "class": "R",
+  "status": "draft",
+  "vp": null,
+  "arena": "unknown",
+  "mods": [
+    {
+      "dir": "chaos_wastes_tweaker_dev",
+      "min_version": "0.7.354-beta",
+      "settings": null
+    }
+  ],
+  "cases": [
+    {
+      "script": "",
+      "steps": [
+        "1. In **Tweaker: Chaos Wastes**, enable **Buy Starting Boons**. Set **Start Shrine: Boons Offered** to **4**, **Start Shrine: Miracles Offered** to **0**, **Start Shrine: Boon Price** to **100%**, and **Start Shrine: Boon Purchase Limit** to **Unlimited**. Under **Pilgrim's Coin**, set **Starting Coins** to **1000**. Leave free **Starting Boons** selections off for the purchase test.",
+        "2. Leave **Individual Boon Prices** off and start a fresh ordinary Chaos Wastes expedition. Confirm four boon cards show numeric prices, never `-`, and affordable cards can be selected.",
+        "3. Record a displayed price and your coins, buy that boon, and confirm the boon is granted and exactly the displayed amount is deducted. Buy a second affordable boon: **Unlimited** must not disable the remaining choices after the first purchase.",
+        "4. Run `/ct_verify_start_shrine` before leaving the starting shrine, then choose **Ready**. Confirm the normal first map choice opens.",
+        "5. Enable **Individual Boon Prices** under **Reworks > Reworks: Boons > Reworks: Existing Boons** and repeat in a fresh ordinary expedition. Cards must remain numeric and the displayed amount must still equal the deduction. Record this option state with the result.",
+        "6. Turn **Individual Boon Prices** off again and repeat one affordable purchase in a fresh expedition. The off state must remain effective; earlier custom pricing must not linger.",
+        "7. Run `/ct_regression_test`, exit normally, and attach the newest complete log with the boon names, displayed costs, before/after coin totals, and whether the second purchase worked."
+      ],
+      "assertions": [
+        "No dash prices; affordable purchases grant the selected boons and deduct exactly the displayed amount; Unlimited allows a second purchase; Ready returns normally; both option states work. `issue1146_false_discount`, `issue458_start_shrine_config`, and `issue467_individual_boon_prices` pass with no relevant regression failure.",
+        "Unit test exists. Runtime: open the start shrine; every offer price_text is numeric; buy one; coin delta equals the displayed price."
+      ],
+      "pass_closes": true
+    }
+  ],
+  "source": {
+    "card_comment_id": 6693619295,
+    "card_date": "2026-11-06T19:33:05Z",
+    "ledger": "D3_ledger.tsv"
+  }
+}

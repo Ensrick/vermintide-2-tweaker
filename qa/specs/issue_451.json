@@ -1,0 +1,38 @@
+{
+  "schema": 1,
+  "issue": 451,
+  "class": "R",
+  "status": "draft",
+  "vp": null,
+  "arena": "unknown",
+  "mods": [
+    {
+      "dir": "enemy_tweaker",
+      "min_version": "0.7.65-dev",
+      "settings": null
+    }
+  ],
+  "cases": [
+    {
+      "script": "",
+      "steps": [
+        "1. Refresh **Tweaker: Enemies** from Steam Workshop, launch the Modded Realm, and confirm the exact build banner above. Workshop item `3716780252`, manifest `498441331850547559`.",
+        "2. Host a private solo Adventure run of **The War Camp** on **Recruit** and wait until the mission is playable.",
+        "3. In a clear area, run `/et_spawn_chosen` once and confirm the chat reply says the Chosen was queued after exact peer and catalog confirmation, not refused.",
+        "4. Fight the single **Chaos Chosen** that appears at your position. Confirm it swings a two-handed greataxe and its boss health bar appears when you approach, ping, or hit it.",
+        "5. Run far ahead of it once and confirm it keeps coming instead of despawning, then kill it and confirm the boss health bar clears after death.",
+        "6. Run `/et_regression_test`, then close the game normally and attach the newest console log."
+      ],
+      "assertions": [
+        "Exactly one **Chaos Chosen** spawns and behaves as a boss, never as a regular elite: it carries the greataxe, shows the boss health bar, survives being outrun, dies to damage, and leaves no boss bar behind. The regression run reports `PASS: issue451_custom_breed_registrar` and `PASS: issue451_chosen_greataxe_prototype` with a `0 failed` summary. No Tweaker: Enemies script error occurs. FAIL if the spawn is refused, no unit or a regular **Chaos Warrior** appears, more than one unit appears, the boss bar or greataxe is missing, or the bar stays after death.",
+        "After #324: /et_spawn_chosen in War Camp; assert breed et_chosen_greataxe, boss flag, health band, target acquired; kill clears boss bar; issue451 checks pass."
+      ],
+      "pass_closes": true
+    }
+  ],
+  "source": {
+    "card_comment_id": 5658059667,
+    "card_date": "2026-09-14T02:12:01Z",
+    "ledger": "D3_ledger.tsv"
+  }
+}

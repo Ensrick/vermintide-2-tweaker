@@ -1,0 +1,44 @@
+{
+  "schema": 1,
+  "issue": 822,
+  "class": "R",
+  "status": "draft",
+  "vp": null,
+  "arena": "unknown",
+  "mods": [
+    {
+      "dir": "crafting_in_modded_dev",
+      "min_version": "",
+      "settings": null
+    },
+    {
+      "dir": "weapons_of_chaos",
+      "min_version": "0.1.62-dev",
+      "settings": null
+    }
+  ],
+  "cases": [
+    {
+      "script": "",
+      "steps": [
+        "1. Enable Weapons of Chaos with **Enable Blightreaper** on, enter the Keep, and find Blightreaper in Inventory before opening the Athanor.",
+        "2. Equip it and confirm no customization cog is offered beside it in Equipment.",
+        "3. Open the Athanor and browse its melee weapon entries. Blightreaper must be absent.",
+        "4. With Blightreaper still equipped, reopen the Athanor. It must not become a selected editable target.",
+        "5. Open Salvage and confirm it cannot be queued or destroyed.",
+        "6. Close and relaunch the game. Exactly one Blightreaper must remain available and equipable.",
+        "7. Run `/cim_regression_test` and `/woc_regression_test`, then record both visible summaries, if shown."
+      ],
+      "assertions": [
+        "Blightreaper is present once without needing a crafting screen, remains protected from CIM craft/edit/salvage selection and Equipment customization, and persists once after relaunch. Both owners' applicable checks pass without a crash. This is identity/singleton acceptance, not renderer-residency acceptance.",
+        "On Keep entry assert exactly one woc_blightreaper_001 in backend items without opening CIM; Athanor list excludes it; salvage contract rejects it; survives mirror reload."
+      ],
+      "pass_closes": true
+    }
+  ],
+  "source": {
+    "card_comment_id": 6693603844,
+    "card_date": "2026-11-06T19:32:17Z",
+    "ledger": "D1_ledger.tsv"
+  }
+}

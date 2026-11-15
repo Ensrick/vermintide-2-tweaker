@@ -1,0 +1,14 @@
+{
+  "schema": 1,
+  "issue": 9106,
+  "class": "R",
+  "status": "ready",
+  "vp": "VP-D1-02",
+  "arena": "keep",
+  "mods": [
+    { "dir": "general_tweaker_dev", "min_version": null, "settings": null }
+  ],
+  "cases": [
+    { "script": "qa/runtime/fixture/issue_9106_missing.lua", "steps": [], "assertions": [], "pass_closes": true }
+  ]
+}

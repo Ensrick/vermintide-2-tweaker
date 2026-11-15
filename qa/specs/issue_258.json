@@ -1,0 +1,40 @@
+{
+  "schema": 1,
+  "issue": 258,
+  "class": "V",
+  "status": "draft",
+  "vp": null,
+  "arena": "unknown",
+  "mods": [
+    {
+      "dir": "chaos_wastes_tweaker_dev",
+      "min_version": "0.7.354-beta",
+      "settings": null
+    }
+  ],
+  "cases": [
+    {
+      "script": "",
+      "steps": [
+        "1. In the **Pilgrimage Chamber**, use **Single Mission Loader** to enter **Well of Dreams**, selecting **Change of Tzeentch (Tzeentch)** under **Curses**.",
+        "2. With **Curse Lighting Brightness** at its default **1.0**, record a dark interior and its top ambient fill.",
+        "3. Move **Curse Lighting Brightness** lower and higher while staying in that scene, recording readability and whether its cursed appearance remains recognizable.",
+        "4. Compare with an uncursed or different-curse **Well of Dreams** control. Record any new stutter or heavy log flooding separately from the visual result.",
+        "5. Run `/ct_regression_test`, retain the complete report, exit normally, and attach the newest log and comparison images."
+      ],
+      "assertions": [
+        "The Tzeentch interior is readable while remaining distinctly cursed; the map-specific change lifts its top ambient fill. The brightness control responds, unrelated map/curse combinations gain no new map-specific lift, and the full regression report has no failures. The source's twofold channel multiplier is not a claim that perceived brightness doubles.",
+        "Automatable part: on dlc_termite_3 with Tzeentch assert ambient_tint_top multiplier 2.0 applied, other maps 1.0; luminance delta versus control screenshot."
+      ],
+      "pass_closes": false
+    }
+  ],
+  "left_for_humans": [
+    "The Tzeentch interior is readable while remaining distinctly cursed; the map-specific change lifts its top ambient fill. The brightness control responds, unrelated map/curse combinations gain no new map-specific lift, and the full regression report has no failures. The source's twofold channel multiplier is not a claim that perceived brightness doubles."
+  ],
+  "source": {
+    "card_comment_id": 6693549784,
+    "card_date": "2026-11-06T19:29:24Z",
+    "ledger": "D3_ledger.tsv"
+  }
+}

@@ -1,0 +1,36 @@
+{
+  "schema": 1,
+  "issue": 181,
+  "class": "R",
+  "status": "draft",
+  "vp": null,
+  "arena": "unknown",
+  "mods": [
+    {
+      "dir": "weapon_tweaker",
+      "min_version": "0.12.344-dev",
+      "settings": null
+    }
+  ],
+  "cases": [
+    {
+      "script": "",
+      "steps": [
+        "1. On Kruber, equip **Saltzpyre: Hammer and Tome** from the melee availability list.",
+        "2. Inspect the inventory preview and owner third person through idle, wield, light, heavy, block, swap, mission entry and respawn.",
+        "3. Inspect first person, then a normal Kruber one-handed mace and Warrior Priest's own Skullsplitter and Tome as controls.",
+        "4. Run `/wt_regression_test` and keep the newest log."
+      ],
+      "assertions": [
+        "Kruber shows one regular Skullsplitter in the right hand, with the Tome and the duplicate offhand hammer hidden, and uses one-handed mace presentation in third person; first person is unchanged, the Kruber mace control is unchanged, and Warrior Priest's native version is untouched; `/wt_regression_test` reports `PASS: issue181_skullsplitter_right_hand_contract` with no new failures. A visible Tome, a second hammer, or a changed Warrior Priest presentation is a failure.",
+        "Equip wh_hammer_book on Kruber: assert 3P hammer linked to right-hand node, tome unit hidden, wield event to_1h_hammer; Warrior Priest control unchanged. Look V."
+      ],
+      "pass_closes": true
+    }
+  ],
+  "source": {
+    "card_comment_id": 5165063979,
+    "card_date": "2026-08-03T10:14:10Z",
+    "ledger": "D2_ledger.tsv"
+  }
+}

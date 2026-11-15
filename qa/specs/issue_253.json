@@ -1,0 +1,41 @@
+{
+  "schema": 1,
+  "issue": 253,
+  "class": "R",
+  "status": "draft",
+  "vp": null,
+  "arena": "unknown",
+  "mods": [
+    {
+      "dir": "chaos_wastes_tweaker_dev",
+      "min_version": "0.7.354-dev",
+      "settings": null
+    }
+  ],
+  "cases": [
+    {
+      "script": "",
+      "steps": [
+        "1. Refresh **Tweaker: Chaos Wastes Dev** from Steam Workshop, launch the Modded Realm, and confirm the exact build banner above. Workshop item `3733366926`, manifest `1970930570108327333`.",
+        "2. In the Mod Options page for Tweaker: Chaos Wastes Dev, open the Curses section and confirm the Disabled Curses list has no Metal entry. Leave every option as you normally run it.",
+        "3. In the keep, type `/ct_weave_metal` in chat with no argument and read the reply, which must say the Metal wind adapter is off. Then type `/ct_weave_metal` with the argument `on`, and type `/ct_weave_metal` with the arguments `strength 1` on one chat line.",
+        "4. Start a Chaos Wastes pilgrimage solo with bots and play one ordinary mission as host.",
+        "5. Inside that mission, type `/ct_weave_metal` in chat with no argument once and read the reply.",
+        "6. During that mission compare armoured and unarmoured enemies. Hit a Stormvermin, Ratling Gunner, Warpfire Thrower, Bestigor or Stormfiend on the body with an attack that normally wounds a Stormvermin but bounces off a Chaos Warrior: while the Metal wind is active the hit shows the armour hit marker and deals little or no damage, exactly as it does on a Chaos Warrior. Clanrats, Skavenslaves, Marauders, Ungors and Gors take normal damage, and Chaos Warriors and Standard Bearers look unchanged because they are already that heavily armoured.",
+        "7. Kill one of those hardened enemies yourself and watch for a screen flash like drinking a potion, then a metal storm effect and sound around you that keeps hitting ordinary enemies nearby for about sixteen seconds. A Stormfiend kill grants the storm to every player in the party.",
+        "8. Finish or leave that mission normally. On the map screen or back in the keep, type `/ct_weave_metal` with the argument `off`, then play one more mission and confirm the same enemies take normal damage again and no metal storm appears on their kills.",
+        "9. Run `/ct_regression_test`, then close the game normally and attach the newest console log."
+      ],
+      "assertions": [
+        "Every use of the command writes exactly one `[ct:253:diag] action=<action> result=<result> enabled=<true or false> strength=<n> server=<true or false> mechanism=<name> bridged=<true or false> level=<armed or idle>` line to the log, and the chat replies agree with it: off at the first status in step 3, on after the on command, strength 1, and inside the hosted mission of step 5 both the reply and the line report level armed with mechanism deus. The Metal effect is present only while the adapter is on: the listed elites and specials are hardened like a Chaos Warrior and killing one grants the metal storm, while ordinary enemies are unchanged; after the off command those enemies take normal damage and no storm appears. No Metal entry appears in the mod's Curses menu, on the map screen, in the curse panel or in the rewards. The regression run reports `PASS: issue253_metal_wind_adapter`, which also proves the eleven hardened enemy types had their armour restored after the level. No Tweaker: Chaos Wastes script error appears.",
+        "Enable /ct_weave_metal; spawn Stormvermin; apply a fixed hit; assert armour result equals the Chaos Warrior case; off restores vanilla."
+      ],
+      "pass_closes": true
+    }
+  ],
+  "source": {
+    "card_comment_id": 5674980518,
+    "card_date": "2026-09-15T04:59:23Z",
+    "ledger": "D3_ledger.tsv"
+  }
+}

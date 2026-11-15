@@ -21,12 +21,17 @@
   Case file paths are relative to the plan file. Every qa/runtime/_shared/*.lua travels with the plan
   (T.shared(<name>) in a case). See tools/harness/README.md.
 
-  Default host_forbid_log (backend write shield, WP-H-14): the game's own log must not show an
-  updateHeroAttributes cloud-script request or an UpdateUserData request. A hit makes a passing run exit 1 and
-  is listed in summary.json / summary.md. A plan with backend_shield false drops both defaults.
+  Optional plan fields (WP-H-02): "expect_mods" (VMF mod ids the smoke case asserts are loaded),
+  "host_expect_log" / "host_forbid_log" (regex lists checked on the final log) and "host_allow_log"
+  ([{ "pattern", "reason" }] excusing one proven-benign line). Read-HostLog.ps1 adds the default forbidden lines
+  (<<Script Error>>, Lua Stack, "was not found in the workshop folder", "Syntax error in .mod file",
+  "Failed to run callback") and, while the backend write shield is on (WP-H-14), any updateHeroAttributes or
+  UpdateUserData request. A plan with backend_shield false drops only the two shield defaults. A forbidden hit or
+  a missing expected line makes the run exit 1 and is named in summary.json / summary.md.
 
-  Exit code: 0 = run completed and every case PASS; 1 = at least one FAIL or a forbidden log line; 2 =
-  ERROR/TIMEOUT/INCONCLUSIVE or the run did not complete; 3 = rig refused to start or isolation was broken.
+  Exit code: 0 = run completed and every case PASS; 1 = at least one FAIL, a forbidden log line or a missing
+  expected line; 2 = ERROR/TIMEOUT/INCONCLUSIVE or the run did not complete; 3 = rig refused to start or isolation
+  was broken.
 
 .NOTES
   Never starts if any Vermintide process exists. Never kills a process it did not start (job object).
@@ -115,12 +120,17 @@ if ($planObj) { Copy-Item -LiteralPath $planPath -Destination (Join-Path $run 'p
 
 # ---------- launch ----------
 if (-not ('Vt2GameProcess' -as [type])) { Add-Type -Path (Join-Path $here 'GameProcess.cs') }
-$arguments = "-eac-untrusted --bundle-dir ../bundle --ini settings --silent-mode -skip-splash -vt2-test-run $nonce $ExtraArgs".Trim()
+# WP-H-02: ask the game to write its console log into the run folder; Find-RunLog.ps1 falls back to the
+# profile's console_logs folder when that file does not appear within 20 s.
+$switchLog = Join-Path $run 'console.log'
+$profileLogDir = Join-Path $rigVt2 'console_logs'
+if ($switchLog.Contains('"')) { Write-Host "RIG REFUSED: quote in the run folder path: $switchLog"; $mutex.ReleaseMutex(); exit 3 }
+$arguments = "-eac-untrusted --bundle-dir ../bundle --ini settings --silent-mode -skip-splash --default-console-log-path `"$switchLog`" -vt2-test-run $nonce $ExtraArgs".Trim()
 $childEnv = @{ SteamAppId = '552500'; SteamGameId = '552500'; USERPROFILE = $profileRoot; APPDATA = $rigAppData; LOCALAPPDATA = $rigLocal }
 if ($TimeoutSeconds -le 0) { $TimeoutSeconds = [int](($planObj.timeout ?? 180)) + 240 }
 $started = Get-Date
 $proc = $null; $verdict = 'UNKNOWN'; $notes = [System.Collections.Generic.List[string]]::new()
-$marks = [ordered]@{}; $logPath = $null; $stopAt = $null; $text = ''; $lastHb = $started; $lastNote = ''
+$marks = [ordered]@{}; $logPath = $null; $logSource = $null; $stopAt = $null; $text = ''; $lastHb = $started; $lastNote = ''
 $patterns = [ordered]@{
     realm = 'realm = (modded|official)'; mods_scan = 'Starting mod scan'; splash = 'StateSplashScreen'; title = 'StateTitleScreen'
     loading = 'StateLoading'; ingame = 'StateIngame'; run_begin = '\[vt2t:' + $nonce + '\] RUN BEGIN'; keep_ready = '\[vt2t:' + $nonce + '\] KEEP READY'
@@ -133,10 +143,12 @@ try {
     $deadline = $started.AddSeconds($TimeoutSeconds)
     while (-not $proc.WaitForExit(500)) {
         $now = Get-Date
-        if (-not $logPath) {
-            $cand = Get-ChildItem -LiteralPath (Join-Path $rigVt2 'console_logs') -Filter 'console-*.log' -ErrorAction SilentlyContinue |
-                Where-Object { $_.LastWriteTime -ge $started.AddSeconds(-2) } | Sort-Object LastWriteTime -Descending | Select-Object -First 1
-            if ($cand) { $logPath = $cand.FullName; $marks['log_created'] = [math]::Round(($now - $started).TotalSeconds, 1) }
+        if (-not $logPath -or $logSource -eq 'profile-fallback') {
+            $found = & (Join-Path $here 'Find-RunLog.ps1') -SwitchPath $switchLog -ProfileLogDir $profileLogDir -Started $started -Now $now
+            if ($found -and $found.Path -ne $logPath) {
+                if (-not $logPath) { $marks['log_created'] = [math]::Round(($now - $started).TotalSeconds, 1) }
+                $logPath = $found.Path; $logSource = $found.Source
+            }
         }
         if ($logPath) {
             $fs = [System.IO.File]::Open($logPath, 'Open', 'Read', 'ReadWrite')
@@ -174,7 +186,14 @@ finally {
 }
 
 # ---------- collect ----------
-if ($logPath) { Copy-Item -LiteralPath $logPath -Destination (Join-Path $run 'console.log') -Force; $text = Get-Content -LiteralPath $logPath -Raw }
+$found = & (Join-Path $here 'Find-RunLog.ps1') -SwitchPath $switchLog -ProfileLogDir $profileLogDir -Started $started -FallbackAfterSeconds 0
+if ($found) { $logPath = $found.Path; $logSource = $found.Source }
+$evidenceLog = $switchLog
+if ($logPath) {
+    if (Test-Path -LiteralPath $switchLog -PathType Container) { $evidenceLog = Join-Path $run 'console.game.log' }
+    if ($logPath -ne $evidenceLog) { Copy-Item -LiteralPath $logPath -Destination $evidenceLog -Force }
+    $text = Get-Content -LiteralPath $logPath -Raw
+}
 Copy-Item -LiteralPath (Join-Path $rigVt2 'user_settings.config') -Destination (Join-Path $run 'user_settings.after.config') -Force
 Get-ChildItem -LiteralPath (Join-Path $rigVt2 'crash_dumps') -ErrorAction SilentlyContinue | Where-Object { $_.LastWriteTime -ge $started } |
     ForEach-Object { $notes.Add("crash dump: $($_.Name) $($_.Length) bytes") }
@@ -197,12 +216,19 @@ foreach ($l in $lines) {
 $runEnd = [bool]($lines | Where-Object { $_ -match '^RUN END' })
 $scriptErrors = @([regex]::Matches($text, '(?m)^.*(\[Script Error\]|<<Script Error>>|Lua Stack).*$') | Select-Object -First 5 | ForEach-Object { $_.Value.Trim() })
 
-# default host_forbid_log of the backend write shield, and the shield timing (Read-HostLog.ps1, WP-H-14)
+# host_expect_log / host_forbid_log with their defaults (WP-H-02), the backend write shield defaults and timing
+# (WP-H-14), time to KEEP READY and load banners: all in Read-HostLog.ps1. No-plan experiments get none of the
+# defaults.
 $shieldOn = [bool]($planObj -and -not ($planObj.PSObject.Properties['backend_shield'] -and $planObj.backend_shield -eq $false))
-$hostLog = & (Join-Path $here 'Read-HostLog.ps1') -Text ([string]$text) -Nonce $nonce -ShieldOn:$shieldOn
+$hostArgs = @{ Text = [string]$text; Nonce = $nonce }
+if ($planObj) { $hostArgs.PlanFile = $planPath }
+$hostLog = & (Join-Path $here 'Read-HostLog.ps1') @hostArgs
 $forbidHits = @($hostLog.ForbidHits)
+$expectMisses = @($hostLog.ExpectMisses)
 $shieldFirst = $hostLog.ShieldInstalledBeforeFirstCommit
 foreach ($h in $forbidHits) { Write-Host "FORBIDDEN LOG LINE ($($h.rule)): $($h.line)" }
+foreach ($p in $expectMisses) { Write-Host "EXPECTED LOG LINE MISSING: $p" }
+foreach ($e in @($hostLog.AllowErrors)) { $notes.Add("host_allow_log: $e") }
 
 $exit = 2
 if ($isolation -ne 'OK') { $exit = 3 }
@@ -212,20 +238,27 @@ elseif ($planObj -and $runEnd -and $cases.Count -gt 0) {
     else { $exit = 0 }
 }
 elseif (-not $planObj) { $exit = 0 }
-if ($forbidHits.Count -and $exit -eq 0) { $exit = 1 }
+if (($forbidHits.Count -or $expectMisses.Count) -and $exit -ne 3) { $exit = 1 }
 $summary = [ordered]@{
     run = "$stamp-$Name-$nonce"; name = $Name; nonce = $nonce; verdict = $verdict; exit = $exit; isolation = $isolation
     private_desktop = (-not $Visible); renderer = $Renderer; arguments = $arguments; run_end_seen = $runEnd
-    backend_shield = [bool]$shieldOn; shield_installed_before_first_commit = $shieldFirst; host_forbid_hits = $forbidHits
+    keep_ready_seconds = $hostLog.KeepReadySeconds; keep_ready_driver_t = $hostLog.KeepReadyDriverT
+    backend_shield = [bool]$shieldOn; shield_installed_before_first_commit = $shieldFirst
+    host_forbid_hits = $forbidHits; host_expect_misses = $expectMisses; host_allowed = @($hostLog.Allowed)
+    loaded_versions = $hostLog.LoadedVersions
     marks_seconds = $marks; cases = $cases; script_errors = $scriptErrors; evidence_lines = $lines.Count
-    log = (Join-Path $run 'console.log'); notes = $notes
+    log = $evidenceLog; log_source = $logSource; notes = $notes
 }
 $summary | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath (Join-Path $run 'summary.json') -Encoding utf8
 $md = @("# Rig run $($summary.run)", '', "Verdict: $verdict | exit $exit | isolation $isolation | RUN END seen: $runEnd", '', '| Case | Verdict | Asserts | Failed | Seconds | Detail |', '|---|---|---|---|---|---|')
 foreach ($c in $cases) { $md += "| $($c.id) | $($c.verdict) | $($c.asserts) | $($c.failed) | $($c.seconds) | $($c.detail) |" }
 $md += ''
+$md += "KEEP READY after $($hostLog.KeepReadySeconds) s of log (driver t=$($hostLog.KeepReadyDriverT)) | log source: $logSource"
 $md += "Backend shield: $(if ($shieldOn) { 'on' } else { 'off' }) | installed before first commit: $shieldFirst"
 foreach ($h in $forbidHits) { $md += "Forbidden log line ($($h.rule)): ``$($h.line)``" }
+foreach ($p in $expectMisses) { $md += "Expected log line missing: ``$p``" }
+foreach ($a in @($hostLog.Allowed)) { $md += "Allowed log line ($($a.rule)): ``$($a.line)`` -- $($a.reason)" }
+if (@($hostLog.LoadedVersions.Keys).Count) { $md += "Load banners: $((@($hostLog.LoadedVersions.Keys) | ForEach-Object { "$_ $($hostLog.LoadedVersions[$_])" }) -join ', ')" }
 $md | Set-Content -LiteralPath (Join-Path $run 'summary.md') -Encoding utf8
 $summary | ConvertTo-Json -Depth 6
 exit $exit

@@ -1,0 +1,36 @@
+{
+  "schema": 1,
+  "issue": 347,
+  "class": "R",
+  "status": "draft",
+  "vp": null,
+  "arena": "unknown",
+  "mods": [
+    {
+      "dir": "general_tweaker_dev",
+      "min_version": "0.2.279-dev",
+      "settings": null
+    }
+  ],
+  "cases": [
+    {
+      "script": "",
+      "steps": [
+        "1. Host with one bot and enable **Bot Behavior Improvements**, **Bots instantly grab targeted items**, and **Bots collect items players leave behind**.",
+        "2. Stand beside an ordinary closed chest and arm the probe by typing `/gt_chest_pickup_probe` in chat. There is no menu option for this - the chat command is the only way to arm it, and an unarmed session produces no rows.",
+        "3. Wait about five seconds, open the chest normally, then wait another five seconds.",
+        "4. Run `/gt_regression_test`, exit normally, and attach every `[gt:347]` row from the newest log."
+      ],
+      "assertions": [
+        "The log opens with a `[gt:347] ARMED` row naming the record and classification caps and the state of both pickup toggles, then carries bounded phase rows across the before-open and after-open windows. The decisive fields are the availability census on each side of the open, plus `assigned`, `nav_result`, `can_loot`, chest-stop, and pickup-stop.",
+        "Harness: stand a bot beside a closed chest, arm /gt_chest_pickup_probe, open chest via interaction, parse [gt:347] availability census before and after."
+      ],
+      "pass_closes": true
+    }
+  ],
+  "source": {
+    "card_comment_id": 5165078202,
+    "card_date": "2026-08-03T10:15:28Z",
+    "ledger": "D5_ledger.tsv"
+  }
+}

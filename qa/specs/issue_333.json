@@ -1,0 +1,37 @@
+{
+  "schema": 1,
+  "issue": 333,
+  "class": "R",
+  "status": "draft",
+  "vp": null,
+  "arena": "unknown",
+  "mods": [
+    {
+      "dir": "general_tweaker_dev",
+      "min_version": "0.2.180",
+      "settings": null
+    }
+  ],
+  "cases": [
+    {
+      "script": "",
+      "steps": [
+        "1. Leave Twitch unlinked. In Mod Tweaker, enable **Offline Twitch Mode**, leave all four **Allow** categories on, and press **Apply** before loading a mission.",
+        "2. Start an ordinary Helmgart campaign mission with bots. Confirm the normal voting interface appears, its timer counts down, and a vote produces its chosen effect without linking an account.",
+        "3. Turn off **Allow buffs and effects** and press **Apply**. Let the current vote finish, then inspect several newly generated votes. Newly selected choices must not belong to that category.",
+        "4. Restore that category, then repeat separately for **Allow item giveaways**, **Allow mutators**, and **Allow enemy spawns**. Keep the other three categories on each time. Eligible choices from enabled categories should still work.",
+        "5. Return to the Keep. The mission vote interface should close without a crash or a persistent fake Twitch connection. Share the newest console log if anything fails; include which category and newly generated choice were involved."
+      ],
+      "assertions": [
+        "Native voting works offline, both choices and any package replacement obey the selected category filters, and mission-exit cleanup completes normally. Do not fail an already-running vote selected before a filter changed.",
+        "Harness: enable mode, disable one category, start mission, call TwitchGameMode:_get_next_vote 200 times; assert no template of the disabled category in either slot."
+      ],
+      "pass_closes": true
+    }
+  ],
+  "source": {
+    "card_comment_id": 6681741644,
+    "card_date": "2026-11-06T09:32:52Z",
+    "ledger": "D5_ledger.tsv"
+  }
+}

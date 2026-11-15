@@ -1,0 +1,38 @@
+{
+  "schema": 1,
+  "issue": 289,
+  "class": "R",
+  "status": "draft",
+  "vp": null,
+  "arena": "unknown",
+  "mods": [
+    {
+      "dir": "chaos_wastes_tweaker_dev",
+      "min_version": "0.7.354-beta",
+      "settings": null
+    }
+  ],
+  "cases": [
+    {
+      "script": "",
+      "steps": [
+        "1. In **Tweaker: Chaos Wastes**, enable **Progressive Modifier Stacking**. Under **Curses**, set **Cursed Mission Count** to 30. Under **Disabled Curses**, leave **Disable all listed curses**, **Disable: Slaanesh: Empathy**, and **Disable: Slaanesh: Unquenchable Thirst** off.",
+        "2. Start an ordinary solo pilgrimage. On the first and second maps, confirm each mission carries only its own displayed curse. There must be no extra shared-damage effect or slow health drain unless it is that mission's own curse.",
+        "3. From the third map onward, watch cursed missions for exactly one extra effect: **Empathy** shares damage with nearby allies, or **Unquenchable Thirst** slowly drains health and replaces healing supplies with potions. The extra must differ from the mission's own curse.",
+        "4. Confirm the map screen, curse panel, and end-of-mission rewards still describe only the mission's own curse. Visit a shrine and return to the map; neither must retain the extra mission effect.",
+        "5. On a separate fresh pilgrimage with **Progressive Modifier Stacking** off, confirm the added effect does not appear on later cursed missions.",
+        "6. Keep the bounded `[ct:289] stack` row from a later eligible mission, recording the map number, own curse and added effect. Run `/ct_regression_test`, exit normally, and attach the newest complete log."
+      ],
+      "assertions": [
+        "Maps 1-2 have no added modifier. From map 3, eligible cursed missions carry exactly one different extra from the two named Slaanesh effects. Map/curse/reward presentation stays unchanged, shrines and map transitions do not retain the extra, and the off control is native. `issue289_progressive_modifier_stack` and the full regression report pass.",
+        "Scripted run to map 3 with stacking on; read active mutators: node curse plus exactly one of empathy/abundance; maps 1-2 none; shrine none."
+      ],
+      "pass_closes": true
+    }
+  ],
+  "source": {
+    "card_comment_id": 6693561088,
+    "card_date": "2026-11-06T19:30:01Z",
+    "ledger": "D3_ledger.tsv"
+  }
+}

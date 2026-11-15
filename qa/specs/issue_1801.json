@@ -1,0 +1,38 @@
+{
+  "schema": 1,
+  "issue": 1801,
+  "class": "R",
+  "status": "draft",
+  "vp": null,
+  "arena": "unknown",
+  "mods": [
+    {
+      "dir": "general_tweaker_dev",
+      "min_version": "0.2.180",
+      "settings": null
+    }
+  ],
+  "cases": [
+    {
+      "script": "",
+      "steps": [
+        "1. Open Mod Tweaker > General > Cheats and Debug > Time Controls. Assign **Freeze world toggle** and **Normal speed** to unused keys, press **Apply**, and close the menu.",
+        "2. In the Keep, stand on level ground near a wall. Use the freeze key. Walk forward/back/sideways, look around, and walk into the wall.",
+        "3. Resume with the freeze key. Repeat twice. Try a slope, then verify normal movement after resuming.",
+        "4. In a solo mission, freeze with a visible enemy. In separate attempts, freeze an already-moving physics prop or ragdoll and an airborne projectile. Check that each stops while you can walk/look, then resumes normally. Record any control you could not set up rather than treating it as passed.",
+        "5. While frozen, open Mod Tweaker, then use the **Normal speed** key. Close and reopen the menu: confirm **Freeze world** is off and normal movement/gameplay returns.",
+        "6. Freeze again, then disable Tweaker: General through the mod controls while still frozen. Confirm normal world progression returns. Re-enable it and confirm it does not start frozen."
+      ],
+      "assertions": [
+        "non-player world progression stops, collision prevents walking through walls, and resume restores normal gameplay. This inspection driver keeps the player's pose/actions/jumping paused; do not expect combat or jump/dodge while frozen. Unsupported-state and late-join checks are separate follow-ups, not passes inferred from this solo card.",
+        "Harness: toggle freeze; world paused flag true and AI unit positions constant for 2 s; scripted move input changes player position; resume restores; issue1801_world_freeze_owner PASS."
+      ],
+      "pass_closes": true
+    }
+  ],
+  "source": {
+    "card_comment_id": 6595749764,
+    "card_date": "2026-11-03T04:51:08Z",
+    "ledger": "D5_ledger.tsv"
+  }
+}

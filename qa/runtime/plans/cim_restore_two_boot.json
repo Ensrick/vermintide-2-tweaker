@@ -1,0 +1,10 @@
+{
+  "name": "cim-restore-two-boot",
+  "note": "WP-CIM-04 (#1654). Needs two boots on ONE rig profile; run.ps1 does not support that yet (it rebuilds the profile from the owner copy each run). Until it does, boot 2 reports INCONCLUSIVE.",
+  "mods": ["1369573612", "3733366851"],
+  "timeout": 300,
+  "boots": [
+    { "cases": [ { "id": "cim-1654-craft-two-copies", "arena": "keep", "file": "../cim/issue_1654_craft_two_copies.lua" } ] },
+    { "cases": [ { "id": "cim-1654-both-restored", "arena": "keep", "file": "../cim/issue_1654_both_restored.lua" } ] }
+  ]
+}

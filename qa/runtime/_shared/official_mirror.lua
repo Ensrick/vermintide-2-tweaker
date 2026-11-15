@@ -12,13 +12,32 @@
 local OM = {}
 local function mirror() return Managers.backend:get_backend_mirror() end      -- backend_manager_playfab.lua:1222
 local function is_slot(key) return type(key) == "string" and key:sub(1, 5) == "slot_" end
+local COSMETIC_SLOTS = { slot_frame = true, slot_hat = true, slot_skin = true } -- CosmeticUtils.is_cosmetic_slot, cosmetic_utils.lua:77-81,104
 
--- true when `id` could not have come from the official account
-function OM.minted(id)
+-- Vanilla's broken-slot rule (playfab_mirror_base.lua:1600-1631): cosmetic slots hold item KEYS owned through
+-- _unlocked_cosmetics, slot_pose holds a pose KEY unlocked under its parent weapon, every other slot a backend id.
+local function not_owned(m, id, slot)
+    if COSMETIC_SLOTS[slot] then
+        local unlocked = m._unlocked_cosmetics
+        if type(unlocked) ~= "table" or not unlocked[id] then return "not in _unlocked_cosmetics" end
+    elseif slot == "slot_pose" then
+        local item = rawget(ItemMasterList, id)
+        if item == nil then return "unknown item key" end
+        local poses = type(m._unlocked_weapon_poses) == "table" and m._unlocked_weapon_poses[item.parent]
+        if not (poses and poses[id]) then return "pose not unlocked" end
+    elseif rawget(m._inventory_items, id) == nil then                              -- B4
+        return "not in _inventory_items"
+    end
+end
+
+-- true when `id` could not have come from the official account; `slot` picks the ownership rule (nil = backend id)
+function OM.minted(id, slot)
     if type(id) ~= "string" then return false end
-    local row = rawget(mirror()._inventory_items, id)                           -- B4
-    if row == nil then return true, "not in _inventory_items" end               -- vanilla's own broken-slot rule, playfab_mirror_base.lua:1617
-    local custom = type(row.CustomData) == "table" and row.CustomData
+    local m = mirror()
+    local why = not_owned(m, id, slot)
+    if why then return true, why end
+    local row = rawget(m._inventory_items, id)
+    local custom = row and type(row.CustomData) == "table" and row.CustomData
     if custom and custom.cim_provider ~= nil then return true, "cim row" end    -- _cim_synthetic_item_contract.lua:353
     if id:match("^cwv_.+_%d%d%d$") then return true, "cwv id" end               -- _gut_native_loadout_policy.lua:17-19
     for _, mod_id in ipairs({ "cim", "cim_dev" }) do
@@ -54,7 +73,7 @@ end
 function OM.baseline_clean()
     local clean = true
     walk(function(_, _, key, value, acked)
-        if is_slot(key) and (OM.minted(value) or value ~= acked) then clean = false end
+        if is_slot(key) and (OM.minted(value, key) or value ~= acked) then clean = false end
     end)
     return clean
 end
@@ -66,7 +85,7 @@ function OM.assert_clean(T, label, slots_only)
     walk(function(career, index, key, value, acked)
         local where = string.format("%s %s[%s].%s", label, career, tostring(index), key)
         if is_slot(key) then
-            local minted, why = OM.minted(value)
+            local minted, why = OM.minted(value, key)
             T.expect(not minted, "INV-A " .. where .. " holds a mod-minted id (" .. tostring(why) .. ")")
         end
         if is_slot(key) or not slots_only then

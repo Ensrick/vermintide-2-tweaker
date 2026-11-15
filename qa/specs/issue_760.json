@@ -1,0 +1,40 @@
+{
+  "schema": 1,
+  "issue": 760,
+  "class": "V",
+  "status": "draft",
+  "vp": null,
+  "arena": "unknown",
+  "mods": [
+    {
+      "dir": "character_weapon_variants",
+      "min_version": "0.1.570-dev",
+      "settings": null
+    }
+  ],
+  "cases": [
+    {
+      "script": "",
+      "steps": [
+        "1. In **Tweaker: Weapons Dev**, enable the **Outrider Grenade Launcher** for Witch Hunter Captain, Bounty Hunter, and Zealot. Equip it on each career.",
+        "2. For each of those three Saltzpyre careers, inspect the weapon in the inventory character preview and owner third person. Compare with Kruber using the Outrider Grenade Launcher: Saltzpyre should use the Repeater Pistol body stance; Kruber should keep the Blunderbuss stance.",
+        "3. In first and third person, fire, reload from partial and empty ammunition, block, bash, swap away and back, and transition from the Keep into a mission. Every action must remain functional and visually complete.",
+        "4. As controls, confirm Warrior Priest and a native Trollhammer remain unchanged.",
+        "5. Run `/cwv_regression_test`, exit normally, and attach the newest full log. Include every bounded `[cwv:760]` row and state the career/view/action for any visible mismatch."
+      ],
+      "assertions": [
+        "Witch Hunter Captain, Bounty Hunter, and Zealot use the Repeater Pistol body stance in preview and owner third person without changing the Outrider's first-person fire, reload, block, or bash behavior. Kruber, Warrior Priest, and native Trollhammer remain unchanged. `cwv_issue760_outrider_saltzpyre_repeater_stance` passes. `network_event_unavailable`, `unit_not_alive`, `dispatch_error`, a missing clip, or visibly wrong motion fails this gate. A solo pass advances the issue to a separate co-op remote-husk card.",
+        "Automatable part: on WHC, BH and Zealot 3P units assert has_animation_event to_repeater_pistol, the event is dispatched on wield and animation state changes; Kruber gets to_blunderbuss."
+      ],
+      "pass_closes": false
+    }
+  ],
+  "left_for_humans": [
+    "Witch Hunter Captain, Bounty Hunter, and Zealot use the Repeater Pistol body stance in preview and owner third person without changing the Outrider's first-person fire, reload, block, or bash behavior. Kruber, Warrior Priest, and native Trollhammer remain unchanged. `cwv_issue760_outrider_saltzpyre_repeater_stance` passes. `network_event_unavailable`, `unit_not_alive`, `dispatch_error`, a missing clip, or visibly wrong motion fails this gate. A solo pass advances the issue to a separate co-op remote-husk card."
+  ],
+  "source": {
+    "card_comment_id": 5749497549,
+    "card_date": "2026-09-20T11:25:45Z",
+    "ledger": "D1_ledger.tsv"
+  }
+}

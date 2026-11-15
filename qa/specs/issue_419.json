@@ -1,0 +1,37 @@
+{
+  "schema": 1,
+  "issue": 419,
+  "class": "R",
+  "status": "draft",
+  "vp": null,
+  "arena": "unknown",
+  "mods": [
+    {
+      "dir": "character_weapon_variants",
+      "min_version": "0.1.570-dev",
+      "settings": null
+    }
+  ],
+  "cases": [
+    {
+      "script": "",
+      "steps": [
+        "1. In Crafting in Modded's Athanor, craft a **Character Weapon Variants Poleaxe**.",
+        "2. Open that exact crafted Poleaxe in the illusion/customization browser. Confirm the preview shows the Poleaxe variant mesh at its normal proportions, not the donor/base weapon mesh stretched by the Poleaxe transform.",
+        "3. Open the same browser for a 5-power Blacksmith Poleaxe and then for one vanilla weapon as controls.",
+        "4. Reopen the crafted Poleaxe twice, scroll it out of view and back, and select one valid illusion.",
+        "5. Run `/cwv_regression_test` and `/cim_regression_test`. If any step fails, exit and attach the newest full log."
+      ],
+      "assertions": [
+        "The Athanor-crafted instance keeps the authored variant mesh before vanilla spawns the preview. The Blacksmith and vanilla controls remain correct, reopening does not revert the mesh, and the selected valid illusion remains authoritative. CWV reports `PASS: issue419_browser_prepass_precedes_vanilla_spawn` and `PASS: browser_meshswap_guards`; both regression commands finish without failure.",
+        "Drive LootItemUnitPreviewer.spawn_units with a stamped crafted item; capture spawned unit paths; assert variant mesh, not base; controls unchanged."
+      ],
+      "pass_closes": true
+    }
+  ],
+  "source": {
+    "card_comment_id": 5749466186,
+    "card_date": "2026-09-20T11:19:05Z",
+    "ledger": "D1_ledger.tsv"
+  }
+}

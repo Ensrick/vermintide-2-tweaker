@@ -1,0 +1,38 @@
+{
+  "schema": 1,
+  "issue": 277,
+  "class": "R",
+  "status": "draft",
+  "vp": null,
+  "arena": "unknown",
+  "mods": [
+    {
+      "dir": "crafting_in_modded_dev",
+      "min_version": "0.8.148",
+      "settings": null
+    }
+  ],
+  "cases": [
+    {
+      "script": "",
+      "steps": [
+        "1. Craft one CIM weapon, necklace, charm, and trinket, and keep ordinary non-CIM examples of the same kinds. Use **CRAFT MODDED ACCESSORIES** where that is the displayed accessory action.",
+        "2. Unequip every CIM craft from current and saved loadouts. Run `/forge_delete_all` and inspect its full on-screen preview. If no preview is visible, stop without confirming and report that limitation. Run `/forge_delete_all` with argument `CONFIRM` only if that entire deletion set is intended; record the preview and completion/refusal text or a screenshot. These messages are VMF echo output, not guaranteed raw log lines.",
+        "3. Restart the game. Confirm those CIM crafts stay absent while ordinary items remain.",
+        "4. Craft replacements, equip one CIM item, preview, and run `/forge_delete_all` with argument `CONFIRM`. The entire batch must be refused; nothing may be deleted.",
+        "5. Unequip it, preview again, craft one additional item, then confirm the old preview. The changed-set guard must refuse it before any deletion.",
+        "6. Run `/cim_regression_test` and record the visible summary, if shown."
+      ],
+      "assertions": [
+        "Cleanup includes exact CIM-owned weapons and accessories, excludes ordinary lookalikes, persists across restart, and refuses equipped or changed sets with no partial deletion. The exact-owner cleanup check passes.",
+        "Sandbox: craft weapon, necklace, charm, trinket; preview then CONFIRM; assert only CIM-owned ids leave mirror and forged store; equipped and stale-preview refusals; relaunch."
+      ],
+      "pass_closes": true
+    }
+  ],
+  "source": {
+    "card_comment_id": 6693557142,
+    "card_date": "2026-11-06T19:29:48Z",
+    "ledger": "D4_ledger.tsv"
+  }
+}
