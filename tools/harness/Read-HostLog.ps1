@@ -12,7 +12,8 @@
     "Failed to run callback" (:222).
   - Shield defaults while the shield is on (-ShieldOn, or a plan without backend_shield false): no
     "Enqueuing ExecuteCloudScript request updateHeroAttributes" line
-    (scripts/managers/backend_playfab/playfab_request_queue.lua:49) and no line naming UpdateUserData.
+    (scripts/managers/backend_playfab/playfab_request_queue.lua:49), no line naming UpdateUserData, and (WP-H-05) no
+    "Enqueuing ExecuteCloudScript request deusRunStarted" line (the driver drops that request; a run start sends it).
   - The plan's own host_forbid_log regexes (or -Forbid), on every line.
   Expected lines: every regex of the plan's host_expect_log (or -Expect) must match some line.
   host_allow_log (plan) / -Allow: entries { "pattern": <regex>, "reason": <text> }. A matching line is excused
@@ -69,6 +70,8 @@ if ($Defaults) {
 if ($shield) {
     $rules['shield: updateHeroAttributes request'] = $gameLine + '.*Enqueuing ExecuteCloudScript request\s+updateHeroAttributes\b.*$'
     $rules['shield: UpdateUserData request'] = $gameLine + '.*UpdateUserData.*$'
+    # WP-H-05: the driver drops deusRunStarted before it is enqueued, so the game's own enqueue line must never appear
+    $rules['shield: deusRunStarted request'] = $gameLine + '.*Enqueuing ExecuteCloudScript request\s+deusRunStarted\b.*$'
 }
 foreach ($pattern in $Forbid) { if ($pattern) { $rules["plan: $pattern"] = '(?m)^.*(?:' + $pattern + ').*$' } }
 

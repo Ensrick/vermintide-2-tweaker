@@ -9,170 +9,10 @@
 -- This proves the driver's control flow and evidence lines only. It does not prove that any engine call
 -- behaves like the stub: that is what rig runs are for.
 return function(H, repo_root)
-    local DRIVER = repo_root .. "/tools/harness/driver/vt2_rig_driver.lua"
-    local BOOTSTRAP = repo_root .. "/tools/harness/bootstrap/vt2_rig_driver.mod"
-    local NONCE = "0123abcd"
-
-    local function read(path)
-        local file = assert(io.open(path, "rb"))
-        local text = file:read("*a")
-        file:close()
-        return text
-    end
-
-    local function hex(text)
-        return (text:gsub(".", function(c)
-            return string.format("%02x", c:byte())
-        end))
-    end
-
-    -- A private global table for one simulated game: the bootstrap, the driver and the cases all run in it.
-    local function new_env(plan, opts)
-        opts = opts or {}
-        local env, lines, settings = {}, {}, { vt2_rig_plan = plan }
-        setmetatable(env, { __index = _G })
-        env._G = env
-        env.print = function(...)
-            local parts = {}
-            for i = 1, select("#", ...) do
-                parts[i] = tostring((select(i, ...)))
-            end
-            lines[#lines + 1] = table.concat(parts, "\t")
-        end
-        -- Lua 5.1 gives a loadstring chunk the thread's globals; keep compiled code inside the private table.
-        env.loadstring = function(source, name)
-            local chunk, err = loadstring(source, name)
-            if chunk then
-                setfenv(chunk, env)
-            end
-            return chunk, err
-        end
-        env.table = setmetatable({
-            clear = function(t)
-                for key in pairs(t) do
-                    t[key] = nil
-                end
-            end,
-        }, { __index = table })
-        env.MODDED_REALM = opts.modded_realm ~= false
-        env.Development = {
-            application_parameter = { ["vt2-test-run"] = opts.command_line_nonce or NONCE },
-            _hardcoded_dev_params = {},
-        }
-        env.GameSettingsDevelopment = {}
-        env.Application = {
-            user_setting = function(key)
-                return settings[key]
-            end,
-            set_user_setting = function(key, value)
-                settings[key] = value
-            end,
-            save_user_settings = function()
-                settings.saves = (settings.saves or 0) + 1
-            end,
-        }
-        local hero = { name = "stub hero unit" }
-        env.Unit = {
-            alive = function(unit)
-                return unit ~= nil and unit == hero
-            end,
-        }
-        env.Boot = { quit_game = false }
-        env.Managers = {
-            player = {
-                local_player = function()
-                    return { player_unit = hero }
-                end,
-                bots = function()
-                    return {}
-                end,
-            },
-            state = {
-                game_mode = {
-                    level_key = function()
-                        return "inn_level"
-                    end,
-                },
-            },
-            backend = opts.backend,
-        }
-        env.cjson = opts.cjson
-        return env, lines, settings
-    end
-
-    local function make_plan(cases, extra)
-        local plan = {
-            nonce = NONCE,
-            name = "offline",
-            timeout = 600,
-            settle = 1,
-            quit = true,
-            driver_hex = hex(read(DRIVER)),
-            cases = {},
-        }
-        for i, case in ipairs(cases) do
-            plan.cases[i] = { id = case.id, arena = case.arena or "keep", hex = hex(case.src) }
-        end
-        for key, value in pairs(extra or {}) do
-            plan[key] = value
-        end
-        return plan
-    end
-
-    local function boot(plan, opts)
-        local env, lines, settings = new_env(plan, opts)
-        local chunk = assert(loadfile(BOOTSTRAP))
-        setfenv(chunk, env)
-        local mod_data = chunk()
-        H.equal(type(mod_data.run), "function", "bootstrap returns a table with run()")
-        local ok, object = pcall(mod_data.run)
-        H.truthy(ok, "bootstrap run() raised: " .. tostring(object))
-        return object, env, lines, settings
-    end
-
-    local function callback(object, name, ...)
-        local cb = object[name]
-        if not cb then
-            return
-        end
-        local ok, err = pcall(cb, object, ...)
-        if not ok then
-            error("driver callback " .. name .. " raised; the game would disable its callbacks: " .. tostring(err), 2)
-        end
-    end
-
-    local function run_to_end(object, env, max_ticks)
-        callback(object, "on_game_state_changed", "enter", "StateTitleScreen")
-        callback(object, "update", 0.1)
-        callback(object, "on_game_state_changed", "enter", "StateIngame")
-        for _ = 1, max_ticks or 20000 do
-            callback(object, "update", 0.1)
-            if env.Boot.quit_game then
-                return true
-            end
-        end
-        return false
-    end
-
-    local function count(lines, pattern)
-        local n = 0
-        for _, line in ipairs(lines) do
-            if line:find(pattern) then
-                n = n + 1
-            end
-        end
-        return n
-    end
-
-    local function first(lines, pattern)
-        for _, line in ipairs(lines) do
-            if line:find(pattern) then
-                return line
-            end
-        end
-    end
-
-    local tag = "^%[vt2t:" .. NONCE .. "%] "
+    local E = assert(loadfile(repo_root .. "/qa/lua/tests/_rig_driver_env.lua"))()(H, repo_root)
+    local NONCE, tag = E.NONCE, E.tag
+    local read, hex, make_plan, boot, callback, run_to_end, count, first =
+        E.read, E.hex, E.make_plan, E.boot, E.callback, E.run_to_end, E.count, E.first
 
     local PASS_CASE = [[
 return {
@@ -781,9 +621,9 @@ end }
     end)
 
     H.test("rig arenas: an arena the driver cannot load ends its cases as INCONCLUSIVE", function()
-        local plan = make_plan({ { id = "deus-case", arena = "deus", src = "return { run = function(T) T.expect(true, 'x') end }" } })
+        local plan = make_plan({ { id = "coop-case", arena = "coop", src = "return { run = function(T) T.expect(true, 'x') end }" } })
         local lines = run_mission(plan)
-        H.truthy(first(lines, tag .. "CASE END id=deus%-case verdict=INCONCLUSIVE .*arena not supported by this driver: deus"), "INCONCLUSIVE names the arena")
+        H.truthy(first(lines, tag .. "CASE END id=coop%-case verdict=INCONCLUSIVE .*arena not supported by this driver: coop"), "INCONCLUSIVE names the arena")
         H.truthy(first(lines, tag .. "RUN END"), "run still ends")
     end)
 
@@ -807,5 +647,64 @@ end }
         H.equal(count(lines, tag .. "CASE END id=main%-ok verdict=PASS asserts=5 failed=0"), 1, "results returned in order")
         H.truthy(first(lines, tag .. "CASE END id=main%-err verdict=ERROR .*planted main error"), "an error in main is the case's ERROR")
         H.truthy(first(lines, tag .. "CASE END id=main%-require verdict=INCONCLUSIVE .*precondition inside main"), "a failed T.require in main stays INCONCLUSIVE")
+    end)
+
+    -- -----------------------------------------------------------------------------------------------------
+    -- WP-H-03: T.cmd runs a regression suite in the main update; the rows it echoes feed T.expect_rt.
+    -- The stub suite echoes rows the way every runner does ("  <VERDICT>: <check>[ -- <detail>]").
+    -- -----------------------------------------------------------------------------------------------------
+    local function boot_with_suite()
+        local calls = {}
+        local plan = make_plan({
+            { id = "rt-asserts", src = [[
+return { run = function(T)
+    local lines = T.cmd("gt_regression_test")
+    T.note("lines", #lines)
+    T.expect_rt("gt_dev", "gt_a")
+    T.expect_rt("gt_dev", "gt_b")
+    T.expect_rt("gt_dev", "gt_x")
+end }
+]] },
+            { id = "rt-skip", src = "return { run = function(T) T.expect_rt('gt_dev', 'gt_s') end }" },
+            { id = "rt-missing-suite", src = "return { run = function(T) T.expect_rt('ct_dev', 'ct_a') end }" },
+            { id = "rt-missing-check", src = "return { run = function(T) T.expect_rt('gt_dev', 'nope') end }" },
+        })
+        local object, env, lines = boot(plan)
+        local VMFMod = {}
+        for _, method in ipairs({ "echo", "info", "warning", "error", "debug" }) do
+            VMFMod[method] = function() end
+        end
+        env.VMFMod = VMFMod
+        local gt = setmetatable({ get_name = function() return "gt_dev" end }, { __index = VMFMod })
+        local vmf = {
+            run_command = function(name)
+                calls[#calls + 1] = { name = name, in_coroutine = coroutine.running() ~= nil }
+                gt:echo("=== gt regression_test (v%s) ===", "0.2.300-dev")
+                gt:echo("  PASS: %s", "gt_a")
+                gt:info("[regression] PASS %s", "gt_a")
+                gt:echo("  FAIL: %s -- %s", "gt_b", "expected 1, got 2")
+                gt:echo("  XPASS: %s -- %s", "gt_x", "open issue 9 no longer reproduces")
+                gt:echo("  SKIP: %s -- %s", "gt_s", "no mission")
+                gt:echo("=== %d passed, %d failed, %d skipped ===", 1, 2, 1)
+            end,
+            get_commands_list = function() return { { name = "gt_regression_test" } } end,
+        }
+        env.get_mod = function(name) return name == "VMF" and vmf or nil end
+        return object, env, lines, calls
+    end
+
+    H.test("rig T.cmd / T.expect_rt: the suite runs in the main update and its rows decide the asserts", function()
+        local object, env, lines, calls = boot_with_suite()
+        H.truthy(run_to_end(object, env), "run completed")
+        H.equal(#calls, 1, "the suite ran once")
+        H.equal(calls[1].in_coroutine, false, "VMF.run_command ran in the main update, not in the case coroutine")
+        H.truthy(first(lines, tag .. "OUT mod=gt_dev via=echo text=\"  FAIL: gt_b %-%- expected 1, got 2\""), "rows are printed as OUT lines for Parse-Sweep")
+        H.truthy(first(lines, tag .. "ASSERT id=rt%-asserts n=%d+ PASS label=\"rt gt_dev gt_a\" got=\"PASS\""), "PASS row passes")
+        H.truthy(first(lines, tag .. "ASSERT id=rt%-asserts n=%d+ FAIL label=\"rt gt_dev gt_b\" got=\"FAIL\" detail=\"expected 1, got 2\""), "FAIL row fails with its detail")
+        H.truthy(first(lines, tag .. "ASSERT id=rt%-asserts n=%d+ PASS label=\"rt gt_dev gt_x\" got=\"XPASS\""), "XPASS counts as passed")
+        H.truthy(first(lines, tag .. "CASE END id=rt%-asserts verdict=FAIL asserts=3 failed=1"), "the case FAILs on the FAIL row")
+        H.truthy(first(lines, tag .. "CASE END id=rt%-skip verdict=INCONCLUSIVE .*not skipped %(no mission%)"), "a SKIP row is INCONCLUSIVE")
+        H.truthy(first(lines, tag .. "CASE END id=rt%-missing%-suite verdict=INCONCLUSIVE .*regression suite of ct_dev ran earlier in this boot"), "a suite not run in this boot is INCONCLUSIVE")
+        H.truthy(first(lines, tag .. "CASE END id=rt%-missing%-check verdict=INCONCLUSIVE .*check nope reported by gt_dev"), "an unknown check is INCONCLUSIVE")
     end)
 end

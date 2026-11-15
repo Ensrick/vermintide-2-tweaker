@@ -14,10 +14,22 @@
 -- T.kill, T.teleport, T.invincible, T.end_level and T.return_to_keep; each case's helper changes are undone
 -- when it ends (run_cleanups). Engine calls that take a unit run in the main update through T.main, never inside
 -- the case coroutine (they fail there: "Attempting get_data with reference from another lua state").
+--
+-- 0.4.5 (WP-H-03): T.cmd runs the command in the main update; every "  <VERDICT>: <check>" row a regression
+-- suite echoes is kept per mod for T.expect_rt; tools/harness/Parse-Sweep.ps1 turns the OUT lines into sweep.json.
+--
+-- 0.4.6 (WP-H-06): helper groups under tools/harness/driver/lib/ travel in the plan (plan.libs) and add their
+-- helpers to every case's T (load_libs, install_libs); the first groups are T.set and the T.shot stub.
+-- tools/harness/API.md lists every helper.
+--
+-- 0.4.7 (WP-H-06 actor group): T.teleport takes { x, y, z } or a Vector3Box and builds the Vector3 in the main update.
+--
+-- 0.4.8 (WP-H-05): arenas "deus" (the Chaos Wastes hub) and "deus:<level_key>" (a run level, loaded from the hub);
+-- the backend write shield drops the run start's deusRunStarted request (SHIELD_DROP_REQUESTS).
 
 local plan, nonce = ...
 
-local DRIVER_VERSION = "0.4.4"
+local DRIVER_VERSION = "0.4.8"
 local driver = {}
 
 local function find_mod(name)
@@ -81,8 +93,10 @@ local S = {
 	main_jobs = {},
 	started_quit = false,
 	rt_capture = nil,
+	rt_results = {},
 	keep_ready = false,
 	shared = {},
+	libs = {},
 	om_snapshot = nil,
 	-- what the backend write shield did; T.shield() hands cases a copy
 	shield = {
@@ -96,8 +110,17 @@ local S = {
 		blocked_keep_decorations = 0,
 		saw_update_hero_attributes = 0,
 		saw_requests = 0,
+		blocked_requests = 0,
+		blocked_by_name = {},
 	},
 }
+
+-- WP-H-05: cloud scripts the shield never sends. deusRunStarted is enqueued by every Chaos Wastes run start
+-- (DeusMechanism._setup_run, Vermintide-2-Source-Code/scripts/managers/game_mode/mechanisms/deus_mechanism.lua:1213;
+-- BackendInterfaceDeusPlayFab.deus_run_started, scripts/managers/backend_playfab/backend_interface_deus_playfab.lua:
+-- 100-116) and resets the account's rolled-over run coins (the client predicts it: playfab_mirror_base.lua:2693-2695).
+-- A dropped request gets a negative id and no callback; its only caller ignores both.
+local SHIELD_DROP_REQUESTS = { deusRunStarted = true }
 
 -- The console log is written through a buffer, so the orchestrator cannot rely on it for liveness.
 -- A settings save is a real file write: it is the live progress channel.
@@ -212,6 +235,33 @@ local function load_shared()
 	end
 end
 
+-- WP-H-06: helper groups (tools/harness/driver/lib/*.lua, sent by New-RigProfile.ps1 -LibDir in file-name order)
+-- travel in the plan as hex text. Each chunk returns install(T, ctx); install_libs calls every one for each case
+-- after the driver's own helpers. A group that does not load is named in a LIB line and its helpers stay nil, so a
+-- case that calls one ends as ERROR.
+local function load_libs()
+	local list = plan.libs or {}
+
+	for i = 1, #list do
+		local entry = list[i]
+		local id = tostring(entry.id or ("lib" .. i))
+		local chunk, err = loadstring(entry.hex and unhex(entry.hex) or "", "=lib:" .. id)
+		local ok, install = false, err
+
+		if chunk then
+			ok, install = pcall(chunk)
+		end
+
+		if ok and type(install) == "function" then
+			S.libs[#S.libs + 1] = { id = id, install = install }
+
+			out("LIB id=%s ok=true", id)
+		else
+			out("LIB id=%s ok=false err=%s", id, q(ok and ("returned " .. type(install) .. ", not an install function") or install))
+		end
+	end
+end
+
 -- ---------------------------------------------------------------------------
 -- Engine helpers
 -- ---------------------------------------------------------------------------
@@ -251,14 +301,37 @@ end
 -- Vermintide-2-Source-Code/scripts/settings/level_settings.lua:50-57), so debug_load_level can return to it.
 local KEEP_LEVEL = "inn_level"
 
+-- WP-H-05 Chaos Wastes. The hub is morris_hub, whose LevelSettings.mechanism is "deus"
+-- (Vermintide-2-Source-Code/levels/honduras_dlcs/morris/level_settings_morris.lua:15-29), so loading it from the keep
+-- switches the mechanism (scripts/game_state/components/level_transition_handler.lua apply_defaults_to_level_data;
+-- scripts/managers/game_mode/game_mechanism_manager.lua:480-531). A run level ("deus:<level_key>", a key such as
+-- pat_mountain_wastes_path1, level_settings_morris.lua:93-142) is started from the hub: in the deus mechanism
+-- debug_load_level sets up a run on a debug seed for that level (mechanisms/deus_mechanism.lua:1002-1015, 1023-1052).
+local DEUS_HUB = "morris_hub"
+
 local function arena_level(arena)
 	if arena == "keep" then
 		return KEEP_LEVEL
+	elseif arena == "deus" then
+		return DEUS_HUB
 	end
 
-	local key = arena:match("^mission:(.+)$") or arena:match("^level:(.+)$")
+	local key = arena:match("^mission:(.+)$") or arena:match("^level:(.+)$") or arena:match("^deus:(.+)$")
 
 	return key
+end
+
+local function current_mechanism()
+	local mechanism = Managers.mechanism
+
+	return mechanism and mechanism.current_mechanism_name and mechanism:current_mechanism_name()
+end
+
+-- The level an arena must pass through first: a run level needs the deus mechanism, which only the hub switches to.
+local function arena_via(arena)
+	if arena:match("^deus:.+$") and current_mechanism() ~= "deus" then
+		return DEUS_HUB
+	end
 end
 
 -- Host-side level change (Vermintide-2-Source-Code/scripts/managers/game_mode/game_mechanism_manager.lua:880-892;
@@ -499,7 +572,8 @@ local function new_T(case)
 	end
 
 	-- Moves a unit that has a teleport_to locomotion (PlayerUnitLocomotionExtension.teleport_to,
-	-- default_player_unit/player_unit_locomotion_extension.lua:1005).
+	-- default_player_unit/player_unit_locomotion_extension.lua:1005). position: { x, y, z } or a Vector3Box (built into a
+	-- Vector3 inside the main update, like T.spawn's offset), or a Vector3 (it reaches the engine one update later).
 	function T.teleport(unit, position)
 		local moved = T.main(function ()
 			local locomotion = unit and ScriptUnit.has_extension(unit, "locomotion_system")
@@ -508,7 +582,22 @@ local function new_T(case)
 				return false
 			end
 
-			locomotion:teleport_to(position)
+			local target = position
+
+			if type(position) == "table" and position.unbox == nil then
+				target = Vector3(position[1] or position.x or 0, position[2] or position.y or 0, position[3] or position.z or 0)
+			else
+				-- a box (engine type, unbox method) gives its value; a plain Vector3 has no unbox and is used as it is
+				local unboxed, value = pcall(function ()
+					return position:unbox()
+				end)
+
+				if unboxed and value ~= nil then
+					target = value
+				end
+			end
+
+			locomotion:teleport_to(target)
 
 			return true
 		end)
@@ -578,24 +667,52 @@ local function new_T(case)
 		end, timeout or 240, "back in the keep")
 	end
 
-	-- Runs a mod chat command. Returns the lines the command printed through VMF echo/info/warning/error.
+	-- Runs a mod chat command in the main update (T.main: a regression suite's checks touch units) and returns the
+	-- lines the command printed through VMF echo/info/warning/error. Regression rows it prints ("  PASS: <check>")
+	-- are kept for T.expect_rt for the rest of the boot.
 	function T.cmd(name, ...)
 		local vmf = find_mod("VMF")
-		local lines = {}
 
 		T.require(vmf and vmf.run_command, "VMF.run_command available")
 
-		S.rt_capture = lines
+		local args = { n = select("#", ...), ... }
+		local lines, ok, err = T.main(function ()
+			local captured = {}
 
-		local ok, err = pcall(vmf.run_command, name, ...)
+			S.rt_capture = captured
 
-		S.rt_capture = nil
+			local ran, why = pcall(vmf.run_command, name, unpack(args, 1, args.n))
+
+			S.rt_capture = nil
+
+			return captured, ran, why
+		end)
 
 		if not ok then
 			record("ASSERT", false, "command /" .. tostring(name) .. " raised", " got=" .. q(err))
 		end
 
 		return lines
+	end
+
+	-- WP-H-03: a named in-mod regression check passed in this boot. Reads the rows that T.cmd captured from the
+	-- mod's /<mod>_regression_test (run it earlier in the boot, e.g. with qa/runtime/_rig/sweep_regression.lua).
+	-- PASS and XPASS pass; FAIL, XFAIL and BAD-SHAPE fail; SKIP or a missing suite or check is INCONCLUSIVE.
+	function T.expect_rt(mod_id, check_name)
+		local suite = S.rt_results[mod_id]
+
+		T.require(suite ~= nil, "regression suite of " .. tostring(mod_id) .. " ran earlier in this boot")
+
+		local row = suite[check_name]
+
+		T.require(row ~= nil, "check " .. tostring(check_name) .. " reported by " .. tostring(mod_id))
+		T.require(row.verdict ~= "SKIP", "check " .. tostring(check_name) .. " not skipped (" .. tostring(row.detail) .. ")")
+
+		local ok = row.verdict == "PASS" or row.verdict == "XPASS"
+
+		record("ASSERT", ok, "rt " .. tostring(mod_id) .. " " .. tostring(check_name), " got=" .. q(row.verdict) .. (row.detail ~= "" and (" detail=" .. q(row.detail)) or ""))
+
+		return ok
 	end
 
 	-- A copy of what the backend write shield did so far (counts only; see install_shield).
@@ -630,6 +747,31 @@ local function new_T(case)
 		return names
 	end
 
+	-- WP-H-06 helper groups. ctx is all a group gets from the driver: the case (its id and cleanups list), the
+	-- evidence printers and the engine readers above. A group that raises while installing is named and skipped.
+	local ctx = {
+		case = case,
+		record = record,
+		out = out,
+		q = q,
+		now = function ()
+			return S.t
+		end,
+		find_mod = find_mod,
+		local_player = local_player,
+		local_hero = local_hero,
+		level_key = level_key,
+	}
+
+	for i = 1, #S.libs do
+		local lib = S.libs[i]
+		local ok, err = pcall(lib.install, T, ctx)
+
+		if not ok then
+			out("LIB ERROR id=%s case=%s err=%s", lib.id, case.id, q(err))
+		end
+	end
+
 	return T
 end
 
@@ -660,6 +802,17 @@ local function install_capture()
 					capture[#capture + 1] = text
 
 					out("OUT mod=%s via=%s text=%s", name, method, q(text))
+
+					-- WP-H-03: the row every runner echoes, "  <VERDICT>: <check>[ -- <detail>]"
+					-- (e.g. weapon_tweaker/scripts/mods/weapon_tweaker/_wt_regression.lua, chat command body)
+					local verdict, check, rest = text:match("^%s*(%u[%u%-]*): (%S+)(.*)$")
+
+					if method == "echo" and (verdict == "PASS" or verdict == "FAIL" or verdict == "SKIP" or verdict == "XFAIL" or verdict == "XPASS" or verdict == "BAD-SHAPE") then
+						local suite = S.rt_results[name] or {}
+
+						S.rt_results[name] = suite
+						suite[check] = { verdict = verdict, detail = (rest:gsub("^%s*%-%-%s*", "")) }
+					end
 				end
 
 				return original(self, message, ...)
@@ -1030,6 +1183,17 @@ local function install_shield()
 		-- function name of every other cloud-script request the game builds
 		-- (the game itself logs "Enqueuing ExecuteCloudScript request" at playfab_request_queue.lua:49).
 		rawset(queue, "enqueue", function (self, request, ...)
+			local drop = type(request) == "table" and SHIELD_DROP_REQUESTS[request.FunctionName]
+
+			if drop then
+				S.shield.blocked_requests = S.shield.blocked_requests + 1
+				S.shield.blocked_by_name[request.FunctionName] = (S.shield.blocked_by_name[request.FunctionName] or 0) + 1
+
+				out("SHIELD blocked=%s case=%s", tostring(request.FunctionName), S.current and S.current.id or "-")
+
+				return -S.shield.blocked_requests
+			end
+
 			pcall(function ()
 				local name = type(request) == "table" and request.FunctionName
 
@@ -1147,10 +1311,19 @@ local function begin_arena(index)
 		return
 	end
 
+	local via = arena_via(arena)
+
+	S.then_level = nil
+
+	if via and via ~= level_key() then
+		S.then_level = wanted_level
+		wanted_level = via
+	end
+
 	if wanted_level == level_key() then
 		set_phase("SETTLE")
 	else
-		out("LOAD arena=%s level=%s from=%s", arena, tostring(wanted_level), tostring(level_key()))
+		out("LOAD arena=%s level=%s from=%s%s", arena, tostring(wanted_level), tostring(level_key()), S.then_level and (" then=" .. S.then_level) or "")
 
 		local ok, err = pcall(load_level, wanted_level)
 
@@ -1225,7 +1398,35 @@ driver.update = function (_, dt)
 		elseif world_ready() and level_key() == S.wanted_level and S.t - S.phase_at > 3 then
 			install_shield()
 			out("LEVEL READY level=%s t=%.1f load_seconds=%.1f", tostring(level_key()), S.t, S.t - S.phase_at)
-			set_phase("SETTLE")
+
+			-- WP-H-05: the hub was only the way in; now load the run level from it
+			local next_level = S.then_level
+
+			if next_level then
+				S.then_level = nil
+				S.wanted_level = next_level
+				out("LOAD arena=%s level=%s from=%s mechanism=%s", tostring(S.arenas[S.arena_index]), next_level, tostring(level_key()), tostring(current_mechanism()))
+
+				local ok, err = pcall(load_level, next_level)
+
+				if ok then
+					set_phase("LOADING")
+				else
+					out("LOAD FAILED arena=%s err=%s", tostring(S.arenas[S.arena_index]), q(err))
+
+					local arena = S.arenas[S.arena_index]
+
+					for i = 1, #S.cases do
+						if S.cases[i].status == "PENDING" and S.cases[i].arena == arena then
+							finish_case(S.cases[i], "INCONCLUSIVE", "level load raised: " .. tostring(err))
+						end
+					end
+
+					begin_arena(S.arena_index + 1)
+				end
+			else
+				set_phase("SETTLE")
+			end
 		end
 	elseif S.phase == "SETTLE" then
 		if not world_ready() then
@@ -1266,6 +1467,7 @@ load_cases()
 
 out("RUN BEGIN driver=%s plan=%s cases=%d arenas=%s realm=modded", DRIVER_VERSION, q(plan.name or "?"), #S.cases, q(table.concat(S.arenas, ",")))
 load_shared()
+load_libs()
 
 local ok_pid, pid = pcall(function ()
 	return Application.process_id and Application.process_id()
