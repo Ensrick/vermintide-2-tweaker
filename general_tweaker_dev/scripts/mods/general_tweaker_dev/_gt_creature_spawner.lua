@@ -10,8 +10,7 @@ local mod = get_mod("gt_dev")
 -- update_client on clients), so a CLIENT sends a schema-tagged VMF request
 -- (`gt_cs_request`) that the host executes; the host acks the result back over
 -- `gt_cs_ack` (#693). Schema constant `mod.GT_CS_RPC_SCHEMA` lives in main.
--- Extracted verbatim from the main file (Phase 4); pure reorganization, no
--- behavior change. All identifiers are namespaced `_gt_cs_*` / `gt_cs_*`.
+-- Extracted verbatim from main (Phase 4). Identifiers: `_gt_cs_*` / `gt_cs_*`.
 --
 -- Coupling with the main file (resolved at call time — this module dofiles
 -- AFTER the main chunk):
@@ -952,6 +951,7 @@ mod:network_register(_GT_CS_RPC, function(sender_peer_id, schema, verb, breed_na
     end
     local pm = Managers.player
     if not (pm and pm.is_server) then return end
+    if mod._gt_host_request_refused("spawn", sender_peer_id) then _gt_cs_ack(sender_peer_id, "The host has client requests turned off."); return end  -- WP-GT-01
     local conflict_director = Managers.state and Managers.state.conflict
     if not conflict_director then return end
     verb = tostring(verb)
