@@ -338,6 +338,9 @@ function M.install(mod, deps)
             mod:error("create_equipment CRASHED: weapon=%s slot=%s career=%s is_bot=%s rhu=%s has_override=%s err=%s",
                 tostring(weapon_key), tostring(slot_name), tostring(career_name),
                 tostring(is_bot), tostring(right_unit), has_override, tostring(result))
+            if mod._wt and mod._wt.note_swallowed then
+                mod._wt.note_swallowed("create_equipment", tostring(weapon_key) .. ": " .. tostring(result))
+            end
             return {}
         end
         if result and item_data then
