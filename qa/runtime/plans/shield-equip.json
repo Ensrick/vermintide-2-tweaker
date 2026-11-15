@@ -1,0 +1,8 @@
+{
+  "name": "shield-equip",
+  "mods": ["1369573612"],
+  "timeout": 300,
+  "cases": [
+    { "id": "shield-equip", "arena": "keep", "file": "../_rig/shield_equip.lua" }
+  ]
+}
