@@ -1,5 +1,12 @@
 # Weapon Tweaker Changelog
 
+## 0.12.348-dev (2026-11-15) -- Mirror sibling guard (WP-WT-03) [not-started]
+
+- Mirror public 0.12.347-beta: the shared guard turns public Weapon Tweaker
+  off when both streams are enabled. Dev itself never yields.
+- Runtime parity, Dev namespace and the friends-only overlay are unchanged.
+  No in-game acceptance is claimed.
+
 ## 0.12.347-dev (2026-11-15) -- Mirror funnel table exports (WP-WT-04) [not-started]
 
 - Mirror public 0.12.346-beta: export `anim_redirect`, `career_anim_redirect`,
