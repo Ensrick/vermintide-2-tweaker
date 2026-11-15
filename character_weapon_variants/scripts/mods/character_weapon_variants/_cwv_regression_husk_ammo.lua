@@ -386,6 +386,14 @@ _rt_register("issue1320_outrider_projectile_unit_and_wire", function()
 	if rawget(nl.item_template_names, def.template) ~= state.lookup_index then
 		return "#1320 item_template_names id drifted from its captured reservation"
 	end
+	-- (5) A2-F01: a fired projectile's own lookup copy leaves with the donor's
+	-- vanilla name, so a peer without this lookup tail can decode the shot.
+	local probe = { action_lookup_data = { item_template_name = def.template,
+		action_name = "action_one", sub_action_name = "default" } }
+	wire_lib.sanitize_projectile_lookup(probe)
+	if probe.action_lookup_data.item_template_name ~= "dr_deus_01_template_1" then
+		return "#1320 the projectile wire name is not the vanilla dr_deus_01_template_1"
+	end
 end)
 
 _rt_register("issue296_tuskgor_javelin_recovery_transaction", function()
