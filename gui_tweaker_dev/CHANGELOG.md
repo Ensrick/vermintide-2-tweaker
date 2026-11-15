@@ -1,5 +1,19 @@
 # Tweaker: GUI dev — Changelog
 
+## 0.2.370-dev (2026-11-14) -- Keep unresolved stored gear ids at exit edges (WP-GUT-01)
+
+- The exit snapshot no longer replaces a stored gear id that does not resolve
+  right now. Its live read for such a slot is the official fallback, which used
+  to overwrite the stored id in the selected row of every career after one
+  session with the providing mod disabled (A7-F01; advances #354, #353, #375).
+  Gear slots only; cosmetics, the read-only overlay and nil live values are
+  unchanged.
+- The pure core takes an optional protector and reports a skip count; the
+  final `[gut:persist]` line adds `skipped_unresolved=<n>`. The rig seam
+  `mod._gut_exit_snapshot` runs the snapshot for the rig case
+  `qa/runtime/gut/issue_354_exit_snapshot_keeps_unresolved_id.lua`.
+- Offline unit coverage only; no in-game acceptance yet.
+
 ## 0.2.369-dev (2026-11-02) -- Preserve third-person state after free camera (#1796)
 
 - Consume the saved third-person state exactly once when free camera releases
