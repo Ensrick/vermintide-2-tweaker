@@ -1,5 +1,14 @@
 # Weapon Tweaker Changelog
 
+## 0.12.345-dev (2026-11-14) -- Mirror native restore on disable (WP-WT-01) [not-started]
+
+- Mirror public 0.12.344-beta: disabling returns every managed weapon to its
+  vanilla owners (native careers restored, cross-career additions removed),
+  nothing is re-applied while disabled, and re-enabling re-applies the saved
+  settings. The peer parity beacon keeps ticking while disabled.
+- Runtime parity, Dev namespace and the friends-only overlay are unchanged.
+  No in-game acceptance is claimed.
+
 ## 0.12.344-dev (2026-11-12) -- Mirror reissued Flame Sword capture (#942) [not-started]
 
 - Mirror public 0.12.343-beta's version-only reissue under the fresh permanent
