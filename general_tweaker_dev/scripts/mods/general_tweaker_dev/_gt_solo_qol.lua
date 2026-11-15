@@ -366,8 +366,7 @@ mod:hook("EnemyRecycler", "update", function (func, self, t, dt, player_position
             -- WorldManager.world() FASSERTS on a missing world (world_manager.lua:111-115);
             -- probe has_world first (#459 sweep). Nothing follows this block in the
             -- pcall'd closure, so the bare return skips only the sphere draw.
-            local wm = Managers.world
-            local world = wm and wm:has_world("level_world") and wm:world("level_world")
+            local world = mod._gt_world.live()
             if not world then return end
             if mod._gt_solo_line_world ~= world then
                 mod._gt_solo_line_object = nil
