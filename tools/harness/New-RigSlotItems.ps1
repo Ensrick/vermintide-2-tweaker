@@ -10,7 +10,8 @@
     item_preview.png  a 1x1 placeholder image
     content\          the bootstrap item's bundles (Workshop folder 3839345856) plus slot-item\vt2_rig_slot.mod
   and prints the two commands that create and install the item, the procedure proven for the bootstrap:
-    ugc_tool.exe -c <item.cfg> -x                         (creates the private item; writes published_id into item.cfg)
+    ugc_tool.exe -c <item.cfg> -x                         (creates the private item; answer the modding-EULA prompt
+                                                          with y, which Invoke-UgcTool.ps1 does for -Publish)
     pwsh -File tools/harness/steam-ugc.ps1 -ItemId <id>   (subscribes and installs it through the game's steam_api64)
   -Publish runs both and prints the slots.psd1 line to record. The items carry placeholder content only: no
   mod content is uploaded, and an item is never made public or friends-visible.
@@ -53,14 +54,14 @@ foreach ($s in @((Import-PowerShellDataFile -LiteralPath $SlotsFile).Slots)) {
     Write-Host "  create:    & `"$UgcTool`" -c `"$cfgPath`" -x   (working directory $dir)"
     Write-Host "  subscribe: pwsh -NoProfile -File tools/harness/steam-ugc.ps1 -ItemId <published_id from item.cfg>"
     if (-not $Publish) { continue }
-    if (-not $idMatch.Success) {
+    if ($idMatch.Success) { $id = $idMatch.Groups[1].Value }
+    else {
         if (-not (Test-Path -LiteralPath $UgcTool -PathType Leaf)) { throw "ugc_tool not found: $UgcTool" }
-        Push-Location -LiteralPath $dir
-        try { & $UgcTool -c $cfgPath -x; $code = $LASTEXITCODE } finally { Pop-Location }
-        $idMatch = [regex]::Match([System.IO.File]::ReadAllText($cfgPath), '(?m)^published_id = (\d+)L;')
-        if ($code -ne 0 -or -not $idMatch.Success) { throw "slot $($s.Slot): ugc_tool exit $code, no published_id in $cfgPath" }
+        # Invoke-UgcTool.ps1 answers the modding-EULA prompt with 'y' the way VMB does; without it the tool exits 1
+        $r = & (Join-Path $PSScriptRoot 'Invoke-UgcTool.ps1') -UgcTool $UgcTool -Config $cfgPath -WorkingDirectory $dir
+        if ($r.ExitCode -ne 0 -or -not $r.PublishedId) { throw "slot $($s.Slot): ugc_tool exit $($r.ExitCode), EULA answered: $($r.Answered), no published id" }
+        $id = $r.PublishedId
     }
-    $id = $idMatch.Groups[1].Value
     & (Get-Process -Id $PID).Path -NoProfile -File (Join-Path $PSScriptRoot 'steam-ugc.ps1') -ItemId $id
     if ($LASTEXITCODE -ne 0) { throw "slot $($s.Slot): steam-ugc.ps1 -ItemId $id exit $LASTEXITCODE" }
     Write-Host "  record in slots.psd1:  @{ Slot = $($s.Slot); Id = '$id'; Title = '$($s.Title)' }"

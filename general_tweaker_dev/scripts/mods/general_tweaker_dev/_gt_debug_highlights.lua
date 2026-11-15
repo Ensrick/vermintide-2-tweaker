@@ -270,9 +270,7 @@ end
 -- WorldManager.world() FASSERTS on a missing world (world_manager.lua:111-115);
 -- probe has_world first (#459).
 local function _world()
-    local wm = Managers.world
-    if not (wm and wm:has_world("level_world")) then return nil end
-    return wm:world("level_world")
+    return mod._gt_world.live()
 end
 
 -- Lazily create (and cache) the screen gui, deferring creation until GUI_MTRL is
@@ -302,9 +300,7 @@ local function _destroy_gui()
     local gui = mod._gt_dh_gui
     local w   = mod._gt_dh_gui_world
     if gui and w then
-        local wm   = Managers.world
-        local live = wm and wm:has_world("level_world") and wm:world("level_world")
-        if live == w then
+        if mod._gt_world.is_live(w) then
             pcall(World.destroy_gui, w, gui)
         else
             _pf("[gt:459:DH] skipped screen-gui destroy - cached world is dead")
