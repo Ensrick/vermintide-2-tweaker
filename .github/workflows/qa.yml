@@ -6,6 +6,11 @@ on:
   pull_request:
     branches: [master, main]
   workflow_dispatch:
+  # WP-P-06: nightly complete run. Pull requests and pushes scope three
+  # pipeline-tooling suites to the change; schedule and manual dispatch pass
+  # -Full so every suite still runs at least once a day.
+  schedule:
+    - cron: '41 9 * * *'
 
 permissions:
   contents: read
@@ -16,7 +21,9 @@ permissions:
   issues: read
 
 concurrency:
-  group: qa-${{ github.workflow }}-${{ github.ref }}
+  # The event is part of the group so the nightly run on master and a push run
+  # on master never cancel each other (a ship needs a green run on its commit).
+  group: qa-${{ github.workflow }}-${{ github.event_name }}-${{ github.ref }}
   cancel-in-progress: true
 
 # CI is the SAME gate as local: it runs qa/run_all.ps1 (the full Standard /
@@ -70,18 +77,6 @@ jobs:
           # dir@version pair, then scope suffix permission to one gate at a time.
           ./qa/check_promotion_authorization.ps1 -ValidateAuthorizedEnvironment -ChangedPath $changed
 
-      - name: Windows PowerShell 5.1 - promotion self-test
-        shell: powershell
-        run: ./qa/check_promotion.ps1 -SelfTest
-
-      - name: Windows PowerShell 5.1 - release pipeline self-test
-        shell: powershell
-        run: ./tools/ship/ship.ps1 -SelfTest
-
-      - name: Windows PowerShell 5.1 - QA compatibility matrix
-        shell: powershell
-        run: ./qa/check_ps51_compatibility.ps1 -SelfTest
-
       - name: Validate PR issue-closure references
         if: github.event_name == 'pull_request'
         shell: pwsh
@@ -100,7 +95,15 @@ jobs:
           # Read-only metadata lets run_all validate an explicitly authorized
           # closure receipt; ordinary PRs use Refs and make no API call.
           GH_TOKEN: ${{ github.token }}
-        run: ./qa/run_all.ps1
+        # WP-P-06: -Full on the nightly schedule and on manual dispatch; pull
+        # requests and pushes scope the pipeline-tooling suites to the change.
+        run: |
+          if ($env:GITHUB_EVENT_NAME -ceq 'schedule' -or $env:GITHUB_EVENT_NAME -ceq 'workflow_dispatch') {
+            ./qa/run_all.ps1 -Full
+          } else {
+            ./qa/run_all.ps1
+          }
+          exit $LASTEXITCODE
         # Exits non-zero only when a Standard-policy check hits exit >=2 or a
         # Blocking-policy check hits any non-zero. Advisory checks (luacheck,
         # stale-docs, loc-tags, issue-label sync, in-progress) never fail this

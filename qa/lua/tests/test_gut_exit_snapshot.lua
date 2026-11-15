@@ -160,6 +160,96 @@ return function(H, repo_root)
         H.equal(merged_rows.es_mercenary, nil)
     end)
 
+    -- WP-GUT-01 (A7-F01): at an exit edge the live gear value for an unresolved stored id is
+    -- already the official fallback, so the reconcile must be able to protect the stored id.
+    -- Every case below runs against each listed tree's pure core (the stable tree joins this
+    -- list in the WP-GUT-01 stable pull request).
+    local cores = {
+        { name = "gui_tweaker_dev", core = Core },
+    }
+
+    local function protect_case_inputs()
+        local store = { es_mercenary = { selected_index = 1, loadouts = {
+            { slot_melee = "X_modded", slot_ranged = "R1", slot_necklace = "N_modded" },
+        } } }
+        local live_by_career = { es_mercenary = {
+            slot_melee = "O_official", slot_ranged = "R2", slot_necklace = "O_neck",
+        } }
+        return store, live_by_career
+    end
+
+    H.test("exit-snapshot keeps a stored gear id that does not resolve", function()
+        local protect = function(career, slot, stored_value)
+            return stored_value == "X_modded" or stored_value == "N_modded"
+        end
+        for i = 1, #cores do
+            local store, live_by_career = protect_case_inputs()
+            local total, merged_rows, per_career, skipped =
+                cores[i].core.reconcile_selected(live_by_career, store, SLOTS, protect)
+            local label = " (" .. cores[i].name .. ")"
+            H.equal(total, 1, "only the resolvable slot diverges" .. label)
+            local row = merged_rows.es_mercenary
+            H.truthy(row, "the career with a resolvable change produces a merged row" .. label)
+            H.equal(row and row.slot_melee, "X_modded", "unresolved stored melee id kept" .. label)
+            H.equal(row and row.slot_necklace, "N_modded", "unresolved stored necklace id kept" .. label)
+            H.equal(row and row.slot_ranged, "R2", "resolvable live value still reconciled" .. label)
+            H.equal(per_career.es_mercenary, 1, label)
+            H.equal(skipped, 2, "protected slots are counted" .. label)
+            H.equal(store.es_mercenary.loadouts[1].slot_melee, "X_modded", "store input not mutated" .. label)
+        end
+    end)
+
+    H.test("exit-snapshot reconcile without a protector behaves as before", function()
+        for i = 1, #cores do
+            local store, live_by_career = protect_case_inputs()
+            local total, merged_rows, per_career, skipped =
+                cores[i].core.reconcile_selected(live_by_career, store, SLOTS)
+            local label = " (" .. cores[i].name .. ")"
+            H.equal(total, 3, "every differing live value diverges without a protector" .. label)
+            H.equal(merged_rows.es_mercenary.slot_melee, "O_official", label)
+            H.equal(merged_rows.es_mercenary.slot_necklace, "O_neck", label)
+            H.equal(merged_rows.es_mercenary.slot_ranged, "R2", label)
+            H.equal(per_career.es_mercenary, 3, label)
+            H.equal(skipped, 0, "nothing is skipped without a protector" .. label)
+        end
+    end)
+
+    H.test("exit-snapshot protector never blocks filling a nil stored slot", function()
+        local asked = {}
+        local protect = function(career, slot, stored_value)
+            asked[#asked + 1] = slot
+            return true
+        end
+        for i = 1, #cores do
+            asked = {}
+            local store = { es_mercenary = { selected_index = 1, loadouts = { { slot_ranged = "R1" } } } }
+            local live_by_career = { es_mercenary = { slot_melee = "O_official", slot_ranged = "R2" } }
+            local total, merged_rows, _, skipped =
+                cores[i].core.reconcile_selected(live_by_career, store, SLOTS, protect)
+            local label = " (" .. cores[i].name .. ")"
+            H.equal(total, 1, "a nil stored slot is filled from live" .. label)
+            H.equal(merged_rows.es_mercenary.slot_melee, "O_official", label)
+            H.equal(merged_rows.es_mercenary.slot_ranged, "R1", "protected stored slot kept" .. label)
+            H.equal(skipped, 1, label)
+            H.equal(#asked, 1, "the protector is asked only about a non-nil stored value" .. label)
+            H.equal(asked[1], "slot_ranged", label)
+        end
+    end)
+
+    H.test("exit-snapshot callers pass the unresolved-gear protector", function()
+        for _, tree in ipairs({ "gui_tweaker_dev" }) do
+            local path = repo_root .. "/" .. tree .. "/scripts/mods/" .. tree .. "/_gut_native_loadouts.lua"
+            local f = assert(io.open(path, "rb"))
+            local src = f:read("*a")
+            f:close()
+            H.equal(src:find("reconcile_selected%(live_by_career, store, LOADOUT_SLOT_NAMES%)\r?\n"), nil,
+                tree .. ": the old three-argument reconcile call is still present")
+            H.truthy(src:find("function(_, slot, value) return GEAR_SLOT_SET[slot] and _resolve_item_raw(value) ~= RESOLVE_YES end)", 1, true),
+                tree .. ": the unresolved-gear protector is not passed to reconcile_selected")
+            H.truthy(src:find("skipped_unresolved=%d", 1, true), tree .. ": bounded skip diagnostic missing")
+        end
+    end)
+
     H.test("exit-snapshot is wired into the native-loadout store + the entry-point exit edges", function()
         local runtime_path = repo_root
             .. "/gui_tweaker_dev/scripts/mods/gui_tweaker_dev/_gut_native_loadouts.lua"
@@ -168,7 +258,7 @@ return function(H, repo_root)
         f:close()
         H.truthy(src:find("function M.exit_snapshot(edge_name)", 1, true),
             "exit_snapshot entry not defined on the store module")
-        H.truthy(src:find("ExitSnapshotCore.reconcile_selected(live_by_career, store, LOADOUT_SLOT_NAMES)", 1, true),
+        H.truthy(src:find("ExitSnapshotCore.reconcile_selected(live_by_career, store, LOADOUT_SLOT_NAMES,", 1, true),
             "STORE reconcile does not go through the pure core")
         local owner_gate = assert(src:find("if not _slot_owned_by_items(slot_name) then", 1, true))
         local backend_read = assert(src:find("BU.get_loadout_item", owner_gate, true))

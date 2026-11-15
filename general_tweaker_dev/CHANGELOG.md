@@ -1,5 +1,16 @@
 # General Tweaker Changelog
 
+## 0.2.280-dev (2026-11-14) -- Host opt-in for client-requested host actions (WP-GT-01)
+
+- Any peer running this mod could make the host win, fail or restart the
+  level, respawn them, honour their godmode, or spawn or clear enemies
+  (audit finding A6-F01). The host now refuses all of these unless it ticks
+  the new option "Allow Client Requests" (off by default). A refusal logs
+  `[gt:host-request] refused kind=... peer=... reason=...` once per peer.
+- The level-control and respawn requests now carry a schema number, so a
+  request from an older build is refused instead of acted on. The host's own
+  commands and keybinds are unchanged. Not confirmed in game.
+
 ## 0.2.279-dev (2026-11-05) -- Close Twitch second-choice filter bypass (#333) [verify-fix]
 
 - The native standard-vote selector did not ask the whitelist about candidate B

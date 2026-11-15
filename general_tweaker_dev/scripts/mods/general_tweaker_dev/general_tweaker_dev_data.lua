@@ -1141,6 +1141,13 @@ local _data = {
                         },
                     },
                     -- Loose options, A->Z by display label:
+                    -- "Allow Client Requests" (WP-GT-01; host opt-in, off by default)
+                    {
+                        setting_id    = "gt_host_allow_client_requests",
+                        type          = "checkbox",
+                        default_value = false,
+                        tooltip       = "gt_host_allow_client_requests_tooltip",
+                    },
                     -- "Allow Duplicate Careers"
                     {
                         setting_id    = "allow_duplicate_careers",

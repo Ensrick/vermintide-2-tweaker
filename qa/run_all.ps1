@@ -127,7 +127,12 @@ function Write-Summary {
 # lua_unit_tests, check_lua_parse, check_published_ids, check_versions,
 # check_build_receipts, check_release_bundle_atomicity or lint-mod.
 $script:qaChangeSet = $null
-$script:qaScopeSelftests = @('qa/', 'tools/', '.github/')
+# A '!' entry excludes a subtree from the scope. qa/runtime/ holds rig cases:
+# no run_selftests target or self-test fixture reads that folder (grep,
+# WP-P-06 stage B), so a rig-case-only change does not rerun every self-test.
+# qa/lua/tests/ stays in scope: check_logging -SelfTest scans
+# qa/lua/tests/test_gut_spawn_weapon_recovery.lua.
+$script:qaScopeSelftests = @('qa/', 'tools/', '.github/', '!qa/runtime/')
 # run_bundle_output_set_host_matrix runs the -SelfTest of the nine checks it
 # lists under both hosts; those checks load tools/ship/ and
 # tools/publish-release/ helpers and qa/_test_fixtures/.
@@ -157,10 +162,17 @@ function Test-QaScope {
     )
     if ($FullRun) { return $true }
     if ($null -eq $ChangeSet -or -not [bool]$ChangeSet.Determinate) { return $true }
+    $include = @($Prefixes | Where-Object { -not $_.StartsWith('!') })
+    $exclude = @($Prefixes | Where-Object { $_.StartsWith('!') } | ForEach-Object { $_.Substring(1) })
     foreach ($path in @($ChangeSet.Paths)) {
         if ([string]::IsNullOrWhiteSpace([string]$path)) { continue }
         $norm = ([string]$path).Trim().Replace('\', '/')
-        foreach ($prefix in $Prefixes) {
+        $excluded = $false
+        foreach ($prefix in $exclude) {
+            if ($norm.StartsWith($prefix, [StringComparison]::OrdinalIgnoreCase)) { $excluded = $true; break }
+        }
+        if ($excluded) { continue }
+        foreach ($prefix in $include) {
             if ($norm.StartsWith($prefix, [StringComparison]::OrdinalIgnoreCase)) { return $true }
         }
     }
@@ -180,7 +192,10 @@ function Run-ScopedCheck {
         return
     }
     Write-Host "===== $name =====" -ForegroundColor Cyan
-    Write-Host ("SKIP (scope): no changed path under {0}" -f ($Prefixes -join ', ')) -ForegroundColor DarkYellow
+    $scopeText = (@($Prefixes | Where-Object { -not $_.StartsWith('!') }) -join ', ')
+    $scopeExcluded = @($Prefixes | Where-Object { $_.StartsWith('!') } | ForEach-Object { $_.Substring(1) })
+    if ($scopeExcluded.Count -gt 0) { $scopeText += ' (not ' + ($scopeExcluded -join ', ') + ')' }
+    Write-Host ("SKIP (scope): no changed path under {0}" -f $scopeText) -ForegroundColor DarkYellow
     Write-Host ""
 }
 
@@ -295,7 +310,9 @@ function Invoke-PolicySelfTest {
         @{ Name = 'mod-only change skips run_selftests'; Determinate = $true; Paths = @($modOnlyPath); Full = $false; Expected = $false },
         @{ Name = 'tools/ship/claim.ps1 runs run_selftests'; Determinate = $true; Paths = @('tools/ship/claim.ps1'); Full = $false; Expected = $true },
         @{ Name = 'indeterminate change set runs run_selftests'; Determinate = $false; Paths = @(); Full = $false; Expected = $true },
-        @{ Name = '-Full runs run_selftests'; Determinate = $true; Paths = @($modOnlyPath); Full = $true; Expected = $true }
+        @{ Name = '-Full runs run_selftests'; Determinate = $true; Paths = @($modOnlyPath); Full = $true; Expected = $true },
+        @{ Name = 'qa/runtime rig case only skips run_selftests'; Determinate = $true; Paths = @('qa/runtime/cim/issue_402_career_commit_scrub.lua', $modOnlyPath); Full = $false; Expected = $false },
+        @{ Name = 'qa/lua/tests change runs run_selftests'; Determinate = $true; Paths = @('qa/runtime/cim/x.lua', 'qa/lua/tests/test_x.lua'); Full = $false; Expected = $true }
     )) {
         $scopeChangeSet = [pscustomobject]@{ Determinate = $scopeFixture.Determinate; Paths = $scopeFixture.Paths }
         $scopeActual = Test-QaScope $selftestScope -ChangeSet $scopeChangeSet -FullRun $scopeFixture.Full
