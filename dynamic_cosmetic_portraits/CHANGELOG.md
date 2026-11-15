@@ -1,5 +1,16 @@
 # Changelog — Dynamic Cosmetic Portraits
 
+## 0.1.33-dev (2026-11-15) -- Source-text checks report SKIP, not PASS (WP-COS-02)
+
+- In the shipped game the mod cannot read its own source files, so the
+  `/dcp_regression_test` checks `skin_map_overrides_hat_map`,
+  `hud_alpha_mask_conformance_pipeline`,
+  `portrait_materials_use_visible_shader_526` and
+  `portrait_override_player_scoped` used to PASS without inspecting anything.
+  They now report SKIP with the reason, and say when their runtime half
+  already ran (audit finding A3-F12). `localization_format_safe` skips the
+  same way when the localization table is unreachable. Not confirmed in game.
+
 ## 0.1.32-dev (2026-10-25) -- Canonical publication guidance (#1025) [tooling]
 
 - Remove copied machine-local launcher paths and point both workflow guides to

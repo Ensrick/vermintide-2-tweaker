@@ -62,15 +62,32 @@ function M.install(mod, deps)
                 end
             else
                 if ok == nil then ok, err = pcall(check.fn) end
-                if ok and err == nil then
+                -- WP-COS-02: a check returning "skip: <reason>" could not inspect
+                -- its subject; it is a SKIP, never a PASS. Every verdict also goes
+                -- to the engine log (visible with mod logging off).
+                if ok and type(err) == "string" and err:sub(1, 5) == "skip:" then
+                    local reason = err:sub(6):gsub("^%s+", "")
+                    skip = skip + 1
+                    mod:echo("  SKIP: %s -- context absent: %s", check.name, reason)
+                    mod:info("[regression] SKIP (context absent) %s: %s", check.name, reason)
+                    if type(printf) == "function" then
+                        printf("[cos-regression] %s %s%s", "SKIP", check.name, " -- " .. reason)
+                    end
+                elseif ok and err == nil then
                     mod:echo("  PASS: %s", check.name)
                     pass = pass + 1
                     mod:info("[regression] PASS %s", check.name)
+                    if type(printf) == "function" then
+                        printf("[cos-regression] %s %s%s", "PASS", check.name, "")
+                    end
                 else
                     local message = (not ok and tostring(err)) or tostring(err)
                     mod:echo("  FAIL: %s -- %s", check.name, message)
                     fail = fail + 1
                     mod:warning("[regression] FAIL %s: %s", check.name, message)
+                    if type(printf) == "function" then
+                        printf("[cos-regression] %s %s%s", "FAIL", check.name, " -- " .. message)
+                    end
                 end
             end
         end

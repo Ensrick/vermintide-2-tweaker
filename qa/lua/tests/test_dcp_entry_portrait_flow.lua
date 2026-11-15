@@ -11,6 +11,13 @@ return function(H, repo_root)
     local VANILLA_MEDIUM = "medium_unit_frame_portrait_kruber_mercenary"
     local UNTRACKED_HAT = "dcp509_untracked_hat"
     local UNTRACKED_SKIN = "dcp509_untracked_skin"
+    -- Checks whose subject is source text, never readable in the shipped game.
+    local SOURCE_TEXT_CHECKS = {
+        skin_map_overrides_hat_map = true,
+        hud_alpha_mask_conformance_pipeline = true,
+        portrait_materials_use_visible_shader_526 = true,
+        portrait_override_player_scoped = true,
+    }
 
     local function mercenary(hat, skin, is_local)
         return {
@@ -198,7 +205,13 @@ return function(H, repo_root)
             H.equal(results.career_settings_swap_saves_and_restores, "PASS", "local " .. local_hat)
             H.equal(results.score_rows_resolve_without_local_swap_509, "PASS", "local " .. local_hat)
             for name, result in pairs(results) do
-                H.equal(result, "PASS", name .. ", local " .. local_hat)
+                -- WP-COS-02: the sandbox has no `io` (rawget(_G, "io") is nil in this env), so
+                -- the four source-text checks cannot read their subject: SKIP, never PASS.
+                if SOURCE_TEXT_CHECKS[name] then
+                    H.truthy(result:find("SKIP: ", 1, true) == 1, name .. ", local " .. local_hat)
+                else
+                    H.equal(result, "PASS", name .. ", local " .. local_hat)
+                end
             end
             H.equal(f.row.portrait_image, before, "the checks leave the live row as they found it")
         end
@@ -211,6 +224,23 @@ return function(H, repo_root)
         local result = f:regression().career_settings_swap_saves_and_restores
         H.truthy(type(result) == "string" and result:find("unowned DCP portrait", 1, true),
             tostring(result))
+    end)
+
+    -- WP-COS-02 (audit finding A3-F12): with `io` absent (the shipped game), the
+    -- source-text checks must report SKIP, not a vacuous PASS.
+    H.test("DCP source-text checks report SKIP when the source is not readable", function()
+        local f = load_entry(UNTRACKED_HAT)
+        f.env.io = false  -- false, not nil: nil would fall through to the real _G
+        f.logs = {}
+        f.commands.dcp_regression_test()
+        for name in pairs(SOURCE_TEXT_CHECKS) do
+            local verdict
+            for _, candidate in ipairs(f.logs) do
+                local v, n = candidate:match("^  (%u+): (%S+)")
+                if n == name then verdict = v end
+            end
+            H.equal(verdict, "SKIP", name .. " must SKIP when its source is not readable")
+        end
     end)
 
     H.test("DCP issue509 named checks report SKIP rather than PASS without their live half", function()
@@ -232,7 +262,9 @@ return function(H, repo_root)
         end
         H.truthy(noted.career, "career check names its skipped live half")
         H.truthy(noted.score, "score check names its skip")
-        H.truthy(table.concat(f.logs, "\n"):find("0 failed, 2 skipped", 1, true),
-            "the actual runner summary must count both skipped checks")
+        -- Both live-half checks plus the four source-text checks (WP-COS-02: no `io`
+        -- in this sandbox, so they SKIP instead of passing on nothing).
+        H.truthy(table.concat(f.logs, "\n"):find("0 failed, 6 skipped", 1, true),
+            "the actual runner summary must count both skipped checks and the source-text skips")
     end)
 end

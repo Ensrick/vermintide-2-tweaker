@@ -390,7 +390,7 @@ PERSISTENCE_CHECKS.install(mod, _rt_register, {
 -- the real hook with a fake LA-clone bid and verify cache + disk both write
 -- and both clear. Leaves no residue; the clone branch never calls vanilla.
 _rt_register("cos_la_loadout_equip_capture_wired", function()
-    if not get_mod("Loremasters-Armoury") then return end -- LA absent: dormant by design
+    if not get_mod("Loremasters-Armoury") then return "skip: LA absent: dormant by design" end
     if not mod._la_skin_safety_installed then
         return "skin loadout safety not installed despite LA present"
     end
@@ -711,7 +711,7 @@ end)
 _rt_register("issue696_la_prespawn_parent_lease", function()
     local lease = MH_EMBED and MH_EMBED.prespawn_lease
     if type(lease) ~= "table" then return "prespawn lease missing from MH embed" end
-    if lease.dormant then return nil end   -- dormant embed owns no spawn seam
+    if lease.dormant then return "skip: dormant embed owns no spawn seam" end
     if type(lease.lease_all) ~= "function"
         or type(lease.observe_spawn) ~= "function" then
         return "prespawn lease API incomplete"
@@ -1736,7 +1736,7 @@ _rt_register("cosmetic_unlock_labels_no_mojibake", function()
     -- en-label carries the mojibake signature, so a future regen with the
     -- encoding bug reintroduced fails here.
     local ok, unlocks = pcall(mod.dofile, mod, "scripts/mods/cosmetics_tweaker/_cosmetic_unlocks")
-    if not ok or type(unlocks) ~= "table" then return end  -- can't reach table; skip
+    if not ok or type(unlocks) ~= "table" then return "skip: can't reach the unlock table" end
     local loc = unlocks.localization
     if type(loc) ~= "table" then return "unlock localization table missing" end
     for k, v in pairs(loc) do
@@ -1759,7 +1759,7 @@ _rt_register("localization_format_safe", function()
     -- ship even if the static check is skipped. RULE: any literal % in a loc
     -- string must be doubled to %%.
     local ok, loc = pcall(mod.dofile, mod, "scripts/mods/cosmetics_tweaker/cosmetics_tweaker_localization")
-    if not ok or type(loc) ~= "table" then return end  -- can't reach loc; skip
+    if not ok or type(loc) ~= "table" then return "skip: can't reach the localization table" end
     for k, v in pairs(loc) do
         if type(v) == "table" and type(v.en) == "string" then
             local fmt_ok, fmt_err = pcall(string.format, v.en)
@@ -1927,7 +1927,7 @@ _rt_register("offhand_preload_async_bounded_565", function()
 end)
 
 _rt_register("la_kruber_shield_catalogue_compatibility_204", function()
-    if not LA_BRIDGE.registered then return nil end
+    if not LA_BRIDGE.registered then return "skip: LA bridge not registered" end
     if type(LA_BRIDGE.kruber_shield_item_types) ~= "table"
             or #LA_BRIDGE.kruber_shield_item_types ~= 7 then
         return "Kruber LA shield catalogue is missing or has unexpected cardinality"
@@ -2006,7 +2006,7 @@ _rt_register("mh_package_single_reference", function()
     -- accumulated 90+ refs per session and produced the shutdown "not unloaded,
     -- deadlock" crashify block). A count above 1 means the dedupe registry
     -- regressed to per-event accumulation.
-    if not MH_EMBED or MH_EMBED.dormant then return nil end  -- embed dormant: vacuous pass
+    if not MH_EMBED or MH_EMBED.dormant then return "skip: MH embed dormant" end
     local reg = MH_EMBED.loaded_packages
     if type(reg) ~= "table" then
         return "loaded_packages registry missing from MH embed exports (issue 282 regression)"
@@ -2023,7 +2023,7 @@ _rt_register("mh_package_single_reference", function()
         return "MH early-release API present (issue 282 deadlock regression)"
     end
     if not (Managers and Managers.package and Managers.package.reference_count) then
-        return nil  -- package manager not up yet: vacuous pass
+        return "skip: package manager not up yet"
     end
     for path in pairs(reg) do
         local n = Managers.package:reference_count(path, "cosmetics_tweaker_mh") or 0
