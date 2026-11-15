@@ -1,0 +1,62 @@
+{
+  "schema": 1,
+  "issue": 660,
+  "class": "X",
+  "status": "draft",
+  "vp": null,
+  "arena": "none",
+  "mods": [
+    {
+      "dir": "gui_tweaker_dev",
+      "min_version": "",
+      "settings": null
+    },
+    {
+      "dir": "crafting_in_modded_dev",
+      "min_version": "",
+      "settings": null
+    },
+    {
+      "dir": "weapon_tweaker",
+      "min_version": "",
+      "settings": null
+    },
+    {
+      "dir": "cosmetics_tweaker",
+      "min_version": "",
+      "settings": null
+    },
+    {
+      "dir": "character_weapon_variants",
+      "min_version": "0.1.536-dev",
+      "settings": null
+    },
+    {
+      "dir": "weapons_of_chaos",
+      "min_version": "",
+      "settings": null
+    }
+  ],
+  "cases": [
+    {
+      "script": "",
+      "steps": [
+        "1. Start a solo Keep session and run `/cwv_regression_test`.",
+        "2. Equip **Greatsword** on Kruber and use its **Combat Style** control to cycle through every available Greatsword style once.",
+        "3. After each style, inspect the weapon in first person, local third person, the inventory character preview, and the Athanor or illusion preview.",
+        "4. Swap to another weapon and back, then enter a mission without changing the selected style.",
+        "5. Recheck first person, local third person, and the inventory character preview. Exit and attach the newest log."
+      ],
+      "assertions": [
+        "`issue660_greatsword_style_appearance_transaction` passes. The selected Greatsword model, style, and transform remain identical across every inspected surface, the weapon swap, and the Keep-to-mission transition. No view shows an invisible weapon or silently falls back to the base model. One unmodified vanilla weapon remains unchanged.",
+        "Not one executable cell. Per leaf: appearance census reading retained unit path and pose per surface and family against the descriptor."
+      ],
+      "pass_closes": false
+    }
+  ],
+  "source": {
+    "card_comment_id": 5384121895,
+    "card_date": "2026-08-23T04:03:51Z",
+    "ledger": "D1_ledger.tsv"
+  }
+}

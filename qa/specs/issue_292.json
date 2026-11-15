@@ -1,0 +1,37 @@
+{
+  "schema": 1,
+  "issue": 292,
+  "class": "R",
+  "status": "draft",
+  "vp": null,
+  "arena": "unknown",
+  "mods": [
+    {
+      "dir": "gui_tweaker_dev",
+      "min_version": "0.2.290",
+      "settings": null
+    }
+  ],
+  "cases": [
+    {
+      "script": "",
+      "steps": [
+        "1. Open **Options > Video**. Check **Graphics Profiles**, **Active Profile**, **Profile Action** and every tooltip for real words, not raw localization markers.",
+        "2. Save two empty slots with visibly different resolution/fullscreen, quality, gamma and available hardware-specific values; each must change from **(empty)** to **(saved)**.",
+        "3. Switch between the profiles. Confirm values are staged but do not activate until native **Apply**. Accept one timed keep confirmation and let another Apply revert.",
+        "4. Restart and confirm both profiles and values persist. Rename one using `/gut_video_profile_name` with arguments `1 Test`, substituting the appropriate disposable slot number; delete only the other disposable test slot through **Delete Selected** and its confirmation.",
+        "5. If a safe saved fixture contains an unavailable resolution/hardware option, load it and confirm that field is skipped rather than forced."
+      ],
+      "assertions": [
+        "Labels/tooltips remain readable, profiles persist, native Apply/keep/revert behavior is unchanged, and rename/delete affect only the selected slot. Unsupported fields, when exercised, are safely skipped.",
+        "issue292_native_video_profile_pipeline PASS; script: save profile, change widgets, load: values staged, applied only after native Apply; relaunch persistence; unavailable value skipped."
+      ],
+      "pass_closes": true
+    }
+  ],
+  "source": {
+    "card_comment_id": 6591477624,
+    "card_date": "2026-11-02T23:50:11Z",
+    "ledger": "D4_ledger.tsv"
+  }
+}

@@ -1,0 +1,43 @@
+{
+  "schema": 1,
+  "issue": 279,
+  "class": "R",
+  "status": "draft",
+  "vp": null,
+  "arena": "unknown",
+  "mods": [
+    {
+      "dir": "crafting_in_modded_dev",
+      "min_version": "",
+      "settings": null
+    },
+    {
+      "dir": "character_weapon_variants",
+      "min_version": "0.1.570-dev",
+      "settings": null
+    }
+  ],
+  "cases": [
+    {
+      "script": "",
+      "steps": [
+        "1. Start the game and confirm the newest log contains `[cwv:LOAD] v0.1.570-dev`.",
+        "2. Open the normal Crafting menu through Crafting in Modded.",
+        "3. Craft an **Outrider Grenade Launcher**.",
+        "4. View the crafted launcher on the inventory character preview.",
+        "5. View the same crafted launcher in the Athanor weapon preview.",
+        "6. Equip it and enter the Keep."
+      ],
+      "assertions": [
+        "Every view shows only the blunderbuss-shaped Outrider Grenade Launcher. No Trollhammer torpedo or second merged weapon model appears.",
+        "Craft Outrider; on owner 3P, inventory preview and Athanor preview enumerate spawned units; assert exactly one right-hand unit and no Trollhammer ammo unit path."
+      ],
+      "pass_closes": true
+    }
+  ],
+  "source": {
+    "card_comment_id": 5161332801,
+    "card_date": "2026-08-03T01:16:23Z",
+    "ledger": "D1_ledger.tsv"
+  }
+}

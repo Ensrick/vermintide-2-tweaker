@@ -1,0 +1,46 @@
+{
+  "schema": 1,
+  "issue": 1188,
+  "class": "C",
+  "status": "draft",
+  "vp": null,
+  "arena": "unknown",
+  "mods": [
+    {
+      "dir": "weapon_tweaker",
+      "min_version": "",
+      "settings": null
+    },
+    {
+      "dir": "character_weapon_variants",
+      "min_version": "",
+      "settings": null
+    }
+  ],
+  "cases": [
+    {
+      "script": "",
+      "steps": [
+        "1. In Tweaker: Weapons, enable **Trollhammer Torpedo** for one Kruber career.",
+        "2. Kruber equips the real Trollhammer; the observer checks it in the Keep and in a mission.",
+        "3. Kruber swaps to the **Outrider Grenade Launcher**, first a curated copy and then an Athanor-crafted copy; the observer checks each.",
+        "4. Turn the unlock off and repeat the Outrider checks.",
+        "5. Run `/cwv_regression_test` and `/wt_regression_test` on both machines and attach both logs."
+      ],
+      "assertions": [
+        "A WT-granted native Trollhammer keeps its torpedo on the observer's view, while every positively identified Outrider removes the inherited torpedo. Curated and crafted Outriders agree, disabling the unlock does not change Outrider behavior, and native/CWV identities never cross.",
+        "Offline: native-pair discriminator test. Co-op: observer sees an ammo unit for the WT-granted Trollhammer and none for the Outrider on the same career."
+      ],
+      "pass_closes": false
+    }
+  ],
+  "left_for_humans": [
+    "A WT-granted native Trollhammer keeps its torpedo on the observer's view, while every positively identified Outrider removes the inherited torpedo. Curated and crafted Outriders agree, disabling the unlock does not change Outrider behavior, and native/CWV identities never cross.",
+    "needs two clients"
+  ],
+  "source": {
+    "card_comment_id": 5357141880,
+    "card_date": "2026-08-20T14:17:43Z",
+    "ledger": "D1_ledger.tsv"
+  }
+}

@@ -1,0 +1,42 @@
+{
+  "schema": 1,
+  "issue": 172,
+  "class": "R",
+  "status": "draft",
+  "vp": null,
+  "arena": "unknown",
+  "mods": [
+    {
+      "dir": "gui_tweaker_dev",
+      "min_version": "",
+      "settings": null
+    },
+    {
+      "dir": "cosmetics_tweaker",
+      "min_version": "",
+      "settings": null
+    }
+  ],
+  "cases": [
+    {
+      "script": "",
+      "steps": [
+        "1. Enter an Adventure mission and open the in-mission inventory's **Cosmetics** tab.",
+        "2. Browse hats and outfits, then open weapon customization and **Apply** an illusion.",
+        "3. Close and reopen inventory, swap weapons and repeat once; inspect the weapon preview and applied appearance.",
+        "4. Relaunch with Cosmetics disabled. Confirm vanilla hat/outfit browsing remains safe and the unsupported weapon-illusion gear path cannot open.",
+        "5. Attach the newest logs from both launches."
+      ],
+      "assertions": [
+        "The tab and previews render without missing materials, duplicate entries or crashes. Cosmetics enables working illusion Apply; without it, safe vanilla browsing remains available but unsupported customization does not.",
+        "In mission: open Cosmetics tab, assert pose atlas material resident before draw, apply illusion, assert backend skin changed and zero Lua errors; repeat without Cosmetics."
+      ],
+      "pass_closes": true
+    }
+  ],
+  "source": {
+    "card_comment_id": 6591460298,
+    "card_date": "2026-11-02T23:49:03Z",
+    "ledger": "D2_ledger.tsv"
+  }
+}

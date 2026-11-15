@@ -1,0 +1,36 @@
+{
+  "schema": 1,
+  "issue": 380,
+  "class": "R",
+  "status": "draft",
+  "vp": null,
+  "arena": "unknown",
+  "mods": [
+    {
+      "dir": "general_tweaker_dev",
+      "min_version": "0.2.279-dev",
+      "settings": null
+    }
+  ],
+  "cases": [
+    {
+      "script": "",
+      "steps": [
+        "1. Enable **Disable downed screen effects**.",
+        "2. Enter a mission and use `/down` to enter real bleedout.",
+        "3. Record separately whether the red fullscreen overlay remains while down and whether the wounded grayscale filter remains after revival.",
+        "4. Run `/gt_regression_test`, exit normally, and attach the newest console log."
+      ],
+      "assertions": [
+        "The bounded evidence shows whether the three watched downed/wounded moods were intercepted. If a visual remains despite an intercepted mood, the run identifies a second renderer as the next target; if no intercept occurs, it identifies the current hook as the wrong seam. Both visuals disappearing is a pass, and partial behavior remains useful diagnostic evidence.",
+        "Harness: option on, /down, parse [gt:neuterfx] swallowed rows for three moods and read MoodHandler active moods; remaining on-screen tint is visual."
+      ],
+      "pass_closes": true
+    }
+  ],
+  "source": {
+    "card_comment_id": 5357059776,
+    "card_date": "2026-08-20T14:11:11Z",
+    "ledger": "D5_ledger.tsv"
+  }
+}

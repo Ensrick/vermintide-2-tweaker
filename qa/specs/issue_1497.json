@@ -1,0 +1,36 @@
+{
+  "schema": 1,
+  "issue": 1497,
+  "class": "R",
+  "status": "draft",
+  "vp": null,
+  "arena": "unknown",
+  "mods": [
+    {
+      "dir": "enemy_tweaker",
+      "min_version": "0.7.65-dev",
+      "settings": null
+    }
+  ],
+  "cases": [
+    {
+      "script": "",
+      "steps": [
+        "1. Unsubscribe and resubscribe to **Tweaker: Enemies**, launch the Modded Realm, and confirm `[et:LOAD] v0.7.65-dev` in the newest log.",
+        "2. From the title screen, enter the Keep alone and wait for it to become playable.",
+        "3. Once in the Keep, run `/et_regression_test` once.",
+        "4. Exit cleanly and attach the newest complete console log. If the screen remains black for two minutes, force-close once and attach that log instead."
+      ],
+      "assertions": [
+        "The Keep becomes playable within two minutes. `issue1497_local_host_hot_join_bypass` reports `PASS`. The local host advances into game-object synchronization without an Enemy Tweaker `hot-join sync HELD` or `KICKED` line for that peer.",
+        "Boot-to-keep smoke: launch with the mod set, assert local peer in-game within 120 s, no HELD/KICKED row for the local peer, issue1497 check PASS."
+      ],
+      "pass_closes": true
+    }
+  ],
+  "source": {
+    "card_comment_id": 5497303657,
+    "card_date": "2026-09-01T16:44:36Z",
+    "ledger": "D3_ledger.tsv"
+  }
+}

@@ -1,0 +1,51 @@
+{
+  "schema": 1,
+  "issue": 153,
+  "class": "S",
+  "status": "draft",
+  "vp": null,
+  "arena": "none",
+  "mods": [
+    {
+      "dir": "gui_tweaker_dev",
+      "min_version": "",
+      "settings": null
+    },
+    {
+      "dir": "career_tweaker",
+      "min_version": "",
+      "settings": null
+    }
+  ],
+  "cases": [
+    {
+      "script": "",
+      "steps": [
+        "1. Confirm **Surface Hidden Career Passives** is enabled in Tweaker: GUI Dev.",
+        "2. Open the Witch Hunter Captain career screen and look at the **Perks** block.",
+        "3. Read the injected rows as words. Depending on how many Perks slots are free, exactly one of these two layouts is correct:",
+        "4. Confirm no text anywhere in the Perks block is an angle-bracket marker - a raw localization key rendered between angle brackets instead of words - and confirm those bonuses are not also appended inside the **Witch Hunt** description.",
+        "5. Close and reopen the career screen and confirm the rows are identical the second time (no duplication, no marker appearing on the reopen).",
+        "6. If a controller is available, open the same screen with the controller layout.",
+        "7. Run `/gut_regression_test` and confirm every check passes."
+      ],
+      "assertions": [
+        "The Perks block renders real words in both the compact and controller layouts, with zero `<...>` markers anywhere in the block. The percent figures print as `+25%` and `+5%`, not `+25%%`. Reopening is idempotent, the Witch Hunt description is untouched, and `issue153_292_engine_ui_loc_supplied` passes.",
+        "Offline audit: per career compare decompiled career/passive buff data with PassiveAbilitySettings.perks rows, list omissions, unit-test the policy table per career."
+      ],
+      "pass_closes": true
+    }
+  ],
+  "offline": [
+    {
+      "class": "S",
+      "command": "",
+      "expect": "Offline audit: per career compare decompiled career/passive buff data with PassiveAbilitySettings.perks rows, list omissions, unit-test the policy table per career."
+    }
+  ],
+  "source": {
+    "card_comment_id": 5165063167,
+    "card_date": "2026-08-03T10:14:06Z",
+    "ledger": "D4_ledger.tsv"
+  }
+}

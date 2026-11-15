@@ -1,0 +1,40 @@
+{
+  "schema": 1,
+  "issue": 1147,
+  "class": "V",
+  "status": "draft",
+  "vp": null,
+  "arena": "unknown",
+  "mods": [
+    {
+      "dir": "cosmetics_tweaker",
+      "min_version": "0.9.230-dev",
+      "settings": null
+    }
+  ],
+  "cases": [
+    {
+      "script": "",
+      "steps": [
+        "1. Equip a glow-capable **Bretonnian Longsword** illusion and set an unmistakable custom glow color.",
+        "2. Close and reopen Equipment without editing the glow, then inspect the weapon on the inventory character preview.",
+        "3. Enter a mission, confirm the same glow in first and third person, and complete or end the mission.",
+        "4. Inspect the weapon on the end-of-mission score lineup, then return to the Keep and reopen the inventory preview.",
+        "5. Run `/cos_regression_test`, exit normally, and attach the newest console log plus screenshots of the inventory and score previews."
+      ],
+      "assertions": [
+        "The same saved custom glow appears on the inventory character preview, in mission, and on the score lineup without reopening the glow editor. `issue1147_surface_glow_repaint_wired` passes; no surface reports success for an unnamed or unpainted mesh, and the glow never falls back to the illusion's baked color on either preview.",
+        "Automatable: on preview and score spawn assert a glow repaint receipt for that surface with a named glow-capable mesh. Rendered colour needs eyes or screenshot."
+      ],
+      "pass_closes": false
+    }
+  ],
+  "left_for_humans": [
+    "The same saved custom glow appears on the inventory character preview, in mission, and on the score lineup without reopening the glow editor. `issue1147_surface_glow_repaint_wired` passes; no surface reports success for an unnamed or unpainted mesh, and the glow never falls back to the illusion's baked color on either preview."
+  ],
+  "source": {
+    "card_comment_id": 5356827897,
+    "card_date": "2026-08-20T13:52:03Z",
+    "ledger": "D2_ledger.tsv"
+  }
+}

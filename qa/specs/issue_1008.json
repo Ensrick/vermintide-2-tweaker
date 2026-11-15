@@ -1,0 +1,37 @@
+{
+  "schema": 1,
+  "issue": 1008,
+  "class": "R",
+  "status": "draft",
+  "vp": null,
+  "arena": "unknown",
+  "mods": [
+    {
+      "dir": "general_tweaker_dev",
+      "min_version": "0.2.180",
+      "settings": null
+    }
+  ],
+  "cases": [
+    {
+      "script": "",
+      "steps": [
+        "1. Spawn a fresh **Chaos Warrior** in a solo mission.",
+        "2. With **Godmode** off, strike its armoured body using an attack that normally deals zero damage through armour.",
+        "3. Enable **Godmode** and **9999 Damage Per Strike**, spawn a fresh Chaos Warrior, and repeat the same body strike.",
+        "4. Turn Godmode off, spawn another fresh control, and repeat once more.",
+        "5. Run `/gt_regression_test`, exit normally, and attach the newest log."
+      ],
+      "assertions": [
+        "With both options on, an armour-zeroed hit deals 9999 damage and kills the fresh Chaos Warrior; both disabled controls retain native damage. A visible weapon bounce may remain because sweep stopping happens before damage resolution. Hard invulnerability and authored no-damage targets are not part of the promotion.",
+        "Harness: spawn Chaos Warrior, deal a body hit with godmode and damage child on: health removed 9999 and unit dead; both off: zero damage."
+      ],
+      "pass_closes": true
+    }
+  ],
+  "source": {
+    "card_comment_id": 6681750694,
+    "card_date": "2026-11-06T09:33:23Z",
+    "ledger": "D5_ledger.tsv"
+  }
+}

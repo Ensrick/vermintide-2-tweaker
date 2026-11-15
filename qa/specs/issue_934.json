@@ -1,0 +1,40 @@
+{
+  "schema": 1,
+  "issue": 934,
+  "class": "R",
+  "status": "draft",
+  "vp": null,
+  "arena": "unknown",
+  "mods": [
+    {
+      "dir": "weapons_of_chaos",
+      "min_version": "0.1.62-dev",
+      "settings": null
+    }
+  ],
+  "cases": [
+    {
+      "script": "",
+      "steps": [
+        "1. Refresh the authorized WOC item normally and start a fresh session. Confirm the exact WOC banner above. Enter the Keep alone with no Blightreaper equipped. Confirm its Keep trophy is visible before the test; if that baseline or the real Blightreaper inventory item is absent, stop and report the missing prerequisite instead of scoring a no-crash pass or forcing a resource load.",
+        "2. Open **Equipment** and equip the WOC **Blightreaper** in one weapon slot. Inspect its Keep trophy display: the relic must be absent and the display empty while the weapon is equipped.",
+        "3. If the normal loadout UI allows Blightreaper in both weapon slots, equip it in the second slot too, then replace only one copy with an ordinary weapon. The trophy must remain absent while the other copy is equipped. If a second slot is not offered, record that and continue with the one-copy case; do not force it through another mod or command.",
+        "4. Replace the final equipped Blightreaper with an ordinary weapon. Confirm the Keep trophy returns without restarting the game or changing the selected decoration.",
+        "5. Equip Blightreaper again. Disable **Weapons of Chaos** through the normal mod menu, then re-enable the mod during the same Keep session, without a mission transition. Do not toggle the separate **Enable Blightreaper** option for this step. Confirm the lease resumes and the trophy again reflects the equipped relic rather than leaving the system inactive.",
+        "6. With the relic still equipped after re-enabling, run `/woc_relic_lease_audit`. Then replace the final copy with an ordinary weapon again and confirm the trophy returns.",
+        "7. Run `/woc_regression_test`. Confirm the shared Blightreaper lease check named below reports PASS, not missing, FAIL, or SKIP. Retain unrelated FAIL/SKIP output rather than counting it as a pass. This policy/installed-seam check does not replace the visible equip/unequip and trophy observations above.",
+        "8. Attach the newest complete console log and the command output; if regression output is visible only in chat, capture it there without changing logging settings. State whether the conditional two-slot case was available and what happened at each trophy change."
+      ],
+      "assertions": [
+        "In a solo Keep session, an equipped Blightreaper creates one bounded local lease. Its trophy is empty only while at least one copy remains equipped, removing the final copy restores the originally selected vanilla trophy presentation, and disabling/re-enabling WOC cannot leave the lease inactive or accept stale state. The registered regression check `issue934_shared_relic_lease_contract` passes. Do not infer this visible result from the audit or regression output alone.",
+        "Equip: lease held and trophy unit hidden; unequip: restored; woc_relic_lease_audit and issue934_shared_relic_lease_contract pass; cleave budget twice donor. Second player needs co-op."
+      ],
+      "pass_closes": true
+    }
+  ],
+  "source": {
+    "card_comment_id": 6689757380,
+    "card_date": "2026-11-06T16:24:11Z",
+    "ledger": "D1_ledger.tsv"
+  }
+}

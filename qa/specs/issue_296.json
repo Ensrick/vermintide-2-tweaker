@@ -1,0 +1,38 @@
+{
+  "schema": 1,
+  "issue": 296,
+  "class": "R",
+  "status": "draft",
+  "vp": null,
+  "arena": "unknown",
+  "mods": [
+    {
+      "dir": "character_weapon_variants",
+      "min_version": "0.1.570-dev",
+      "settings": null
+    }
+  ],
+  "cases": [
+    {
+      "script": "",
+      "steps": [
+        "1. Refresh Character Weapon Variants normally, launch the Modded Realm, enter the Keep alone and confirm the exact banner above. Run `/cwv_regression_test`, wait for its final summary and record all results, including every FAIL, SKIP and XFAIL.",
+        "2. As **Mercenary**, equip **Tuskgor Javelin** in the ranged slot. Record its ammunition count and any ammo-return trait on the selected copy.",
+        "3. Enter a solo Adventure mission. Throw one javelin into reachable ground, one into a wall and one into an enemy's body where a recovery pickup survives. Approach each landed or stuck spear. Record whether an interaction prompt appears, the ammunition immediately before and after each pickup, and whether the pickup disappears. Do not count a separate headshot/trait refund as recovery.",
+        "4. With ammunition missing and no infinite-ammo effect, use an ordinary ammunition crate and record whether the finite stack refills. Swap to the other weapon and back, then repeat one throw and recovery.",
+        "5. Return to the Keep and enter another mission; repeat one recovery after that transition. Then repeat the same ground, wall, enemy and ammunition-crate checks as **Witch Hunter Captain**, using his **Tuskgor Javelin**.",
+        "6. Run `/cwv_regression_test` again, wait for the final summary, exit normally and attach the newest console log plus the ammunition/prompt observations and both complete command results. Report every other FAIL, SKIP or XFAIL separately, along with any unavailable item, blocked throw, missing pickup or crash; do not bypass a safety gate."
+      ],
+      "assertions": [
+        "Both careers can use the finite-stack weapon in solo play. Every recoverable landed/stuck pickup remains interactable and restores exactly one shot when ammunition is missing; ordinary ammunition crates refill it; swapping and mission transitions preserve recovery; no pickup or network-lookup crash occurs. Require `issue296_tuskgor_javelin_recovery_transaction` and `cwv_wire_safe_thrown_variant_installed` explicitly PASS on each command invocation; neither SKIP nor XFAIL is a PASS. Preserve/report every other result separately: this card does not require or claim a healthy whole suite. This is a candidate Solo acceptance test, not proof of physics, rendering, refill or peer success already observed. Do not test mixed lobbies or hot join yet.",
+        "Trigger a throw, locate the spawned cwv javelin pickup unit, invoke its interaction, assert ammo +1 and pickup destroyed; ammo crate refills to max."
+      ],
+      "pass_closes": true
+    }
+  ],
+  "source": {
+    "card_comment_id": 6529037330,
+    "card_date": "2026-10-30T17:26:27Z",
+    "ledger": "D1_ledger.tsv"
+  }
+}

@@ -1,0 +1,36 @@
+{
+  "schema": 1,
+  "issue": 274,
+  "class": "R",
+  "status": "draft",
+  "vp": null,
+  "arena": "unknown",
+  "mods": [
+    {
+      "dir": "gui_tweaker_dev",
+      "min_version": "0.2.290",
+      "settings": null
+    }
+  ],
+  "cases": [
+    {
+      "script": "",
+      "steps": [
+        "1. Enable **Skip Cutscenes** and automatic skipping.",
+        "2. Start **A Parting of the Waves** and confirm its mission-introduction cutscene is skipped.",
+        "3. Finish the mission and let the ending play without trying to skip it. Watch the authored camera and its normal release afterward.",
+        "4. If practical, repeat the ending check in **Well of Dreams**. Retain the log and identify any camera lock."
+      ],
+      "assertions": [
+        "Only introductions are skipped. Mid-mission/outro scenes follow the vanilla camera path, never lock on fixed scenery and return control normally.",
+        "issue274_intro_only_cutscene_policy and issue274_post_intro_guard_bounded PASS; scripted mission end: outro camera delegate runs, player camera restored after authored duration."
+      ],
+      "pass_closes": true
+    }
+  ],
+  "source": {
+    "card_comment_id": 6591471004,
+    "card_date": "2026-11-02T23:49:45Z",
+    "ledger": "D4_ledger.tsv"
+  }
+}

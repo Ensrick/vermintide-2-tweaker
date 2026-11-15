@@ -1,0 +1,40 @@
+{
+  "schema": 1,
+  "issue": 633,
+  "class": "V",
+  "status": "draft",
+  "vp": null,
+  "arena": "unknown",
+  "mods": [
+    {
+      "dir": "weapons_of_chaos",
+      "min_version": "0.1.62-dev",
+      "settings": null
+    }
+  ],
+  "cases": [
+    {
+      "script": "",
+      "steps": [
+        "1. Equip **Blightreaper** in the Keep and run `/woc_audio_contract`.",
+        "2. Run `/woc_audio_probe` once, then press and release Inspect, press it again, swap away and back, and inspect once more.",
+        "3. Read the weapon's name, type, and description in inventory and inspect views.",
+        "4. Enter an Adventure mission and repeat the contract, one probe, and the Inspect sequence.",
+        "5. Exit normally and attach the newest console log."
+      ],
+      "assertions": [
+        "Every string is localized without raw keys, brackets, or repeated titles. The diagnostic reports whether the audited native inspect and ambient events are resident, starts or explicitly skips each bounded attempt, and releases every started sound on stop, swap, or transition. No chat output, forced hub package, sound stacking, or leak occurs.",
+        "Static: every WOC display key resolves in the localization table. Runtime: woc_audio_contract reports event residency and stop receipts. Audibility needs ears."
+      ],
+      "pass_closes": false
+    }
+  ],
+  "left_for_humans": [
+    "Every string is localized without raw keys, brackets, or repeated titles. The diagnostic reports whether the audited native inspect and ambient events are resident, starts or explicitly skips each bounded attempt, and releases every started sound on stop, swap, or transition. No chat output, forced hub package, sound stacking, or leak occurs."
+  ],
+  "source": {
+    "card_comment_id": 5357113191,
+    "card_date": "2026-08-20T14:15:36Z",
+    "ledger": "D1_ledger.tsv"
+  }
+}

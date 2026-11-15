@@ -1,0 +1,36 @@
+{
+  "schema": 1,
+  "issue": 577,
+  "class": "R",
+  "status": "draft",
+  "vp": null,
+  "arena": "unknown",
+  "mods": [
+    {
+      "dir": "modded_progression",
+      "min_version": "0.2.41-dev",
+      "settings": null
+    }
+  ],
+  "cases": [
+    {
+      "script": "",
+      "steps": [
+        "1. In the Modded Realm, buy one unowned plain Silver Shilling cosmetic from either the featured view or item list. Record the balance before and after and retain the matching `[mp:577]` log row.",
+        "2. Check that same item in the featured view, item list, preview, and purchase popup. It must read as owned and refuse a second purchase.",
+        "3. Leave/reopen the Emporium, then restart the game; confirm ownership and the debited balance remain durable.",
+        "4. Browse an official-owned cosmetic before and after the local purchase. Inspect DLC, platform, bundle, and non-shilling offers as controls."
+      ],
+      "assertions": [
+        "One local debit and grant, durable local ownership on every Emporium surface, no duplicate spend, no loss of official rows, and no official-backend purchase call.",
+        "Seeded sandbox profile: purchase an unowned offer: ledger debit, local ownership, duplicate refusal, zero PlayFab requests, relaunch persists; mp577_* PASS."
+      ],
+      "pass_closes": true
+    }
+  ],
+  "source": {
+    "card_comment_id": 5161349687,
+    "card_date": "2026-08-03T01:19:55Z",
+    "ledger": "D4_ledger.tsv"
+  }
+}

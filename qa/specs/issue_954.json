@@ -1,0 +1,37 @@
+{
+  "schema": 1,
+  "issue": 954,
+  "class": "R",
+  "status": "draft",
+  "vp": null,
+  "arena": "unknown",
+  "mods": [
+    {
+      "dir": "gui_tweaker_dev",
+      "min_version": "0.2.290",
+      "settings": null
+    }
+  ],
+  "cases": [
+    {
+      "script": "",
+      "steps": [
+        "1. In the Keep, record two distinct Warrior Priest rows: bot-designated A and player row B, with identifiable weapons in both slots. Keep their original values for restoration.",
+        "2. Select A and change one weapon. Select B and confirm its weapons are unchanged; return to A and confirm A retained its edit.",
+        "3. Now change a weapon on B. Return to A and confirm its weapons and bot designation are unchanged; return to B and confirm B retained its own edit. Repeat for the other weapon slot.",
+        "4. Leave B selected for the player, switch to another hero, and start a solo mission with Warrior Priest as a bot. Observe both weapons the bot actually wields: they must come from A, not B.",
+        "5. Return to the Keep and restart normally. Recheck both edited rows and bot designation; neither may have copied the other's equipment. Retain the log and report each direction separately."
+      ],
+      "assertions": [
+        "Editing A never changes B and editing B never changes A, in either weapon slot, across row switches/restart. The spawned bot uses designated A while player B remains distinct. No bot-spawn error occurs.",
+        "Edit player row B: bot_loadout snapshot A unchanged, and the reverse; spawn the bot in a mission and read its inventory slots equal snapshot A; relaunch; issue954_* PASS."
+      ],
+      "pass_closes": true
+    }
+  ],
+  "source": {
+    "card_comment_id": 6591493598,
+    "card_date": "2026-11-02T23:51:11Z",
+    "ledger": "D4_ledger.tsv"
+  }
+}

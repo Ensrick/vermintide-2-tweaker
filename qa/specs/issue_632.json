@@ -1,0 +1,37 @@
+{
+  "schema": 1,
+  "issue": 632,
+  "class": "R",
+  "status": "draft",
+  "vp": null,
+  "arena": "unknown",
+  "mods": [
+    {
+      "dir": "weapons_of_chaos",
+      "min_version": "0.1.50-dev",
+      "settings": null
+    }
+  ],
+  "cases": [
+    {
+      "script": "",
+      "steps": [
+        "1. Equip the Blightreaper on any career.",
+        "2. Hit an armored enemy (Stormvermin) with light and heavy attacks.",
+        "3. Swing through a dense horde and watch how many rats each sweep staggers or wounds.",
+        "4. Kill several enemies and watch for the green spirits.",
+        "5. Run `/woc_regression_test`."
+      ],
+      "assertions": [
+        "Armored hits play Greataxe-style impact sounds and effects (not fire or crowbill impacts). Sweeps cleave roughly twice as many targets as before. Kill-spawned spirits still chase you and convert green health to temporary health. The regression suite reports no FAIL.",
+        "Assert template speed 0.75, sweep cleave twice donor, hit applies the Hagbane dot, one spirit per attributed kill, power 600 or 900, no temper option."
+      ],
+      "pass_closes": true
+    }
+  ],
+  "source": {
+    "card_comment_id": 5156088701,
+    "card_date": "2026-08-02T07:04:13Z",
+    "ledger": "D1_ledger.tsv"
+  }
+}

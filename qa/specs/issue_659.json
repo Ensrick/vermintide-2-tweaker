@@ -1,0 +1,36 @@
+{
+  "schema": 1,
+  "issue": 659,
+  "class": "R",
+  "status": "draft",
+  "vp": null,
+  "arena": "unknown",
+  "mods": [
+    {
+      "dir": "general_tweaker_dev",
+      "min_version": "0.2.279-dev",
+      "settings": null
+    }
+  ],
+  "cases": [
+    {
+      "script": "",
+      "steps": [
+        "1. Select **Necromancer**, stay in the Keep, and enable **Allow Bots in Keep**.",
+        "2. Aim **Raise Dead** at clear flat ground, hold the targeting decal steady, and release once.",
+        "3. Repeat at two or three different clear locations and wait several seconds.",
+        "4. Run `/gt_regression_test`, exit normally, and attach the newest console log."
+      ],
+      "assertions": [
+        "A bounded four-phase trace identifies whether targeting resolves, the action finishes on its summon branch, the passive queues a pet, and the authoritative server spawn succeeds. The first missing or rejected phase localizes the real boundary; the already-falsified Keep pet-ban flag is not treated as new evidence. Zero phase records after real attempts is a diagnostic failure.",
+        "Harness: Necromancer in Keep with bots-in-keep on, trigger the raise-dead action, parse four-phase [gt:659] trace and count pet units."
+      ],
+      "pass_closes": true
+    }
+  ],
+  "source": {
+    "card_comment_id": 5357114370,
+    "card_date": "2026-08-20T14:15:42Z",
+    "ledger": "D5_ledger.tsv"
+  }
+}

@@ -1,0 +1,40 @@
+{
+  "schema": 1,
+  "issue": 1150,
+  "class": "C",
+  "status": "draft",
+  "vp": null,
+  "arena": "unknown",
+  "mods": [
+    {
+      "dir": "general_tweaker_dev",
+      "min_version": "0.2.180",
+      "settings": null
+    }
+  ],
+  "cases": [
+    {
+      "script": "",
+      "steps": [
+        "1. Both peers run the official General build above. The host enables **Allow Duplicate Careers** while the client leaves it off.",
+        "2. The client joins and selects the same hero and career as the host, then runs `/dupc_state`.",
+        "3. Reverse the settings: host off, client on. Have the client leave, rejoin, and try the same duplicate selection again.",
+        "4. Run `/dupc_state` and `/gt_regression_test` on the client, exit normally, and attach both newest logs."
+      ],
+      "assertions": [
+        "The first duplicate selection succeeds and the second is refused like native behaviour. Client state follows the host-advertised value after each join; a local toggle does not override it, and reconnect retains no stale authority.",
+        "Automatable: policy truth table offline (test_gt_dupc_policy.lua); host run asserts advertised lobby value; client adoption after join needs a second peer; parse /dupc_state."
+      ],
+      "pass_closes": false
+    }
+  ],
+  "left_for_humans": [
+    "The first duplicate selection succeeds and the second is refused like native behaviour. Client state follows the host-advertised value after each join; a local toggle does not override it, and reconnect retains no stale authority.",
+    "needs two clients"
+  ],
+  "source": {
+    "card_comment_id": 6681757639,
+    "card_date": "2026-11-06T09:33:48Z",
+    "ledger": "D5_ledger.tsv"
+  }
+}

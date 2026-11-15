@@ -1,0 +1,40 @@
+{
+  "schema": 1,
+  "issue": 324,
+  "class": "R",
+  "status": "draft",
+  "vp": null,
+  "arena": "unknown",
+  "mods": [
+    {
+      "dir": "chaos_wastes_tweaker_dev",
+      "min_version": "",
+      "settings": null
+    },
+    {
+      "dir": "enemy_tweaker",
+      "min_version": "",
+      "settings": null
+    }
+  ],
+  "cases": [
+    {
+      "script": "",
+      "steps": [
+        "1. Refresh **Tweaker: Enemies** from Steam Workshop, launch the Modded Realm with your usual mod set, and confirm the exact build banner above. Workshop item `3716780252`, manifest `498441331850547559`.",
+        "2. Load into the keep and stay there for about 30 seconds.",
+        "3. Run `/et_regression_test`, then exit the game normally and attach the newest console log."
+      ],
+      "assertions": [
+        "This is a diagnostic pass: the Skaven Warlord is not expected to register yet. The regression run reports `PASS: issue324_capacity_authority_probe`. The log carries the capacity probe rows from mod load and, once, from after the network starts; they decide the next fix. No Tweaker: Enemies script error appears while the keep loads.",
+        "Keep: capture [et:324] cap-probe rows at load and after network init. After fix: spawn et_skaven_warlord; assert target acquired and tree past spawn node within 15 s."
+      ],
+      "pass_closes": true
+    }
+  ],
+  "source": {
+    "card_comment_id": 6236225946,
+    "card_date": "2026-10-17T15:59:28Z",
+    "ledger": "D3_ledger.tsv"
+  }
+}

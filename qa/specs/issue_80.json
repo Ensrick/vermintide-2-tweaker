@@ -1,0 +1,42 @@
+{
+  "schema": 1,
+  "issue": 80,
+  "class": "R",
+  "status": "draft",
+  "vp": null,
+  "arena": "unknown",
+  "mods": [
+    {
+      "dir": "gui_tweaker_dev",
+      "min_version": "",
+      "settings": null
+    },
+    {
+      "dir": "crafting_in_modded_dev",
+      "min_version": "",
+      "settings": null
+    }
+  ],
+  "cases": [
+    {
+      "script": "",
+      "steps": [
+        "1. Enable **Allow Crafting Bench in Mission** and enter an Adventure mission.",
+        "2. Open the in-mission inventory, then open **Crafting** once. Complete one salvage, one property or trait reroll, and one illusion application.",
+        "3. Close and reopen inventory and repeat one action. Confirm there is one working bench, not a duplicate or a Keep-only forge.",
+        "4. Turn the setting off and reopen inventory. In separate controls, enter Chaos Wastes and launch with Crafting in Modded disabled.",
+        "5. Confirm Crafting is safely unavailable in all three controls while other permitted tabs still work. Exit normally and attach the newest logs."
+      ],
+      "assertions": [
+        "Adventure plus the enabled setting and CIM exposes the mission-safe standard bench. All three actions succeed without duplicate entry, missing resources, EAC errors or crashes. Setting off, Chaos Wastes or no CIM leaves Crafting unavailable.",
+        "In a mission with the setting on, open the forge via mod API, salvage/reroll/apply-skin a sandbox item, assert state change and no crash; absent in deus and when off."
+      ],
+      "pass_closes": true
+    }
+  ],
+  "source": {
+    "card_comment_id": 6591399283,
+    "card_date": "2026-11-02T23:45:11Z",
+    "ledger": "D4_ledger.tsv"
+  }
+}

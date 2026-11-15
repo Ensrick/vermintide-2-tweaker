@@ -1,0 +1,39 @@
+{
+  "schema": 1,
+  "issue": 467,
+  "class": "R",
+  "status": "draft",
+  "vp": null,
+  "arena": "unknown",
+  "mods": [
+    {
+      "dir": "chaos_wastes_tweaker_dev",
+      "min_version": "0.7.354-beta",
+      "settings": null
+    }
+  ],
+  "cases": [
+    {
+      "script": "",
+      "steps": [
+        "1. Open **Tweaker: Chaos Wastes > Reworks > Reworks: Boons > Reworks: Existing Boons** and enable **Individual Boon Prices**.",
+        "2. Start an ordinary Chaos Wastes expedition and open a boon shrine. Find **Barkskin** or **Smednir's Wealth**, the coin auto-pickup boon. Confirm a non-discounted Barkskin card costs **225** coins or Smednir's Wealth costs **150**.",
+        "3. Record the displayed price and coins before purchase. Confirm the affordability state matches that price, buy the boon when affordable, and confirm exactly that amount is deducted and the boon is granted.",
+        "4. For a fresh starting-shrine control, enable **Buy Starting Boons**, set **Start Shrine: Boon Price** to **50%**, and leave free **Starting Boon: Barkskin** off so it remains eligible to be offered. When Barkskin is offered there, it must display and charge **113** coins. If it is not offered, report that control as untested.",
+        "5. Turn **Individual Boon Prices** off, Apply, and open a fresh ordinary shrine. A non-discounted rare Barkskin or Smednir's Wealth card must use its native **200**-coin rarity price, not 225 or 150. With the starting price still at 50%, a fresh starting shrine uses **100** for either rare control. An earlier enabled choice must not override the off setting.",
+        "6. Turn **Individual Boon Prices** back on and repeat an available non-discounted control. Custom pricing must return without changing the boon's rarity or identity.",
+        "7. Retain the bounded `[ct:467] purchase accepted` rows and run `/ct_regression_test`, including the individual boon-pricing check. Exit normally and attach the newest complete log. Include the boon name, option state, displayed price, and coins before/after each purchase."
+      ],
+      "assertions": [
+        "Card text, affordability, and coin deduction agree; Barkskin is 225 and Smednir's Wealth 150 at normal scale, with Barkskin 113 at the 50% starting shrine. Off returns to native rarity prices and on restores the exact-name prices. `issue467_individual_boon_prices` and the full regression report pass.",
+        "Unit: policy price fixtures 225/150/113/100. Runtime: force a Barkskin offer; widget price 225; buy debits 225; toggle off gives 200."
+      ],
+      "pass_closes": true
+    }
+  ],
+  "source": {
+    "card_comment_id": 6693586935,
+    "card_date": "2026-11-06T19:31:23Z",
+    "ledger": "D3_ledger.tsv"
+  }
+}

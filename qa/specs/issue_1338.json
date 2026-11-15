@@ -1,0 +1,37 @@
+{
+  "schema": 1,
+  "issue": 1338,
+  "class": "R",
+  "status": "draft",
+  "vp": null,
+  "arena": "unknown",
+  "mods": [
+    {
+      "dir": "general_tweaker_dev",
+      "min_version": "0.2.279-dev",
+      "settings": null
+    }
+  ],
+  "cases": [
+    {
+      "script": "",
+      "steps": [
+        "1. Optionally start the repository's agent-bridge watcher before launching the game.",
+        "2. Launch the modded Keep and run `/agent_probe_clipboard`; record the visible verdict exactly.",
+        "3. Run `/agent_arm`, wait about ten seconds, then run `/agent_disarm`; confirm heartbeats do not pollute chat.",
+        "4. Run `/agent_dump` using the player-manager example shown by the command help.",
+        "5. Exit normally and attach the newest console log; if the watcher ran, attach its generated bridge-inbox files too."
+      ],
+      "assertions": [
+        "The clipboard probe returns a decisive live, no-op, dead, or absent result without logging clipboard contents. Heartbeats appear only while armed, a bounded framed dump reaches the console, the optional watcher reconstructs matching files, and no heartbeat or payload is echoed to game chat. No command error or crash occurs.",
+        "Bridge self-test: watcher receives [agent:*] BEGIN/END frames after arming; phase 2: a token sent through the inbound channel is echoed in the log within N seconds."
+      ],
+      "pass_closes": true
+    }
+  ],
+  "source": {
+    "card_comment_id": 5357146615,
+    "card_date": "2026-08-20T14:18:06Z",
+    "ledger": "D5_ledger.tsv"
+  }
+}

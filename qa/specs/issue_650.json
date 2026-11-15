@@ -1,0 +1,37 @@
+{
+  "schema": 1,
+  "issue": 650,
+  "class": "R",
+  "status": "draft",
+  "vp": null,
+  "arena": "unknown",
+  "mods": [
+    {
+      "dir": "cosmetics_tweaker",
+      "min_version": "0.9.230-dev",
+      "settings": null
+    }
+  ],
+  "cases": [
+    {
+      "script": "",
+      "steps": [
+        "1. Equip Kruber's Mace and Shield and select the first supported mace primary plus a supported Bretonnian shield.",
+        "2. Reopen the Equipment inventory grid and confirm the icon layers the chosen mace behind the chosen shield.",
+        "3. Select the supported runed shield, apply a distinctive custom glow color, and confirm the icon glow and the held shield use that same color.",
+        "4. Change the primary, the offhand, and the glow one at a time; scroll away and back, then reuse the grid cell with an unsupported item.",
+        "5. Restart and inspect the same exact weapon instance again."
+      ],
+      "assertions": [
+        "Supported mace and shield layers compose in the intended order, the exact-instance glow updates live and persists across the restart, changes invalidate only the affected card, unsupported combinations restore their native icon, and no stale cell, pink default, crash, or cross-item leak occurs.",
+        "Build a real item-grid widget for a mace+shield+glow item; assert passes carry primary, shield and glow textures in order and glow RGB equals the store. Composition look V."
+      ],
+      "pass_closes": true
+    }
+  ],
+  "source": {
+    "card_comment_id": 5165092337,
+    "card_date": "2026-08-03T10:16:47Z",
+    "ledger": "D2_ledger.tsv"
+  }
+}

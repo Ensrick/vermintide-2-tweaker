@@ -1,0 +1,40 @@
+{
+  "schema": 1,
+  "issue": 602,
+  "class": "X",
+  "status": "draft",
+  "vp": null,
+  "arena": "none",
+  "mods": [
+    {
+      "dir": "weapon_tweaker",
+      "min_version": "",
+      "settings": null
+    },
+    {
+      "dir": "cosmetics_tweaker",
+      "min_version": "",
+      "settings": null
+    },
+    {
+      "dir": "character_weapon_variants",
+      "min_version": "",
+      "settings": null
+    }
+  ],
+  "cases": [
+    {
+      "script": "",
+      "steps": [],
+      "assertions": [
+        "None for the art. Gameplay identities already covered by test_cwv_dawi_maces.lua; a licence-record lint can gate packaging."
+      ],
+      "pass_closes": false
+    }
+  ],
+  "source": {
+    "card_comment_id": null,
+    "card_date": null,
+    "ledger": "D1_ledger.tsv"
+  }
+}
