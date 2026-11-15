@@ -38,7 +38,6 @@ local _is_sp_crossbow_presentation_item = mod._wt.is_sp_crossbow_presentation_it
 local _BRACE_REPEATER_3P_UNIT           = mod._wt.brace_repeater_3p_unit
 local _SP_CROSSBOW_3P_UNIT              = mod._wt.sp_crossbow_3p_unit
 local _wt_skullsplitter_hand_policy     = mod._wt.skullsplitter_hand_policy
-local _wt_validate_attachment_sources   = mod._wt.validate_attachment_sources
 local _scale_weapon_units               = mod._wt.scale_weapon_units
 local _resolve_grip_offset              = mod._wt.resolve_grip_offset
 local _offset_weapon_units              = mod._wt.offset_weapon_units
@@ -297,21 +296,15 @@ _wt_paired_preview_transform.install(mod, {
     policy = _wt_grip_offset_policy,
 })
 
--- v0.12.114-dev: converted from hook_safe to mod:hook (full wrapper) so we
--- can PRE-VALIDATE attachment_node_linking before the original _spawn_item_unit
--- calls link_units. Previously hook_safe ran AFTER spawn (post-crash, useless
--- for prevention). The PRE check substitutes any source nodes that the
--- target body doesn't actually have (e.g. j_leftweaponcomponent16 on a non-
--- elf body) with j_hips. Elves keep their native nodes because Unit.has_node
--- returns true. Replaces the broken boot-time global mutation that
--- v0.12.112/.113-dev shipped (which broke elf bow visibility).
+-- Full wrapper (not hook_safe) because the post-spawn work needs the spawned
+-- unit and the return values. Missing-node protection for preview links is the
+-- GearUtils.link_units guard in _wt_cross_character_safety.lua: vanilla
+-- HeroPreviewer._spawn_item_unit links through GearUtils.link -> link_units
+-- (world_hero_previewer.lua:1101, gear_utils.lua:288-291). WP-WT-12 removed a
+-- pre-spawn validator here that could never run: vanilla passes the
+-- `.third_person` sub-table (keys wielded/unwielded), never a table that has
+-- a `.third_person` key (world_hero_previewer.lua:687, 714, 909-917, 1050-1075).
 mod:hook("MenuWorldPreviewer", "_spawn_item_unit", function(func, self, unit, slot_type, item_template, attachment_node_linking, scene_graph_links, material_settings_name, skip_wield_anim)
-    -- PRE: validate attachment sources against the actual body unit to
-    -- prevent engine-fatal Unit.node() on missing-node lookups.
-    if self and _is_unit(self.character_unit) then
-        _wt_validate_attachment_sources(self.character_unit, attachment_node_linking)
-    end
-
     -- Call through. Multi-return capture per VMF_RECIPES.md § 2.
     local r1, r2, r3 = func(self, unit, slot_type, item_template,
         attachment_node_linking, scene_graph_links, material_settings_name,

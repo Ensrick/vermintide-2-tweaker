@@ -91,7 +91,7 @@ mod:info("[mem-probe] wt weapon_backend: +%.1f MB lua (NOT in the boot_lua total
 -- definitions, lifecycle stub, and dead-only formula checks were deleted under
 -- #433. Saved br_* values remain untouched and the prefix stays reserved.
 
-local MOD_VERSION = "0.12.348-beta"
+local MOD_VERSION = "0.12.349-beta"
 _MEM_PROBE_T0_WT = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 
 -- v0.12.73: source-pattern marker constant for the /wt_regression_test
@@ -831,13 +831,11 @@ end)
 mod:dofile("scripts/mods/weapon_tweaker/_wt_cross_char_template_patches")
 -- Cross-character engine-fatal safety owner (#1159). It remains immediately
 -- after template mutation and before custom damage-profile registration.
-local _wt_cross_character_safety = mod:dofile(
+mod:dofile(
     "scripts/mods/weapon_tweaker/_wt_cross_character_safety").install(mod, {
         dbg = _dbg,
         dbg_alert = _dbg_alert,
     })
-local _wt_validate_attachment_sources =
-    _wt_cross_character_safety.validate_attachment_sources
 -- Toggle-gated weapon rebalance owner (#1159).
 --
 -- Authentic Brace of Pistols, the issue #348 Kruber Empire 1h sword push-combo
@@ -881,7 +879,6 @@ mod:dofile("scripts/mods/weapon_tweaker/_wt_ingame_3p_swap_owner")
 -- _wt_menu_preview_owner.lua. Bare dofile at the former execution position:
 -- both previewer registrations have to land here, after the in-game 3P swap
 -- owner above and before the lifecycle callbacks below.
-mod._wt.validate_attachment_sources = _wt_validate_attachment_sources
 mod._wt.scale_weapon_units          = _scale_weapon_units
 mod._wt.resolve_grip_offset         = _resolve_grip_offset
 mod._wt.offset_weapon_units         = _offset_weapon_units
