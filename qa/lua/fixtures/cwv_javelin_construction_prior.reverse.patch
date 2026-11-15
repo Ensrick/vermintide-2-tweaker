@@ -20,7 +20,9 @@
 +		"scripts/mods/character_weapon_variants/_cwv_javelin_recovery_contract").new({
 -		inventory_for = function(unit)
 +		inventory_for = function(unit)
-@@ -848,6 +841,53 @@
+@@ -510,1 +503,0 @@
+-		if _om.outrider_projectile_wire_lib then pcall(_om.outrider_projectile_wire_lib.sanitize_projectile_lookup, self) end
+@@ -849,6 +841,53 @@
 -		return func(self, pickup_unit, link_position, link_rotation, hit_unit, node_index)
 +		return func(self, pickup_unit, link_position, link_rotation, hit_unit, node_index)
 -	end)
@@ -80,7 +82,7 @@
 +	-- for VMF hook bookkeeping, and the function is small enough to share).
 -	local function _always_false() return false end
 +	local function _always_false() return false end
-@@ -918,7 +958,14 @@
+@@ -919,7 +958,14 @@
 -
 +
 -	-- ANIM ADDENDUM: this function only touches stats + (eventually) 3P fields.
@@ -102,7 +104,7 @@
 +		-- Ammo system rewrite: finite stack, vanilla pickups refill.
 -		if template.ammo_data then
 +		if template.ammo_data then
-@@ -1034,18 +1081,21 @@
+@@ -1035,18 +1081,21 @@
 -			template.wield_anim_career_3p[career] = wield
 +			template.wield_anim_career_3p[career] = wield
 -		end
@@ -142,7 +144,7 @@
 +			_TJ_MAX_AMMO, _TJ_DAMAGE_MULT * 100, _TJ_SPEED_MULT * 100, _TJ_PROJECTILE_SPEED_MULT * 100)
 -	end
 +	end
-@@ -1490,8 +1540,6 @@
+@@ -1491,8 +1540,6 @@
 -
 +
 -	return {
