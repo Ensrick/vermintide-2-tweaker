@@ -60,6 +60,7 @@
             Source = "_lib_official_loadout_guard.lua"
             Consumers = @(
                 "crafting_in_modded_dev/scripts/mods/crafting_in_modded_dev/_lib_official_loadout_guard.lua"
+                "weapons_of_chaos/scripts/mods/weapons_of_chaos/_lib_official_loadout_guard.lua"
             )
         }
         @{

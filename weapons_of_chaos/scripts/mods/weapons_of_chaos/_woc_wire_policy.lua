@@ -13,6 +13,15 @@ function M.is_woc_key(key)
 	return type(key) == "string" and key:sub(1, 4) == "woc_"
 end
 
+-- WP-CIM-07 (#402, #1688): "did WOC create this backend id". WOC relics are
+-- local MoreItemsLibrary rows `woc_<relic>_NNN` (_woc_boss_weapon_catalog.lua,
+-- _woc_shared_relic.lua BACKEND_ID). The official account never owns one, so
+-- WOC's official loadout guard scrubs every id this returns true for.
+function M.is_woc_backend_id(backend_id)
+	return type(backend_id) == "string"
+		and backend_id:match("^woc_[%w_]+_%d%d%d$") ~= nil
+end
+
 function M.is_woc_item(item)
 	if type(item) ~= "table" then return false end
 	if M.is_woc_key(item.key) or item.woc_unique_relic == true then return true end
