@@ -185,6 +185,26 @@ try {
     Assert-True ($cfg4 -match '(?ms)^\tgt_dev = \{\n\t\tfresh_mod_block = false\n\t\}') 'options: a mod without a block gets one'
     Assert-True ([regex]::Matches($cfg4, '(?m)^mods_settings = \{$').Count -eq 1) 'options: still one mods_settings table'
 
+    # ---- WP-H-08 boots: -KeepProfile starts from the profile the previous boot left ----
+    $keepRoot = Join-Path $root 'rig\profile5'
+    $out5 = & $builder -RealProfile $real -ProfileRoot $keepRoot -PlanPath $planPath -Nonce '5555aaaa' -DriverFile $driverFile -DriverId $driverId
+    # what boot 1 leaves behind: a setting the game saved and a changed save file
+    [System.IO.File]::AppendAllText($out5.UserSettings, "vt2_rig_boot_marker = `"boot1-5555aaaa`"`n")
+    [System.IO.File]::WriteAllBytes((Join-Path $out5.Vt2Dir 'save_data.sav'), [byte[]](200..240))
+    $savBoot1 = Get-Sha (Join-Path $out5.Vt2Dir 'save_data.sav')
+    $out6 = & $builder -RealProfile $real -ProfileRoot $keepRoot -PlanPath $optPlan -Nonce '6666bbbb' -DriverFile $driverFile -DriverId $driverId -KeepProfile
+    $cfg6 = [System.IO.File]::ReadAllText($out6.UserSettings)
+    Assert-True ($cfg6 -match '(?m)^vt2_rig_boot_marker = "boot1-5555aaaa"$') 'KeepProfile: a setting boot 1 saved survives into boot 2'
+    Assert-True ((Get-Sha (Join-Path $out6.Vt2Dir 'save_data.sav')) -eq $savBoot1) "KeepProfile: boot 1's save is kept, not replaced by the owner's"
+    $plans6 = Read-PlanBlocks $cfg6
+    Assert-True ($plans6.Count -eq 1 -and $plans6[0].nonce -eq '6666bbbb') 'KeepProfile: one plan block, the new boot''s'
+    $enabled6 = Get-Enabled $cfg6
+    Assert-True ($enabled6['9000000099'] -eq 'true' -and $enabled6['3733367409'] -ne 'true') 'KeepProfile: the mod list follows the new boot''s plan'
+    Assert-True ($cfg6 -match '(?m)^use_pc_menu_layout = true$') 'KeepProfile: the new boot''s settings are applied'
+    $keepErr = $null
+    try { & $builder -RealProfile $real -ProfileRoot (Join-Path $root 'rig\empty') -PlanPath $planPath -Nonce '7777cccc' -DriverFile $driverFile -DriverId $driverId -KeepProfile | Out-Null } catch { $keepErr = $_.Exception.Message }
+    Assert-True ($keepErr -match 'KeepProfile: no rig profile to keep') 'KeepProfile without a profile to keep throws'
+
     foreach ($f in $ownerBefore.Keys) { Assert-True ((Get-Sha (Join-Path $real $f)) -eq $ownerBefore[$f]) "owner file unchanged: $f" }
 }
 finally {

@@ -30,7 +30,8 @@ param(
     [string] $SharedDir = '',                         # qa/runtime/_shared: every *.lua in it travels with the plan
     [hashtable] $SlotSwaps = @{},                     # WP-H-07: real Workshop id -> rig slot id holding its local build
     [hashtable] $ExpectVersions = @{},                # WP-H-07: VMF mod id -> staged MOD_VERSION the smoke case checks
-    [switch] $KeepOwnerMods                           # no-plan experiments: leave the copied mod list as it is
+    [switch] $KeepOwnerMods,                          # no-plan experiments: leave the copied mod list as it is
+    [switch] $KeepProfile                             # WP-H-08 boots: start from the profile the previous boot left
 )
 $ErrorActionPreference = 'Stop'
 
@@ -84,16 +85,24 @@ $rigAppData = Join-Path $ProfileRoot 'AppData\Roaming'
 $rigLocal = Join-Path $ProfileRoot 'AppData\Local'
 $rigVt2 = Join-Path $rigAppData 'Fatshark\Vermintide 2'
 New-Item -ItemType Directory -Force -Path $rigVt2, $rigLocal, (Join-Path $rigVt2 'console_logs') | Out-Null
-foreach ($f in 'save_data.sav', 'save_data.old', 'launcher.config') {
-    $src = Join-Path $RealProfile $f
-    if (Test-Path -LiteralPath $src) { Copy-Item -LiteralPath $src -Destination (Join-Path $rigVt2 $f) -Force }
+# -KeepProfile (a later boot of a plan with boots): the save and settings the previous boot left in the rig profile
+# are the starting point; nothing is copied from the owner's profile again.
+if ($KeepProfile) {
+    if (-not (Test-Path -LiteralPath (Join-Path $rigVt2 'user_settings.config') -PathType Leaf)) { throw "KeepProfile: no rig profile to keep under $rigVt2" }
+}
+else {
+    foreach ($f in 'save_data.sav', 'save_data.old', 'launcher.config') {
+        $src = Join-Path $RealProfile $f
+        if (Test-Path -LiteralPath $src) { Copy-Item -LiteralPath $src -Destination (Join-Path $rigVt2 $f) -Force }
+    }
 }
 $shader = Join-Path $rigVt2 'shader_cache.pipe_lib'
 if (-not (Test-Path -LiteralPath $shader) -and (Test-Path -LiteralPath (Join-Path $RealProfile 'shader_cache.pipe_lib'))) {
     Copy-Item -LiteralPath (Join-Path $RealProfile 'shader_cache.pipe_lib') -Destination $shader
 }
 
-$cfg = [System.IO.File]::ReadAllText((Join-Path $RealProfile 'user_settings.config')) -replace "`r`n", "`n"
+$cfgSource = if ($KeepProfile) { Join-Path $rigVt2 'user_settings.config' } else { Join-Path $RealProfile 'user_settings.config' }
+$cfg = [System.IO.File]::ReadAllText($cfgSource) -replace "`r`n", "`n"
 $forced = [ordered]@{ borderless_fullscreen = 'false'; fullscreen = 'false'; max_fps = '30'; master_bus_volume = '0' }
 # plan "settings": top-level user settings; a JSON boolean or number is written as SJSON (true, 30), a string as it
 # is (raw SJSON text, e.g. "30")
