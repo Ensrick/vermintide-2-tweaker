@@ -144,6 +144,14 @@ return function(context)
 
     local function load()
         local save_data = mod:get("forged_weapons")
+        -- WP-CIM-06 step 5: one backup per process of the store as it was at
+        -- session start. Never an empty backup.
+        if not mod._cim_store_backup_done then
+            mod._cim_store_backup_done = true
+            if type(save_data) == "table" and next(save_data) ~= nil then
+                mod:set("forged_weapons_backup", save_data, false)
+            end
+        end
         if not save_data or type(save_data) ~= "table" then return end
         forged_weapons = {}
         local rewrite = false
@@ -292,6 +300,19 @@ return function(context)
     end
     mod._cim_get_craft = function(backend_id) return forged_weapons[backend_id] end
     mod._cim_persist_crafts = save
+    rt_register("issue_cim_store_backup_present", function()
+        if next(forged_weapons) == nil then return "skip: no crafted items" end
+        local backup = mod:get("forged_weapons_backup")
+        if type(backup) ~= "table" or next(backup) == nil then
+            return "crafted items exist but forged_weapons_backup is missing or empty"
+        end
+    end)
+    -- Runs the entry's restore loop (`_athanor_inject_all`) for commands that
+    -- re-register saved records, e.g. /cim_restore_backup.
+    mod._cim_run_restore_loop = function()
+        local athanor_inject_all = get_athanor_inject_all()
+        if athanor_inject_all then athanor_inject_all() end
+    end
     rt_register("issue_cim_store_serializable", function()
         if not store_policy then return "skip: store policy not loaded" end
         local valid, bad_id, bad_path = store_policy.validate_store(build_save_data(forged_weapons))

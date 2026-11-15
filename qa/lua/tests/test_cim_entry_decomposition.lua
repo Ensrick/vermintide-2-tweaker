@@ -69,6 +69,7 @@ return function(H, repo_root)
             "forge", "forge_trait", "forge_props", "forge_skin",
             "forge_power", "forge_cancel", "forge_confirm",
             "salvage_debug", "forge_list", "forge_delete",
+            "cim_restore_backup",
         }
         local actual = {}
         for name in owner:gmatch('mod:command%\("([^"]+)"') do
@@ -121,6 +122,7 @@ return function(H, repo_root)
             "forge", "forge_trait", "forge_props", "forge_skin",
             "forge_power", "forge_cancel", "forge_confirm",
             "salvage_debug", "forge_list", "forge_delete",
+            "cim_restore_backup",
         })
         H.equal(bulk_installs, 1)
         H.truthy(type(mod._cim277_delete_owned_ids) == "function")

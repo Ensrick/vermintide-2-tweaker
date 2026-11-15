@@ -360,6 +360,7 @@ local suites = {
     "test_cim_restore_injection",
     "test_cim_store_policy",
     "test_cim_forge_state_store",
+    "test_cim_store_backup",
     "test_woc_wire_policy",
 	"test_woc_boss_weapon_catalog",
 	"test_cim_external_trait_policy",

@@ -1,5 +1,18 @@
 # Crafting in Modded Changelog
 
+## 0.8.154-dev (2026-11-15) -- Session-start backup of crafted items and /cim_restore_backup (#1654, #277)
+
+- The first load in each game session copies the crafted collection to the
+  new setting `forged_weapons_backup` (never an empty copy), so a bad write
+  or a lost record later in the session can be undone (WP-CIM-06b).
+- New command `/cim_restore_backup`: without an argument it reports how many
+  backed-up items are missing from the collection; `/cim_restore_backup
+  CONFIRM` adds exactly those back in one validated write and restores them
+  to the inventory. It never removes or overwrites an item.
+- Regression check `issue_cim_store_backup_present`.
+- Not confirmed in game. The rig case is
+  `qa/runtime/cim/issue_1654_store_backup.lua`.
+
 ## 0.8.153-dev (2026-11-15) -- Never write a crafted store that breaks the settings save (#1654, #277)
 
 - Every write of the crafted collection (`forged_weapons`) is validated
