@@ -1206,61 +1206,26 @@ from release lookup through carry-forward, immutable snapshot capture, and
 release-ID mutation; removing or narrowing that transaction revives lost
 manifest updates.
 
-**Partial publication does not mean test-ready (#1328/#1548).** After the
-publisher confirms the exact published GitHub release, it arms an immutable
-in-memory source-pin context in a private shared holder before copying its
-hosted receipt to ship. The publisher independently matches the prepared
-identity to its source-qualified staged entry; intent, an ambiguous HTTP result,
-and an unpublished draft do not arm it. Ship imports that outcome even when
-receipt copying, reporting, or publisher cleanup fails. On those failures or a
-later authorization/upload/verification failure,
-outer finalization drains authenticated descendants and reconciles consumed
-exception pins before releasing the machine transaction. The original failure
-and version claim remain; no labels, cards, or readiness banner are emitted.
-Writes are staged beside the authority file, replaced atomically, and read back.
-Carry the resulting metadata-only change through a reviewed PR. The successful
-path invokes the same helper before constructing live-test authority.
-After hard process death or an ambiguous server outcome, the next canonical
-ship performs current-source-pin recovery after its clean exact-source,
-claim, merged-PR and hosted-QA authorization, before build. Under the owning
-machine transaction and subordinate release-mutation lock it fetches the
-current published GitHub manifest and proves every consumed pin's source
-identity, immutable subtree and version before any write. Current server state
-is authoritative; no old intent journal, version ordering, removed worktree or
-previous lease record is needed or replayed. A changed invoking pin set always
-stops for a reviewed metadata PR, including when the freshly discovered primary
-already holds that candidate. Conflicting primary edits are preserved. A clean
-current primary receives one atomic, read-back-verified candidate, retaining its
-line endings. An unavailable current manifest grants no recovery authority and
-changes no pins; the existing publisher still owns its bounded release fallback
-and all publication gates. Missing-manifest reconstruction is separate from pin
-recovery (#1434). GitHub provenance alone never confirms Workshop transfer or
-permits refreshing held test cards.
+**Partial publication does not mean test-ready (#1328/#1548).** Source pins in
+`tools/verify/live_test_contract_exceptions.psd1` are informational
+(WP-P-05, 2026-11-15): each records the deployed tree an override was reviewed
+against. A ship no longer rewrites them, before the build or after the upload,
+and the source authority no longer compares them with the deployed tree, so a
+ship leaves the working tree clean and needs no pin pull request. The
+override's source, literal signature and token anchors are still checked
+against the deployed source and fail closed when audited code changed.
+On a failure after the publisher confirmed the exact published GitHub release,
+the machine-transaction exit still drains authenticated descendants; the
+original failure and version claim remain, and no labels, cards or readiness
+banner are emitted. GitHub provenance alone never
+confirms Workshop transfer or permits refreshing held test cards.
 
-**Reviewed route-source retention (#1777).** An explicit protected source+artifact
-PR may declare exactly two reviewed immutable same-mod route trees in
-`ReviewedRouteTransitions`: canonical `ModId`, ancestor `FromSourceCommit`,
-`CandidateModTree`, and exact committed schema-3 `CandidateReceiptSha256`.
-The existing authorized SourceCommit supplies the candidate subtree and complete
-receipt/source/output proof; no final-commit self-reference or caller boolean
-is authority. Ancestry proves source provenance, NOT historical publication.
-Every marked route must independently name the identical distinct lowercase
-two-tree pair; family/discovery ownership is ineligible. Validate declarations,
-committed bindings, normal definitions and immutable source anchors BEFORE
-current-tree membership. Malformed/mismatched/foreign/third/mixed policy fails
-with original bytes retained. A valid pair containing the actual current tree
-is a byte-exact no-op; valid policy missing current takes ordinary recovery and
-the reviewed metadata-PR stop, never adds a third retained tree. That repair PR
-must retire/replace the stale declaration. Unmarked legacy behavior is unchanged.
-Only the fresh authenticated manifest selects active source authority; unchanged
-selected-source path/signature/emitter/guard checks still apply. The pair grants
-no historical recovery, replay, Workshop, card, claim-release or ship authority.
-Retain at most this one reviewed candidate generation, with no accumulating
-history: abandonment/revocation and the next source candidate explicitly prune
-or replace the declaration in protected review. Metadata-only HEAD advancement
-still requires the new exact clean-source/default/hosted authorization. Hard-
-death recovery uses the existing fresh-server/owning-lease/mutex boundaries.
-No active declaration or sacrificial publication is introduced by this tooling.
+**Reviewed route-source retention (#1777).** `ReviewedRouteTransitions`
+declarations are read only by the dormant pin-rewrite path, which runs in its
+own gates (`VT2_SOURCE_PIN_REWRITE_SELFTEST=1`) and never in a real ship.
+Because pins are no longer compared with the deployed tree, a declaration grants
+nothing at ship time; unchanged selected-source path, signature, emitter and
+guard checks still apply. No active declaration is introduced by this tooling.
 
 **Pinned-card refresh is stream-specific, not load-tag-specific.** A runtime
 tag such as `[wt:LOAD]` may be intentionally shared by public and development

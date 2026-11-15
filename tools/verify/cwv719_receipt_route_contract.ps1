@@ -89,7 +89,8 @@ function Test-VtCwv719ReceiptRouteContract {
         $message=$null;try{& $Action|Out-Null}catch{$message=$_.Exception.Message}
         & $assert ($message -and $message -match $Pattern) ('negative accepted: '+$Label+' result='+$message)
     }
-    & $reject {& $apply -Tree ('0'*40)} 'tree drift' 'wrong deployed tree'
+    # WP-P-05: pins are informational; another deployed tree with unchanged anchors is accepted.
+    & $apply -Tree ('0'*40) | Out-Null
     foreach($path in @($helper,$entry,$check)){
         $missing=$sources.Clone();$missing.Remove($path)
         & $reject {& $apply -Texts $missing} '(?:source missing|anchor drift|unregistered action command)' ('missing immutable witness '+$path)
