@@ -35,6 +35,10 @@
   disabled; the load banner must show the staged version (an expected line), and summary.json records the
   build's commit, version and whether the real Workshop folder stayed byte-identical.
 
+  Several boots (WP-H-08): "boots": [ { "cases": [...] }, { "cases": [...], "modset": "..." } ] instead of top-level
+  "cases" runs the boots in order on one rig profile; every boot after the first starts from the profile the one
+  before it left. Each boot's evidence is in <run>\boot-<i>\; the run's summary lists every boot (Split-BootPlan.ps1).
+
   Exit code: 0 = run completed and every case PASS; 1 = at least one FAIL, a forbidden log line or a missing
   expected line; 2 = ERROR/TIMEOUT/INCONCLUSIVE or the run did not complete; 3 = rig refused to start or isolation
   was broken.
@@ -60,7 +64,9 @@ param(
     [string] $SteamApps = '',               # default: resolved from HKCU:\Software\Valve\Steam SteamPath
     [string] $StopOnLog = '',               # no-plan experiments: stop when this regex appears in the log
     [int] $StopDelaySeconds = 5,
-    [switch] $KeepOwnerMods                 # no-plan experiments: leave the copied mod list as it is
+    [switch] $KeepOwnerMods,                # no-plan experiments: leave the copied mod list as it is
+    [string] $RunDir = '',                  # WP-H-08: evidence folder of one boot of a plan with boots (Invoke-RigBoots.ps1)
+    [switch] $KeepProfile                   # WP-H-08: a later boot starts from the profile the boot before it left
 )
 $ErrorActionPreference = 'Stop'
 $here = $PSScriptRoot
@@ -73,9 +79,25 @@ $planObj = $null
 if ($Plan) {
     $planPath = (Resolve-Path -LiteralPath $Plan).Path
     $planObj = Get-Content -LiteralPath $planPath -Raw | ConvertFrom-Json
+    # WP-H-08: "modset" fills mods and expect_mods (New-RigProfile.ps1 resolves the plan the same way)
+    try { $planObj = & (Join-Path $PSScriptRoot 'Resolve-RigPlan.ps1') -Plan $planObj }
+    catch { Write-Host "RIG REFUSED: plan: $($_.Exception.Message)"; exit 3 }
     if (-not $Name) { $Name = $planObj.name }
 }
 if (-not $Name) { throw 'Give -Plan or -Name.' }
+
+# ---------- boots (WP-H-08) ----------
+# A plan with "boots" runs once per boot, in order, on one rig profile: boot 1 starts from a fresh copy of the
+# owner's profile, every later boot from the profile the boot before it left (save, settings, mod data), so a case
+# can check what survives a restart. Invoke-RigBoots.ps1 holds the rig lock across the boots and runs this script
+# once per boot (Split-BootPlan.ps1 writes each boot's plan; evidence in <run>\boot-<i>\).
+if ($planObj -and $planObj.PSObject.Properties['boots'] -and $planObj.boots) {
+    $childArgs = @{ Renderer = $Renderer; ExtraArgs = $ExtraArgs; DriverFile = $DriverFile; DriverId = $DriverId; SharedDir = $SharedDir; SlotsFile = $SlotsFile; SteamApps = $SteamApps }
+    if ($Visible) { $childArgs.Visible = $true }
+    if ($TimeoutSeconds -gt 0) { $childArgs.TimeoutSeconds = $TimeoutSeconds }
+    & (Join-Path $here 'Invoke-RigBoots.ps1') -PlanPath $planPath -Name $Name -RigRoot $RigRoot -ChildArgs $childArgs -RunScript $PSCommandPath
+    exit $LASTEXITCODE
+}
 
 # ---------- preflight ----------
 try {
@@ -117,7 +139,7 @@ if (-not $mutex.WaitOne(0)) { Write-Host 'RIG REFUSED: another rig run holds the
 
 $nonce = -join ((1..8) | ForEach-Object { '{0:x}' -f (Get-Random -Maximum 16) })
 $stamp = (Get-Date).ToUniversalTime().ToString('yyyyMMdd-HHmmss')
-$run = Join-Path $RigRoot "runs\$stamp-$Name-$nonce"
+$run = if ($RunDir) { $RunDir } else { Join-Path $RigRoot "runs\$stamp-$Name-$nonce" }
 New-Item -ItemType Directory -Force -Path $run | Out-Null
 $watched = 'user_settings.config', 'save_data.sav', 'launcher.config'
 $before = @{}; foreach ($f in $watched) { $before[$f] = Get-FileSha (Join-Path $realProfile $f) }
@@ -146,6 +168,8 @@ function Get-FolderHashes([string] $dir) {
     ($h.GetEnumerator() | ForEach-Object { "$($_.Key)=$($_.Value)" }) -join ';'
 }
 $realFoldersBefore = @{}; foreach ($lb in $localBuilds) { $realFoldersBefore[$lb.real_id] = Get-FolderHashes $lb.real_dir }
+# WP-H-08: a later boot of a plan with boots keeps the profile the boot before it left
+if ($KeepProfile) { $profileArgs.KeepProfile = $true }
 try { $rigProfile = & (Join-Path $here 'New-RigProfile.ps1') @profileArgs }
 catch { Write-Host "RIG REFUSED: profile: $($_.Exception.Message)"; $mutex.ReleaseMutex(); exit 3 }
 $profileRoot = $rigProfile.ProfileRoot

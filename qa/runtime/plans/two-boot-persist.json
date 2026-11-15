@@ -1,0 +1,10 @@
+{
+  "name": "two-boot-persist",
+  "purpose": "WP-H-08 acceptance: boot 2 starts from the profile boot 1 left. Boot 1 saves a marker into the rig profile's user settings; boot 2 reads it back.",
+  "mods": ["1369573612"],
+  "timeout": 240,
+  "boots": [
+    { "cases": [ { "id": "boot-marker-write", "arena": "keep", "file": "../_rig/boot_marker_write.lua" } ] },
+    { "cases": [ { "id": "boot-marker-read", "arena": "keep", "file": "../_rig/boot_marker_read.lua" } ] }
+  ]
+}
