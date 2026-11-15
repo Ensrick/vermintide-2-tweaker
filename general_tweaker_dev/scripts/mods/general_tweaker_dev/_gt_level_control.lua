@@ -5,6 +5,20 @@ local BackendGuard = mod:dofile(
     "scripts/mods/general_tweaker_dev/_gt_level_control_backend_guard")
 mod._gt_modded_realm_authority = RealmAuthority
 mod._gt_level_control_backend_guard = BackendGuard
+-- WP-GT-01 (A6-F01): a host performs a peer's request only with "Allow Client
+-- Requests" on; refusals other than not_host log once per kind|peer|reason.
+mod._gt_host_request_policy = mod:dofile("scripts/mods/general_tweaker_dev/_gt_host_request_policy")
+local _gt_host_request_logged = {}
+mod._gt_host_request_refused = function(kind, sender_peer_id, schema, expected_schema)
+    local P = mod._gt_host_request_policy
+    local refused, reason = P.refuse(Managers.player and Managers.player.is_server, mod:get(P.SETTING), schema, expected_schema)
+    local key = tostring(kind) .. "|" .. tostring(sender_peer_id) .. "|" .. tostring(reason)
+    if refused and reason ~= "not_host" and not _gt_host_request_logged[key] then
+        _gt_host_request_logged[key] = true
+        mod:info("[gt:host-request] refused kind=%s peer=%s reason=%s", tostring(kind), tostring(sender_peer_id), tostring(reason))
+    end
+    return refused, reason
+end
 
 -- _gt_level_control.lua — host/level control + reservation-side fixes.
 --
@@ -79,8 +93,8 @@ mod._gt_level_control_backend_guard = BackendGuard
 -- assert is_server). v0.2.99-dev: make these CLIENT-USABLE — a client REQUESTS
 -- the action and the host performs it, mirroring the gt_respawn client->host RPC
 -- (handy for co-op testing where a non-host wants to force-win/fail/restart).
--- Any peer can trigger it (no extra permission gate) -- fine for a friends test;
--- a host opt-out toggle can be added later if grief is a concern.
+-- WP-GT-01: the host performs a peer's request only with "Allow Client Requests"
+-- on (gt_host_allow_client_requests, off by default); the payload is (SCHEMA, verb).
 local _GT_LEVEL_RPC = "gt_level_control"
 
 local _GT_LEVEL_VERBS = {
@@ -120,8 +134,8 @@ local function _gt_request_level_control(verb)
         if vmf and vmf.ping_vmf_users then pcall(vmf.ping_vmf_users) end
         local host = Managers.mechanism and Managers.mechanism.server_peer_id and Managers.mechanism:server_peer_id()
         if host then
-            pcall(function() mod:network_send(_GT_LEVEL_RPC, host, verb) end)
-            mod:echo("[gt] " .. tostring(verb) .. " requested from host (run it again if nothing happens -- the host link may have just re-synced).")
+            pcall(function() mod:network_send(_GT_LEVEL_RPC, host, mod._gt_host_request_policy.SCHEMA, verb) end)
+            mod:echo("[gt] " .. tostring(verb) .. " requested from host (run it again if nothing happens -- the host link may have just re-synced). The host must enable Allow Client Requests.")
         else
             mod:echo("[gt] couldn't resolve the host peer.")
         end
@@ -133,7 +147,8 @@ mod.gt_fail_level    = function() _gt_request_level_control("fail")     end
 mod.gt_restart_level = function() _gt_request_level_control("restart")  end
 
 -- Host receives a client's level-control request and performs it for the lobby.
-mod:network_register(_GT_LEVEL_RPC, function(sender_peer_id, verb)
+mod:network_register(_GT_LEVEL_RPC, function(sender_peer_id, schema, verb)
+    if mod._gt_host_request_refused("level", sender_peer_id, schema, mod._gt_host_request_policy.SCHEMA) then return end
     local pm = Managers.player
     if not (pm and pm.is_server) then return end
     local ok, msg = _gt_host_exec_level_control(tostring(verb))
@@ -534,8 +549,8 @@ mod.gt_respawn = function()
         if vmf and vmf.ping_vmf_users then pcall(vmf.ping_vmf_users) end
         local host = Managers.mechanism and Managers.mechanism.server_peer_id and Managers.mechanism:server_peer_id()
         if host then
-            pcall(function() mod:network_send(_GT_RESPAWN_RPC, host, lpid) end)
-            mod:echo("[gt] respawn requested from host (run it again if nothing happens -- the host link may have just re-synced).")
+            pcall(function() mod:network_send(_GT_RESPAWN_RPC, host, mod._gt_host_request_policy.SCHEMA, lpid) end)
+            mod:echo("[gt] respawn requested from host (run it again if nothing happens -- the host link may have just re-synced). The host must enable Allow Client Requests.")
         else
             mod:echo("[gt] couldn't resolve the host peer.")
         end
@@ -543,7 +558,8 @@ mod.gt_respawn = function()
 end
 
 -- Host receives a client's respawn request and performs it for that peer.
-mod:network_register(_GT_RESPAWN_RPC, function(sender_peer_id, lpid)
+mod:network_register(_GT_RESPAWN_RPC, function(sender_peer_id, schema, lpid)
+    if mod._gt_host_request_refused("respawn", sender_peer_id, schema, mod._gt_host_request_policy.SCHEMA) then return end
     local pm = Managers.player
     if not (pm and pm.is_server) then return end
     local ok, msg = _gt_host_respawn(sender_peer_id, tonumber(lpid) or 1)
