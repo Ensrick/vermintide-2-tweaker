@@ -969,7 +969,7 @@ local _data = {
                     {
                         setting_id    = "gt_host_lag_comp",
                         type          = "checkbox",
-                        default_value = true,
+                        default_value = false,
                         tooltip       = "gt_host_lag_comp_tooltip",
                         sub_widgets   = {
                             {
