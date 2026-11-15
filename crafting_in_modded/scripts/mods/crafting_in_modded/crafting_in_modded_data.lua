@@ -114,8 +114,8 @@ local options_data = {
                         default_value = true,
                     },
                     -- Base power level applied to every freshly-crafted item.
-                    -- Vanilla weapons cap at 300; CW boosts apply on top. 0-950
-                    -- in steps of 50 covers the range the user might want.
+                    -- Vanilla weapons cap at 300; CW boosts apply on top.
+                    -- Mod Tweaker steps by 25 across 0-950; VMF stays integer-granular.
                     --
                     -- `unit_text` intentionally omitted — VMF treats an empty
                     -- string as a loc key and renders the unresolved-key

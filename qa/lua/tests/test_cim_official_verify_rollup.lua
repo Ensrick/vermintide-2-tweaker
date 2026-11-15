@@ -79,9 +79,105 @@ return function(H, repo_root)
         "test_cim_mission_forge_widget_safety",
         "test_cim_tab_preview",
         "test_cim_dev_forge_installation",
+        "test_cim_forge_realm_diagnostic",
     }) do
         with_production(function()
             assert(load_selected(repo_root .. "/qa/lua/tests/" .. name .. ".lua"))()(proxy, repo_root)
+        end)
+    end
+
+    -- Execute the exact public registrar and its real localization loader.
+    -- This tests the instrument itself: a missing dependency cannot report PASS.
+    local function base_power_check(spec)
+        local checks, seen = {}, { loads = 0, settings = 0, powers = 0 }
+        local mod = {}
+        function mod:set() error("Base Power regression check wrote settings") end
+        if not spec.missing_loader then
+            function mod:dofile(path)
+                seen.loads = seen.loads + 1
+                H.equal(path, "scripts/mods/crafting_in_modded/crafting_in_modded_localization")
+                if spec.load_error then error("localization unavailable") end
+                if spec.localization ~= nil then return spec.localization end
+                return assert(load_selected(repo_root .. official
+                    .. "crafting_in_modded_localization.lua"))()
+            end
+        end
+        if not spec.missing_setting then
+            function mod:get(key)
+                seen.settings = seen.settings + 1
+                H.equal(key, "base_power_level")
+                if spec.setting_error then error("setting unavailable") end
+                return spec.setting
+            end
+        end
+        if not spec.missing_power then
+            mod._cim_base_power = function()
+                seen.powers = seen.powers + 1
+                if spec.power_error then error("power unavailable") end
+                return spec.power
+            end
+        end
+        local install = assert(load_selected(repo_root .. official .. "_cim_regression_checks.lua"))()
+        install({ mod = mod, rt_register = function(name, fn)
+            H.equal(checks[name], nil, "duplicate runtime check")
+            checks[name] = fn
+        end })
+        return assert(checks.issue1530_base_power_step_wording,
+            "public issue1530 registration missing"), seen
+    end
+
+    for _, values in ipairs({
+        { name = "off-grid integer", setting = 324, power = 324 },
+        { name = "off-grid fraction", setting = 324.5, power = 324.5 },
+        { name = "low clamp", setting = -1, power = 0 },
+        { name = "high clamp", setting = 951, power = 950 },
+        { name = "nonnumeric default", setting = false, power = 300 },
+        { name = "missing setting default", power = 300 },
+    }) do
+        local spec = values
+        H.test("Official CIM issue1530 actual check accepts " .. spec.name, function()
+            with_production(function()
+                local check, seen = base_power_check(spec)
+                H.equal(check(), nil)
+                H.equal(seen.loads, 1); H.equal(seen.settings, 1); H.equal(seen.powers, 1)
+                H.equal(check(), nil, "repeat should remain read-only")
+                H.equal(seen.loads, 2)
+            end)
+        end)
+    end
+    for _, values in ipairs({
+        { name = "missing loader", missing_loader = true },
+        { name = "throwing loader", load_error = true },
+        { name = "non-table localization", localization = false },
+        { name = "missing description", localization = {} },
+        { name = "stale tooltip", localization = {
+            base_power_level_description = { en = "Power in steps of 50" },
+        } },
+        { name = "mixed stale tooltip", localization = {
+            base_power_level_description = { en = "steps of 25 in Mod Tweaker; steps of 50" },
+        } },
+        { name = "missing setting reader", missing_setting = true },
+        { name = "throwing setting reader", setting_error = true },
+        { name = "missing craft reader", missing_power = true },
+        { name = "throwing craft reader", power_error = true },
+        { name = "missing craft result", setting = 300 },
+        { name = "nonnumeric craft result", setting = 300, power = "300" },
+        { name = "NaN craft result", setting = 300, power = 0 / 0 },
+        { name = "infinite craft result", setting = 300, power = math.huge },
+        { name = "out-of-range craft result", setting = 300, power = 951 },
+        { name = "quantized integer", setting = 324, power = 325 },
+        { name = "quantized fraction", setting = 324.5, power = 325 },
+        { name = "incorrect clamp", setting = 951, power = 300 },
+        { name = "incorrect default", setting = false, power = 0 },
+    }) do
+        local spec = values
+        H.test("Official CIM issue1530 actual check refuses " .. spec.name, function()
+            with_production(function()
+                local check = base_power_check(spec)
+                local result = check()
+                H.equal(type(result), "string", "missing/broken proof reported PASS")
+                H.truthy(#result > 0)
+            end)
         end)
     end
 
