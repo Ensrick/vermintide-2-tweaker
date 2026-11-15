@@ -20,7 +20,7 @@ pwsh -NoProfile -File tools/harness/run.ps1 -Plan qa/runtime/plans/smoke-keep.js
 
 Exit code: 0 every case PASS; 1 at least one FAIL; 2 ERROR, TIMEOUT or INCONCLUSIVE, or the run did not complete; 3 the rig refused to start or isolation broke. It refuses when a Vermintide process exists, Steam is not running, free RAM is under 6 GiB, the bootstrap item is not installed, or another rig run holds the lock.
 
-Offline tests (no game): `pwsh -File tools/harness/tests/GameProcess.Tests.ps1`, `pwsh -File tools/harness/tests/Profile.Tests.ps1`, and `qa/lua/tests/test_rig_driver.lua` inside `pwsh -File qa/check_lua_unit_tests.ps1`.
+Offline tests (no game): `pwsh -File tools/harness/tests/<name>.Tests.ps1` for `GameProcess`, `Profile`, `HostLog`, `FindRunLog` and `SmokePlan`, and `qa/lua/tests/test_rig_driver.lua` inside `pwsh -File qa/check_lua_unit_tests.ps1`.
 
 ## Plan format
 
@@ -32,11 +32,21 @@ Offline tests (no game): `pwsh -File tools/harness/tests/GameProcess.Tests.ps1`,
   "settle": 4,
   "arenas": ["keep", "mission:military"],
   "settings": { "max_fps": "30" },
+  "expect_mods": ["VMF"],
+  "host_expect_log": ["\\[gt:LOAD\\] v"],
+  "host_forbid_log": [],
+  "host_allow_log": [ { "pattern": "<regex>", "reason": "why this one line is benign" } ],
   "cases": [ { "id": "smoke-keep", "arena": "keep", "file": "../_rig/smoke_keep.lua" } ]
 }
 ```
 
-`mods` are Workshop folder ids to enable (VMF first; the driver is added last). Every other mod in the copied list is disabled. `timeout` is the in-game run limit in seconds (the host limit is that plus 240). `file` is relative to the plan file. A case file returns a table:
+`mods` are Workshop folder ids to enable (VMF first; the driver is added last). A plan id missing from the copied mod list gets an entry, so a mod that is not installed shows up as a forbidden log line instead of being skipped silently. Every other mod in the copied list is disabled. `timeout` is the in-game run limit in seconds (the host limit is that plus 240). `file` is relative to the plan file. `expect_mods` are VMF mod ids the smoke case asserts are loaded.
+
+Host log checks (`Read-HostLog.ps1`, on the final log): every `host_expect_log` regex must match; any `host_forbid_log` regex, and by default `<<Script Error>>`, `Lua Stack`, `was not found in the workshop folder`, `Syntax error in .mod file` and `Failed to run callback` on the game's own lines, plus the two shield defaults, is forbidden. A forbidden hit or a missing expected line makes the run exit 1 and is named in the summary. Do not disable a default; add one `host_allow_log` entry with its reason for a line proven benign. `pwsh -File tools/harness/Read-HostLog.ps1 -LogFile <log> -PlanFile <plan> -Nonce <n> -ExitCode` judges a saved log on its own.
+
+Full-set smoke plans: `pwsh -File tools/harness/New-SmokePlan.ps1` writes `qa/runtime/plans/smoke-public.json` (inventory rows with `Public = $true`) and `smoke-dev.json` (rows with stream `dev` or `single`) from `tools/mod-inventory.psd1`; `-Check` reports drift. Never edit them by hand. `smoke-broken-fixture.json` is a negative control: it names a mod id that is not installed and must exit 1.
+
+A case file returns a table:
 
 ```lua
 return { issue = 0, timeout = 60, run = function(T) T.step("x"); T.expect(cond, "label") end }
@@ -87,4 +97,4 @@ A plan may set `backend_shield: false` only when its cases test commit behaviour
 
 ## Reading a run
 
-`runs\<run>\summary.md` has one line with the host verdict (`EXITED code=...`, `HOST-TIMEOUT-KILLED`, `VISIBLE-WINDOW`), the exit code, `isolation OK|BROKEN` and whether `RUN END` was seen, then one table row per case (verdict, assertion count, failed count, seconds, first failure). `summary.json` adds the seconds from start to each boot mark (`title`, `ingame`, `keep_ready`, `run_end`), the first script errors and notes. `evidence.txt` is every `[vt2t:<nonce>]` line in order; `console.log` is the game log; `plan.json` and `user_settings.after.config` are kept for replay.
+`runs\<run>\summary.md` has one line with the host verdict (`EXITED code=...`, `HOST-TIMEOUT-KILLED`, `VISIBLE-WINDOW`), the exit code, `isolation OK|BROKEN` and whether `RUN END` was seen, then one table row per case (verdict, assertion count, failed count, seconds, first failure). `summary.json` adds `keep_ready_seconds` (log timestamp of `KEEP READY` minus the first log line; the polled `marks_seconds.keep_ready` is later because the log is buffered), the driver's own `keep_ready_driver_t`, the host log findings, `loaded_versions` from the `[<tag>:LOAD] v<version>` banners, the seconds from start to each boot mark, the first script errors and notes. `evidence.txt` is every `[vt2t:<nonce>]` line in order; `console.log` is the game log (the game is started with `--default-console-log-path <run>\console.log`; `log_source` says whether that switch worked or the profile's `console_logs` folder was used after 20 s); `plan.json` and `user_settings.after.config` are kept for replay.
