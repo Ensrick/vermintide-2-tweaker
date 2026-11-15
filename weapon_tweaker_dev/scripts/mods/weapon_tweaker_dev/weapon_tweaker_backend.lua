@@ -594,6 +594,7 @@ function M.install(mod, weapon_unlock_map, apply_weapon_unlocks, patch_career_ac
     local prev_update = mod.update
     mod.update = function(dt)
         if prev_update then pcall(prev_update, dt) end
+        if not mod._wt.is_active() then return end
         if mod._wt368_deferred_availability then
             mod._wt368_deferred_availability = nil
             apply_weapon_unlocks()

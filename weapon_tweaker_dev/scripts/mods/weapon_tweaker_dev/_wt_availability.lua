@@ -374,12 +374,12 @@ local function reconcile_effective_career_actions(item, template, career_name, i
     return report, result
 end
 
--- Clean disable: strip every cross-career career name this mod added to ItemMasterList[*].can_wield
--- and every ability action it injected into Weapons[*].actions. Without this, disabling the mod
--- via VMF would leave cross-career unlocks active on every affected weapon until game restart.
--- The restore-and-mutate phases of apply_weapon_unlocks / patch_career_actions_on_weapons already
--- handle the strip step on every call, so we just clear the management state and re-call: every
--- mod:get("unlock_*") read returns nil/false post-disable, so the add-back phase contributes nothing.
+-- Clean disable: return every weapon_unlock_map pair to its vanilla ownership.
+-- Cross-career pairs lose the career; native pairs (for example dr_ranger on
+-- dr_1h_axe) get it back even when its toggle stripped it while enabled.
+-- Ownership comes from the static _wt_native_weapon_ownership catalog, never
+-- from live can_wield. VMF settings keep their values after a disable, so this
+-- cannot rely on apply_weapon_unlocks reading false toggles.
 local function clear_weapon_unlocks()
     local backend = WT.weapon_backend
     if backend and backend.clear_loadout_cache then
@@ -390,11 +390,7 @@ local function clear_weapon_unlocks()
         for _, weapon_key in ipairs(weapons) do
             local item = rawget(ItemMasterList, weapon_key)
             if item and item.can_wield then
-                for i = #item.can_wield, 1, -1 do
-                    if item.can_wield[i] == career then
-                        table.remove(item.can_wield, i)
-                    end
-                end
+                _set_career(item, career, WT.is_native_weapon(career, weapon_key))
             end
         end
     end

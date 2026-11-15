@@ -5,6 +5,7 @@ local M = {}
 function M.install(c)
     local mod = c.mod
     mod.on_setting_changed = function(setting_id)
+        if c.is_active and not c.is_active() then return end
         if c.rework_runtime:is_batching() then return end
         if c.rework_runtime:on_master_changed(setting_id) then return end
         if mod._wt942_on_setting_changed and mod._wt942_on_setting_changed(setting_id) then
@@ -59,6 +60,7 @@ function M.install(c)
 
     -- #1002: N silent persisted writes, master reconciliation, one live apply.
     mod.on_settings_batch_changed = function(setting_ids)
+        if c.is_active and not c.is_active() then return end
         if c.history_runtime then
             c.history_runtime:on_settings_batch_changed(setting_ids)
         end
