@@ -476,9 +476,9 @@ return {
 
     -- WP-H-02: the real smoke case asserts every VMF mod id of the plan's expect_mods, read from the plan block in
     -- user settings (the table the bootstrap handed the driver).
-    local function run_smoke(expect_mods)
+    local function run_smoke(expect_mods, expect_versions)
         local plan = make_plan({ { id = "smoke-keep", src = read(repo_root .. "/qa/runtime/_rig/smoke_keep.lua") } },
-            { expect_mods = expect_mods })
+            { expect_mods = expect_mods, expect_versions = expect_versions })
         local object, env, lines = boot(plan)
         local hero = env.Managers.player:local_player().player_unit
         env.Managers.player.local_player = function()
@@ -517,5 +517,17 @@ return {
     H.test("rig smoke case: an expect_mods id that is not loaded is a FAIL naming it", function()
         local lines = run_smoke({ "VMF", "missing_mod" })
         H.truthy(first(lines, tag .. "CASE END id=smoke%-keep verdict=FAIL .*detail=\"mod missing_mod is loaded\""), "FAIL names the missing mod")
+    end)
+
+    -- WP-H-07: a staged local build must be the version that runs
+    H.test("rig smoke case: the staged version of a local build is asserted", function()
+        local same = run_smoke({ "VMF" }, { gt_dev = "0.2.300-dev" })
+        H.equal(count(same, tag .. "ASSERT id=smoke%-keep n=%d+ PASS label=\"mod gt_dev runs the staged version\""), 1, "matching MOD_VERSION passes")
+        H.equal(count(same, tag .. "CASE END id=smoke%-keep verdict=PASS"), 1, "smoke case passes")
+        local other = run_smoke({ "VMF" }, { gt_dev = "9.9.9-marker" })
+        H.truthy(first(other, tag .. "CASE END id=smoke%-keep verdict=FAIL .*detail=\"mod gt_dev runs the staged version\""), "a different version FAILs")
+        local banner = run_smoke({ "VMF" }, { VMF = "2.0.0" })
+        H.equal(count(banner, tag .. "NOTE id=smoke%-keep key=staged:VMF value=\"2%.0%.0 %(checked against the load banner by run%.ps1%)\""), 1,
+            "a mod without MOD_VERSION is left to the host banner check")
     end)
 end

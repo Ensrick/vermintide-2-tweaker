@@ -29,6 +29,12 @@
   UpdateUserData request. A plan with backend_shield false drops only the two shield defaults. A forbidden hit or
   a missing expected line makes the run exit 1 and is named in summary.json / summary.md.
 
+  Local builds (WP-H-07): "local_builds": [{ "mod": "<dir>", "slot": <n> }] runs a build that stage-build.ps1 put
+  into rig slot <n> (tools/harness/slots.psd1). Before launch the slot's files must match its slot.json, else the
+  rig refuses (exit 3). The slot id takes the real id's place in the profile's mod list and the real id is
+  disabled; the load banner must show the staged version (an expected line), and summary.json records the
+  build's commit, version and whether the real Workshop folder stayed byte-identical.
+
   Exit code: 0 = run completed and every case PASS; 1 = at least one FAIL, a forbidden log line or a missing
   expected line; 2 = ERROR/TIMEOUT/INCONCLUSIVE or the run did not complete; 3 = rig refused to start or isolation
   was broken.
@@ -49,6 +55,7 @@ param(
     [string] $DriverFile = (Join-Path $PSScriptRoot 'driver/vt2_rig_driver.lua'),
     [string] $DriverId = '3839345856',      # private Workshop item: the rig bootstrap
     [string] $SharedDir = (Join-Path $PSScriptRoot '..\..\qa\runtime\_shared'),
+    [string] $SlotsFile = (Join-Path $PSScriptRoot 'slots.psd1'),     # WP-H-07 rig slots for plan local_builds
     [string] $RigRoot = (Join-Path $env:LOCALAPPDATA 'vt2-harness'),
     [string] $SteamApps = '',               # default: resolved from HKCU:\Software\Valve\Steam SteamPath
     [string] $StopOnLog = '',               # no-plan experiments: stop when this regex appears in the log
@@ -75,6 +82,24 @@ try {
     $install = & (Join-Path $here 'Resolve-Vt2Install.ps1') -SteamApps $SteamApps
     $steamApps = $install.SteamApps
     $workshop = $install.Workshop
+    # WP-H-07: every local build must sit in a rig slot whose files still match its slot.json
+    $localBuilds = @()
+    if ($planObj -and $planObj.PSObject.Properties['local_builds']) {
+        $inventory = Import-PowerShellDataFile -LiteralPath (Join-Path $here '..\mod-inventory.psd1')
+        foreach ($lb in @($planObj.local_builds)) {
+            $dir = [string]$lb.mod
+            $row = @($inventory.Mods | Where-Object { $_.Dir -eq $dir })
+            if ($row.Count -ne 1) { throw "local_builds: not an inventory mod folder: $dir" }
+            $slot = & (Join-Path $here 'Get-RigSlot.ps1') -Slot ([int]$lb.slot) -Workshop $workshop -SlotsFile $SlotsFile
+            $check = & (Join-Path $here 'Test-RigSlot.ps1') -SlotDir $slot.Dir -Mod $dir
+            if (-not $check.Ok) { throw "local_builds: slot $($slot.Slot) ($($slot.Id)) for $dir does not match its slot.json: $($check.Problems -join '; ')" }
+            $localBuilds += [ordered]@{
+                mod = $dir; mod_id = [string]$row[0].ModId; slot = $slot.Slot; slot_id = $slot.Id; real_id = [string]$row[0].WorkshopId
+                commit = [string]$check.Info.commit; dirty = [bool]$check.Info.dirty; version = [string]$check.Info.version
+                real_dir = (Join-Path $workshop ([string]$row[0].WorkshopId)); real_folder_unchanged = $null
+            }
+        }
+    }
     $acf = Get-Content -LiteralPath (Join-Path $steamApps 'appmanifest_552500.acf') -Raw
     if ($acf -notmatch '"StateFlags"\s+"4"') { throw 'VT2 is not fully installed (StateFlags is not 4).' }
     $running = Get-Process -ErrorAction SilentlyContinue | Where-Object { $_.ProcessName -match '^(vermintide2|vermintide2_dx12|vermintide2_launcher)$' }
@@ -110,6 +135,17 @@ if ($planObj) {
 # ---------- profile ----------
 $profileArgs = @{ RealProfile = $realProfile; ProfileRoot = (Join-Path $RigRoot 'profile'); DriverId = $DriverId; KeepOwnerMods = $KeepOwnerMods }
 if ($planObj) { $profileArgs.PlanPath = $planPath; $profileArgs.Nonce = $nonce; $profileArgs.DriverFile = $DriverFile; $profileArgs.SharedDir = $SharedDir }
+if ($localBuilds.Count) {
+    $swaps = @{}; $versions = @{}
+    foreach ($lb in $localBuilds) { $swaps[$lb.real_id] = $lb.slot_id; if ($lb.version) { $versions[$lb.mod_id] = $lb.version } }
+    $profileArgs.SlotSwaps = $swaps; $profileArgs.ExpectVersions = $versions
+}
+function Get-FolderHashes([string] $dir) {
+    $h = [ordered]@{}
+    foreach ($f in @(Get-ChildItem -LiteralPath $dir -File -ErrorAction SilentlyContinue | Sort-Object Name)) { $h[$f.Name] = (Get-FileHash -LiteralPath $f.FullName -Algorithm SHA256).Hash }
+    ($h.GetEnumerator() | ForEach-Object { "$($_.Key)=$($_.Value)" }) -join ';'
+}
+$realFoldersBefore = @{}; foreach ($lb in $localBuilds) { $realFoldersBefore[$lb.real_id] = Get-FolderHashes $lb.real_dir }
 try { $rigProfile = & (Join-Path $here 'New-RigProfile.ps1') @profileArgs }
 catch { Write-Host "RIG REFUSED: profile: $($_.Exception.Message)"; $mutex.ReleaseMutex(); exit 3 }
 $profileRoot = $rigProfile.ProfileRoot
@@ -203,6 +239,11 @@ foreach ($f in $watched) { if ($before[$f] -ne $after[$f]) { $isolation = 'BROKE
 $realLogsAfter = @(Get-ChildItem -LiteralPath (Join-Path $realProfile 'console_logs') -Filter 'console-*.log' -ErrorAction SilentlyContinue | ForEach-Object Name)
 $leaked = @($realLogsAfter | Where-Object { $_ -notin $realLogsBefore })
 if ($leaked.Count) { $isolation = 'BROKEN'; $notes.Add("log written to the owner's real profile: $($leaked -join ', ')") }
+# WP-H-07: the real Workshop folder of every locally built mod must be byte-identical before and after
+foreach ($lb in $localBuilds) {
+    $lb.real_folder_unchanged = ((Get-FolderHashes $lb.real_dir) -ceq $realFoldersBefore[$lb.real_id])
+    if (-not $lb.real_folder_unchanged) { $notes.Add("real Workshop folder of $($lb.mod) ($($lb.real_id)) changed during the run") }
+}
 
 # evidence lines
 $lines = @(); if ($text) { $lines = @([regex]::Matches($text, '(?m)^.*\[vt2t:' + $nonce + '\] (.*)$') | ForEach-Object { $_.Groups[1].Value.TrimEnd() }) }
@@ -222,6 +263,9 @@ $scriptErrors = @([regex]::Matches($text, '(?m)^.*(\[Script Error\]|<<Script Err
 $shieldOn = [bool]($planObj -and -not ($planObj.PSObject.Properties['backend_shield'] -and $planObj.backend_shield -eq $false))
 $hostArgs = @{ Text = [string]$text; Nonce = $nonce }
 if ($planObj) { $hostArgs.PlanFile = $planPath }
+# WP-H-07: each local build's load banner must show the staged version
+$bannerExpect = @($localBuilds | Where-Object { $_.version } | ForEach-Object { '\[[A-Za-z_]+:LOAD\] v' + [regex]::Escape($_.version) + '(?![0-9A-Za-z.+\-])' })
+if ($bannerExpect.Count) { $hostArgs.Expect = $bannerExpect }
 $hostLog = & (Join-Path $here 'Read-HostLog.ps1') @hostArgs
 $forbidHits = @($hostLog.ForbidHits)
 $expectMisses = @($hostLog.ExpectMisses)
@@ -245,7 +289,7 @@ $summary = [ordered]@{
     keep_ready_seconds = $hostLog.KeepReadySeconds; keep_ready_driver_t = $hostLog.KeepReadyDriverT
     backend_shield = [bool]$shieldOn; shield_installed_before_first_commit = $shieldFirst
     host_forbid_hits = $forbidHits; host_expect_misses = $expectMisses; host_allowed = @($hostLog.Allowed)
-    loaded_versions = $hostLog.LoadedVersions
+    loaded_versions = $hostLog.LoadedVersions; local_builds = @($localBuilds)
     marks_seconds = $marks; cases = $cases; script_errors = $scriptErrors; evidence_lines = $lines.Count
     log = $evidenceLog; log_source = $logSource; notes = $notes
 }
@@ -258,6 +302,7 @@ $md += "Backend shield: $(if ($shieldOn) { 'on' } else { 'off' }) | installed be
 foreach ($h in $forbidHits) { $md += "Forbidden log line ($($h.rule)): ``$($h.line)``" }
 foreach ($p in $expectMisses) { $md += "Expected log line missing: ``$p``" }
 foreach ($a in @($hostLog.Allowed)) { $md += "Allowed log line ($($a.rule)): ``$($a.line)`` -- $($a.reason)" }
+foreach ($lb in $localBuilds) { $md += "Local build: $($lb.mod) $($lb.version) at $($lb.commit)$(if ($lb.dirty) { ' (dirty)' }) in slot $($lb.slot) ($($lb.slot_id)) | real folder unchanged: $($lb.real_folder_unchanged)" }
 if (@($hostLog.LoadedVersions.Keys).Count) { $md += "Load banners: $((@($hostLog.LoadedVersions.Keys) | ForEach-Object { "$_ $($hostLog.LoadedVersions[$_])" }) -join ', ')" }
 $md | Set-Content -LiteralPath (Join-Path $run 'summary.md') -Encoding utf8
 $summary | ConvertTo-Json -Depth 6

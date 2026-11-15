@@ -20,7 +20,7 @@ pwsh -NoProfile -File tools/harness/run.ps1 -Plan qa/runtime/plans/smoke-keep.js
 
 Exit code: 0 every case PASS; 1 at least one FAIL; 2 ERROR, TIMEOUT or INCONCLUSIVE, or the run did not complete; 3 the rig refused to start or isolation broke. It refuses when a Vermintide process exists, Steam is not running, free RAM is under 6 GiB, the bootstrap item is not installed, or another rig run holds the lock.
 
-Offline tests (no game): `pwsh -File tools/harness/tests/<name>.Tests.ps1` for `GameProcess`, `Profile`, `HostLog`, `FindRunLog` and `SmokePlan`, and `qa/lua/tests/test_rig_driver.lua` inside `pwsh -File qa/check_lua_unit_tests.ps1`.
+Offline tests (no game): `pwsh -File tools/harness/tests/<name>.Tests.ps1` for `GameProcess`, `Profile`, `HostLog`, `FindRunLog`, `SmokePlan` and `Slots`, and `qa/lua/tests/test_rig_driver.lua` inside `pwsh -File qa/check_lua_unit_tests.ps1`.
 
 ## Plan format
 
@@ -94,6 +94,14 @@ What a run never does while the shield is on (driver 0.4.3, `install_shield`, on
 `run.ps1` checks the log afterwards: any `Enqueuing ExecuteCloudScript request updateHeroAttributes` line or any `UpdateUserData` line from the game makes a passing run exit 1 and is listed in `summary.md` (`Read-HostLog.ps1`). `summary.json` also says whether `SHIELD installed` came before the first `_commit_internal`. Cases read the shield's counts with `T.shield()` and get shared helpers with `T.shared("official_mirror")`.
 
 A plan may set `backend_shield: false` only when its cases test commit behaviour itself, and then needs a `backend_shield_reason` (enforced by `qa/check_runtime_scripts.ps1`, WP-H-13). Never switch the shield off to make a case pass.
+
+## Rig slots: testing an unshipped build (WP-H-07)
+
+The game loads only Workshop items Steam lists as subscribed, and a mod's bundles are found by package name, not folder id. So the rig owns six private items ("VT2 Rig Slot 1" to "6", ids in `slots.psd1`) whose content it overwrites with a local build. A real mod's Workshop folder is never written.
+
+- Once: `pwsh -File tools/harness/New-RigSlotItems.ps1` prepares the six item folders (private, placeholder content: the bootstrap's bundles plus an inert `vt2_rig_slot.mod`) and prints the `ugc_tool -c item.cfg -x` and `steam-ugc.ps1 -ItemId <id>` commands; `-Publish` runs them. Record each id in `slots.psd1`.
+- Per build: `pwsh -File tools/harness/stage-build.ps1 -Mod <dir> -Slot <n>` builds the mod from the worktree that holds the script (through `tools/ship/ship.ps1 -BuildOnly` under the machine-wide build lock; `-NoBuild` stages the existing `bundleV2`), replaces the slot folder's files with `bundleV2\*` and writes `slot.json` (commit, version, file hashes). It refuses any id that is not in `slots.psd1`, a real mod's id and the bootstrap.
+- Per run: plan field `"local_builds": [{ "mod": "<dir>", "slot": <n> }]`. `run.ps1` refuses (exit 3) when the slot's files no longer match `slot.json` (Steam may restore the placeholder at any time: re-stage). The slot takes the real id's place in the mod list, the real id is disabled, the staged version must appear in the mod's load banner, and `summary.json` lists the build's commit, version and `real_folder_unchanged`.
 
 ## Reading a run
 
