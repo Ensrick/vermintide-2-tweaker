@@ -52,8 +52,7 @@ return function(H, repo_root)
         local runtime = read(repo_root
             .. "/event_tweaker/scripts/mods/event_tweaker/_evt_cursed_adventure.lua")
 
-        H.truthy(guard:find('mod:hook("GameModeBase", "is_joinable"', 1, true))
-        H.truthy(guard:find("JoinPolicy.allow_join(vanilla_joinable, _curse_session_locked)", 1, true))
+        H.truthy(guard:find("JoinPolicy.install_join_lock(", 1, true))
         H.truthy(guard:find("server.peer_state_machines", 1, true))
         H.truthy(selection:find("set_curse_requested(#out > 0)", 1, true))
 
