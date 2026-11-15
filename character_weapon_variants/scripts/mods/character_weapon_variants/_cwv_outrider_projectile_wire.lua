@@ -125,6 +125,30 @@ function M.apply_restamp(rows, template_key)
 	return changed
 end
 
+-- Pure (A2-F01): the template name a peer can decode. The clone name is a
+-- LOCAL item_template_names append that a peer without cwv (or with another
+-- lookup tail) cannot decode (game_object_initializers_extractors.lua:755,
+-- strict decode at :3284), so the wire carries the donor's vanilla name.
+function M.wire_template_name(name)
+	if name == M.TEMPLATE_KEY then return M.DONOR_TEMPLATE_KEY end
+	return name
+end
+
+-- A fired projectile's OWN action_lookup_data copy
+-- (player_projectile_unit_extension.lua:59-66) is read only by the game-object
+-- initializers (game_object_initializers_extractors.lua:737), which run after
+-- extension init (unit_spawner.lua:336-346). Rewriting it from the existing
+-- PlayerProjectileUnitExtension.init hook changes the wire and nothing local.
+-- Returns true only when it changed the name.
+function M.sanitize_projectile_lookup(extension)
+	local data = type(extension) == "table" and extension.action_lookup_data or nil
+	if type(data) ~= "table" then return false end
+	local wire = M.wire_template_name(data.item_template_name)
+	if wire == data.item_template_name then return false end
+	data.item_template_name = wire
+	return true
+end
+
 -- Identity set of every vanilla ActionTemplates action table.
 function M.shared_action_set(action_templates)
 	local shared = {}
@@ -139,6 +163,9 @@ end
 function M.install(mod, ctx)
 	ctx = ctx or {}
 	local om = assert(ctx.om, "outrider projectile wire requires om")
+	-- Published before any early return: the projectile init hook sanitizes
+	-- through it (_cwv_javelin_runtime_owner.lua).
+	om.outrider_projectile_wire_lib = M
 	local network_lookup = assert(ctx.network_lookup,
 		"outrider projectile wire requires the shared network_lookup helper")
 	local emit = ctx.printf or function() end
