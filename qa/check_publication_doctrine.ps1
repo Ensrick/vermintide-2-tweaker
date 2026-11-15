@@ -12,6 +12,7 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
+. (Join-Path $PSScriptRoot 'worktree_state.ps1')  # Get-QATrackedFiles: tracked + not-ignored files only (WP-T-06)
 
 # Windows PowerShell 5.1's -File path initializes PSScriptRoot after parameter
 # defaults. Resolve the optional root in the body, never from the caller's CWD.
@@ -833,7 +834,6 @@ if ($SelfTest) {
 }
 
 $repoPath = (Resolve-Path -LiteralPath $RepoRoot).Path
-. (Join-Path $PSScriptRoot 'worktree_state.ps1')  # Get-QATrackedFiles: tracked + not-ignored files only (WP-T-06)
 $documents = @(Get-ActiveDocuments $repoPath)
 $violations = @(Get-DoctrineViolations $documents)
 

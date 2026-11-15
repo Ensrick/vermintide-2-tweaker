@@ -4,6 +4,7 @@ param(
     [switch]$Quiet,
     [switch]$SelfTest
 )
+. (Join-Path $PSScriptRoot 'worktree_state.ps1')  # Get-QATrackedFiles: tracked + not-ignored files only (WP-T-06)
 
 $requiredDocs = @{
     'PROJECT_STANDARDS.md' = @(
@@ -72,7 +73,6 @@ if ($SelfTest) {
 }
 
 $repoRoot = Split-Path $PSScriptRoot -Parent
-. (Join-Path $PSScriptRoot 'worktree_state.ps1')  # Get-QATrackedFiles: tracked + not-ignored files only (WP-T-06)
 $documents = @{}
 foreach ($path in $requiredDocs.Keys) {
     $fullPath = Join-Path $repoRoot $path

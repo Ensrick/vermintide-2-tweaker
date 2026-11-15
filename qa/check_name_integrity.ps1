@@ -49,6 +49,7 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
+. (Join-Path $PSScriptRoot 'worktree_state.ps1')  # Get-QATrackedFiles: tracked + not-ignored files only (WP-T-06)
 
 # #1739: PS5 standalone -File does not bind PSScriptRoot during defaults.
 # Derive omitted paths here; explicitly supplied values retain their semantics.
@@ -536,7 +537,6 @@ entry.description = "planted_annotated_fixture_key" -- name-integrity: non-rende
 if ($SelfTest) { exit (Invoke-SelfTest) }
 
 $repoRoot = (Resolve-Path $RepoRoot).Path
-. (Join-Path $PSScriptRoot 'worktree_state.ps1')  # Get-QATrackedFiles: tracked + not-ignored files only (WP-T-06)
 
 # The oracle (docs/generated/NAME_MAP.generated.json) is committed, so it loads
 # identically in CI and locally — always use it.
