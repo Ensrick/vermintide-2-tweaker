@@ -86,6 +86,7 @@ function New-ReleaseJournal {
         mod = $Mod
         session_id = [guid]::NewGuid().ToString()
         version = $null
+        cfg_version = $null
         branch = $null
         pr = $null
         merge_commit = $null
@@ -371,15 +372,24 @@ function Invoke-ReleaseStep {
             $old = Get-ReleaseSourceVersion $RepoRoot $mod
             if ($null -eq $old) { Write-ReleaseLog "no MOD_VERSION in $lua"; return $script:ReleaseExit.StepFailed }
             $utf8 = New-Object Text.UTF8Encoding($false)
+            # The version itemV2.cfg names is recorded before anything is written,
+            # so an interrupted step still finds it on the rerun.
+            if ([string]::IsNullOrWhiteSpace([string]$Journal.cfg_version)) {
+                $Journal.cfg_version = $old
+                Save-ReleaseJournal -Journal $Journal
+            }
             if ($old -cne $new) {
                 $text = [IO.File]::ReadAllText($lua, [Text.Encoding]::UTF8)
                 $pattern = 'MOD_VERSION(\s*=\s*)"' + [regex]::Escape($old) + '"'
                 if ([regex]::Matches($text, $pattern).Count -ne 1) { Write-ReleaseLog 'MOD_VERSION is not assigned exactly once'; return $script:ReleaseExit.StepFailed }
                 [IO.File]::WriteAllText($lua, [regex]::Replace($text, $pattern, ('MOD_VERSION$1"' + $new + '"')), $utf8)
-                $cfg = Join-Path $RepoRoot "$mod\itemV2.cfg"
-                if (Test-Path -LiteralPath $cfg -PathType Leaf) {
-                    $cfgText = [IO.File]::ReadAllText($cfg, [Text.Encoding]::UTF8)
-                    [IO.File]::WriteAllText($cfg, $cfgText.Replace(" v$old", " v$new"), $utf8)
+            }
+            $cfg = Join-Path $RepoRoot "$mod\itemV2.cfg"
+            if (Test-Path -LiteralPath $cfg -PathType Leaf) {
+                $cfgText = [IO.File]::ReadAllText($cfg, [Text.Encoding]::UTF8)
+                $cfgOld = [string]$Journal.cfg_version
+                if ($cfgOld -cne $new -and $cfgText.Contains(" v$cfgOld")) {
+                    [IO.File]::WriteAllText($cfg, $cfgText.Replace(" v$cfgOld", " v$new"), $utf8)
                 }
             }
             $changelog = Join-Path $RepoRoot "$mod\CHANGELOG.md"

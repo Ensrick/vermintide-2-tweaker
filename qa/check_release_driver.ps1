@@ -207,7 +207,14 @@ try {
     $code = Invoke-ReleaseSteps -Steps @('version') -Journal $j -RepoRoot $machineRoot -Options $vOptions
     if ($code -ne 0 -or ([regex]::Matches([IO.File]::ReadAllText((Join-Path $modDir 'CHANGELOG.md')), '## 0\.1\.3-dev')).Count -ne 1) { $failures += 'a rerun of the version step changed the files again' }
     else { Write-Host '  [PASS] a completed version step is skipped on rerun' -ForegroundColor Green }
-
+    # Interrupted after the Lua write: itemV2.cfg still names the old version.
+    [IO.File]::WriteAllText((Join-Path $modDir 'itemV2.cfg'), "title = ""Fixture v0.1.2-dev"";`ndescription = ""[b]Fixture v0.1.2-dev[/b]"";`n")
+    $code = Invoke-ReleaseSteps -Steps @('version') -Journal $j -RepoRoot $machineRoot -Options $vOptions
+    $cfgText = [IO.File]::ReadAllText((Join-Path $modDir 'itemV2.cfg'))
+    if ($code -ne 0 -or $cfgText.Contains('v0.1.2-dev') -or -not $cfgText.Contains('[b]Fixture v0.1.3-dev[/b]') -or
+            ([regex]::Matches([IO.File]::ReadAllText((Join-Path $modDir 'CHANGELOG.md')), '## 0\.1\.3-dev')).Count -ne 1) {
+        $failures += "a version step interrupted after the Lua write was not completed on rerun (exit $code)"
+    } else { Write-Host '  [PASS] a version step interrupted after the Lua write completes the cfg on rerun' -ForegroundColor Green }
     # Clean version: the ship step stops with exit 20 unless -ConfirmVersion names it.
     $j = Reset-Machine '1.2.3' 0 $true
     $code = Invoke-ReleaseSteps -Steps @('ship') -Journal $j -RepoRoot $machineRoot -Options $options
