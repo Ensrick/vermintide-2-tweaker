@@ -15,7 +15,7 @@
 --
 -- Owned by: weapon_tweaker.lua entry point. Consumed via: mod:dofile.
 -- Shared state: reads mod._wt.MOD_VERSION (the version echoed in the command
--- banner); exports mod._wt.rt_register.
+-- banner); exports mod._wt.rt_register and mod._wt.run_regression.
 
 local mod = get_mod("wt")
 local WT = mod._wt
@@ -25,24 +25,53 @@ local _RT_CHECKS = {}
 local function _rt_register(name, fn)
     _RT_CHECKS[#_RT_CHECKS + 1] = { name = name, fn = fn }
 end
-mod:command("wt_regression_test", "Run regression smoke checks for past bugs", function()
-    local pass, fail, skip = 0, 0, 0
-    mod:echo("=== wt regression_test (v%s) ===", MOD_VERSION)
+-- WP-WT-02: the one runner, shared by the chat command and scripted callers
+-- (the test rig). Each row also goes to the engine log through printf
+-- (Vermintide-2-Source-Code/foundation/scripts/util/misc_util.lua:29), which
+-- reaches the console log even with VMF mod logging off.
+local function _run()
+    local rows, pass, fail, skip = {}, 0, 0, 0
+    local tag = "[" .. tostring(mod:get_name()) .. ":RT]"
     for _, c in ipairs(_RT_CHECKS) do
         local ok, err = pcall(c.fn)
+        local row = { name = c.name }
         if ok and err == nil then
-            mod:echo("  PASS: %s", c.name); pass = pass + 1
-            mod:info("[regression] PASS %s", c.name)
+            row.result = "PASS"; pass = pass + 1
         elseif ok and type(err) == "string" and err:sub(1, 5) == "skip:" then
             -- v0.12.117 (Issue #74): tests return "skip: <reason>" when their
             -- preconditions (game tables, sibling mods) aren't loaded; that's
             -- neither PASS nor FAIL and must not pollute the failure count.
-            mod:echo("  SKIP: %s -- %s", c.name, err); skip = skip + 1
-            mod:info("[regression] SKIP %s: %s", c.name, err)
+            row.result, row.detail = "SKIP", err; skip = skip + 1
         else
-            local msg = (not ok and tostring(err)) or tostring(err)
-            mod:echo("  FAIL: %s -- %s", c.name, msg); fail = fail + 1
-            mod:warning("[regression] FAIL %s: %s", c.name, msg)
+            row.result, row.detail = "FAIL", tostring(err); fail = fail + 1
+        end
+        rows[#rows + 1] = row
+        if row.detail then
+            pcall(printf, "%s check=%s result=%s detail=%s", tag, row.name, row.result,
+                (row.detail:gsub("\r\n", " "):gsub("[\r\n]", " ")))
+        else
+            pcall(printf, "%s check=%s result=%s", tag, row.name, row.result)
+        end
+    end
+    pcall(printf, "%s summary pass=%d fail=%d skip=%d total=%d version=%s",
+        tag, pass, fail, skip, #rows, tostring(MOD_VERSION))
+    return rows, pass, fail, skip
+end
+WT.run_regression = _run
+
+mod:command("wt_regression_test", "Run regression smoke checks for past bugs", function()
+    mod:echo("=== wt regression_test (v%s) ===", MOD_VERSION)
+    local rows, pass, fail, skip = _run()
+    for _, row in ipairs(rows) do
+        if row.result == "PASS" then
+            mod:echo("  PASS: %s", row.name)
+            mod:info("[regression] PASS %s", row.name)
+        elseif row.result == "SKIP" then
+            mod:echo("  SKIP: %s -- %s", row.name, row.detail)
+            mod:info("[regression] SKIP %s: %s", row.name, row.detail)
+        else
+            mod:echo("  FAIL: %s -- %s", row.name, row.detail)
+            mod:warning("[regression] FAIL %s: %s", row.name, row.detail)
         end
     end
     mod:echo("=== %d passed, %d failed, %d skipped ===", pass, fail, skip)

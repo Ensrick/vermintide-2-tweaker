@@ -206,6 +206,7 @@ local suites = {
     "test_wt_axe_shield_heavy_chain",
     "test_wt_native_ownership",
     "test_wt_lifecycle_disable",
+    "test_wt_regression_runner",
     "test_wt_loadout_cache",
     "test_wt_ranger_dual_preview",
     "test_wt_moonfire_aoe_owner",
