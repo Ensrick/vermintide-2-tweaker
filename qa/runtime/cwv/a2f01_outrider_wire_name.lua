@@ -21,11 +21,29 @@
 --
 -- The loadout write is restored before the case ends (rule R9). Run with the
 -- WP-H-14 backend write shield on.
+--
+-- Seed precondition: CWV registers its Blacksmith seeds into the local backend
+-- ([cwv:592] line, _cwv_item_registration_owner.lua:868). Modded Progression's
+-- fresh-profile route answers get_item_from_id from its own view only
+-- (_mp_fresh_profile_runtime.lua:449-452, routed at :526-539 and :556), so
+-- with mp starting_state = "fresh" the seed is invisible (first lead run
+-- 20261115-162744-lead-cases-a2-9709b2c8: "[mp:fresh] route state=active",
+-- REQUIRE "Outrider seed item in the backend"). When the seed is hidden the
+-- case pauses that route through mp's own lifecycle callback
+-- (modded_progression.lua:537-538 -> R.set_enabled, which only flips the flag
+-- and drops the cached view, :262-265) and resumes it in cleanup.
 
 local MOD_ID = "character_weapon_variants"
 local CAREER = "es_mercenary"
 local SLOT = "slot_ranged"
 local SEED_IDS = { "cwv_es_outrider_grenade_launcher_001", "cwv_es_outrider_grenade_launcher_000" }
+
+local function find_seed(items)
+    for i = 1, #SEED_IDS do
+        if items:get_item_from_id(SEED_IDS[i]) ~= nil then return SEED_IDS[i] end
+    end
+    return nil
+end
 
 -- Shared between run and cleanup; filled during run only.
 local state = {}
@@ -49,10 +67,21 @@ local function cleanup()
     unwrap()
     if state.cleaned then return end
     state.cleaned = true
+    -- Loadout write-back first, through the same (paused or untouched) route
+    -- that took the seed write; then resume mp; then re-equip what the resumed
+    -- route reports for the slot.
     if state.equipped and state.original_id then
         pcall(BackendUtils.set_loadout_item, state.original_id, CAREER, SLOT)
-        if state.inventory then
-            pcall(state.inventory.create_equipment_in_slot, state.inventory, SLOT, state.original_id)
+    end
+    if state.mp_paused and state.mp then
+        state.mp_paused = false
+        pcall(state.mp.on_enabled)
+    end
+    if state.equipped and state.inventory then
+        local ok, current = pcall(BackendUtils.get_loadout_item_id, CAREER, SLOT)
+        local restore_id = (ok and current) or state.original_id
+        if restore_id then
+            pcall(state.inventory.create_equipment_in_slot, state.inventory, SLOT, restore_id)
         end
     end
 end
@@ -92,15 +121,25 @@ return {
         T.require(hero ~= nil, "Mercenary hero alive")
 
         T.step("equip the Outrider seed")
-        local items = Managers.backend:get_interface("items")
-        local seed_id
-        for i = 1, #SEED_IDS do
-            if items:get_item_from_id(SEED_IDS[i]) ~= nil then seed_id = SEED_IDS[i]; break end
-        end
-        T.require(seed_id ~= nil, "Outrider seed item in the backend")
-        T.note("seed_id", seed_id)
+        -- Extension lookups first: the driver never calls this file's
+        -- `cleanup` field (it runs only case.cleanups, vt2_rig_driver.lua:674-736),
+        -- so every failing require after the mp pause below calls cleanup() itself.
         local inventory = T.ext(hero, "inventory_system")
         local first_person = T.ext(hero, "first_person_system")
+        local items = Managers.backend:get_interface("items")
+        local seed_id = find_seed(items)
+        local mp = get_mod("mp")
+        if seed_id == nil and type(mp) == "table" and type(mp.on_disabled) == "function"
+                and type(mp.on_enabled) == "function" then
+            state.mp = mp
+            state.mp_paused = true
+            mp.on_disabled()
+            seed_id = find_seed(items)
+        end
+        T.note("mp_route", state.mp_paused and "paused for the case" or "untouched")
+        if seed_id == nil then cleanup() end
+        T.require(seed_id ~= nil, "Outrider seed item in the backend")
+        T.note("seed_id", seed_id)
         state.original_id = BackendUtils.get_loadout_item_id(CAREER, SLOT)
         state.inventory = inventory
         T.note("original_id", tostring(state.original_id))
