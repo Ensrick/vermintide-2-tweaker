@@ -1,0 +1,12 @@
+{
+  "name": "plan-options",
+  "purpose": "WP-H-08 acceptance: a modset, a VMF option and a top-level user setting set by the plan are what the game reads.",
+  "modset": "verminious_dreams_lighting_dev",
+  "timeout": 300,
+  "settings": { "use_pc_menu_layout": true },
+  "options": { "VMF": { "vt2_rig_plan_option": "rig-plan", "vt2_rig_plan_number": 7 } },
+  "cases": [
+    { "id": "smoke-keep", "arena": "keep", "file": "../_rig/smoke_keep.lua" },
+    { "id": "plan-options", "arena": "keep", "file": "../_rig/plan_options.lua" }
+  ]
+}

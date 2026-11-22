@@ -37,10 +37,13 @@ function Read-PlanBlocks([string] $cfg) {
         foreach ($c in [regex]::Matches($body, '(?ms)^\t\t\{\n\t\t\tid = "([^"]*)"\n\t\t\tarena = "([^"]*)"\n\t\t\thex = "([0-9a-f]*)"\n\t\t\}')) {
             $plan.cases += [ordered]@{ id = $c.Groups[1].Value; arena = $c.Groups[2].Value; source = ConvertFrom-Hex $c.Groups[3].Value }
         }
-        $sharedBlock = [regex]::Match($body, '(?ms)^\tshared = \[\n(.*?)^\t\]\n')
-        if ($sharedBlock.Success) {
-            foreach ($s in [regex]::Matches($sharedBlock.Groups[1].Value, '(?ms)^\t\t\{\n\t\t\tid = "([^"]*)"\n\t\t\thex = "([0-9a-f]*)"\n\t\t\}')) {
-                $plan.shared += [ordered]@{ id = $s.Groups[1].Value; source = ConvertFrom-Hex $s.Groups[2].Value }
+        $plan.libs = @()
+        foreach ($key in 'shared', 'libs') {
+            $block = [regex]::Match($body, '(?ms)^\t' + $key + ' = \[\n(.*?)^\t\]\n')
+            if ($block.Success) {
+                foreach ($s in [regex]::Matches($block.Groups[1].Value, '(?ms)^\t\t\{\n\t\t\tid = "([^"]*)"\n\t\t\thex = "([0-9a-f]*)"\n\t\t\}')) {
+                    $plan[$key] += [ordered]@{ id = $s.Groups[1].Value; source = ConvertFrom-Hex $s.Groups[2].Value }
+                }
             }
         }
         $found += $plan
@@ -87,10 +90,17 @@ try {
     [System.IO.File]::WriteAllText((Join-Path $sharedDir 'official_mirror.lua'), $sharedA, $utf8)
     [System.IO.File]::WriteAllText((Join-Path $sharedDir 'another_helper.lua'), $sharedB, $utf8)
     [System.IO.File]::WriteAllText((Join-Path $sharedDir 'notes.txt'), "not a helper`n", $utf8)
+    $libDir = Join-Path $root 'lib'
+    New-Item -ItemType Directory -Force -Path $libDir | Out-Null
+    $libA = "return function(T, ctx) function T.set() end end`n"
+    $libB = "return function(T, ctx) function T.shot() return false end end`n"
+    [System.IO.File]::WriteAllText((Join-Path $libDir 'shot.lua'), $libB, $utf8)
+    [System.IO.File]::WriteAllText((Join-Path $libDir 'settings.lua'), $libA, $utf8)
+    [System.IO.File]::WriteAllText((Join-Path $libDir 'README.md'), "not a helper group`n", $utf8)
 
     # ---- first build: the copied settings have no driver entry and carry an earlier run's blocks ----
     $profileRoot = Join-Path $root 'rig\profile'
-    $out = & $builder -RealProfile $real -ProfileRoot $profileRoot -PlanPath $planPath -Nonce '1234abcd' -DriverFile $driverFile -DriverId $driverId -SharedDir $sharedDir
+    $out = & $builder -RealProfile $real -ProfileRoot $profileRoot -PlanPath $planPath -Nonce '1234abcd' -DriverFile $driverFile -DriverId $driverId -SharedDir $sharedDir -LibDir $libDir
     Assert-True (Test-Path -LiteralPath $out.UserSettings -PathType Leaf) 'profile user_settings.config written'
     Assert-True ($out.Vt2Dir -eq (Join-Path $profileRoot 'AppData\Roaming\Fatshark\Vermintide 2')) 'profile folder layout under the rig profile root'
     $cfg = [System.IO.File]::ReadAllText($out.UserSettings)
@@ -109,6 +119,8 @@ try {
     Assert-True ($p.shared.Count -eq 2) "two shared helpers in the plan block, the .txt file ignored (got $($p.shared.Count))"
     Assert-True ($p.shared[0].id -eq 'another_helper' -and $p.shared[0].source -ceq $sharedB) 'shared helper another_helper parses back with its text'
     Assert-True ($p.shared[1].id -eq 'official_mirror' -and $p.shared[1].source -ceq $sharedA) 'shared helper official_mirror parses back with its text'
+    Assert-True ($p.libs.Count -eq 2) "two driver helper groups in the plan block, the .md file ignored (got $($p.libs.Count))"
+    Assert-True ($p.libs[0].id -eq 'settings' -and $p.libs[0].source -ceq $libA -and $p.libs[1].id -eq 'shot' -and $p.libs[1].source -ceq $libB) 'helper groups parse back with their text, in file-name order'
     Assert-True ($cfg -notmatch 'earlier-run') "earlier run's plan block removed"
     Assert-True ($cfg -notmatch '(?m)^vt2_rig_results = ') "earlier run's vt2_rig_results removed"
     Assert-True ($cfg -notmatch '(?m)^vt2_rig_progress = ') "earlier run's vt2_rig_progress removed"
@@ -143,6 +155,7 @@ try {
     Assert-True ([regex]::Matches($cfg2, '(?m)^\t\tid = "' + $driverId + '"$').Count -eq 1) 'second build: driver entry still exists once'
     Assert-True ($cfg2 -notmatch '(?m)^vt2_rig_results = ' -and $cfg2 -notmatch '(?m)^vt2_rig_progress = ') 'second build: results and progress from the earlier run removed'
     Assert-True ($plans2[0].shared.Count -eq 0) 'second build without -SharedDir: no shared block'
+    Assert-True ($plans2[0].libs.Count -eq 0) 'second build without -LibDir: no libs block'
 
     # ---- third build: a plan that switches the shield off says so in the plan block ----
     $offPath = Join-Path $planDir 'plan-off.json'
@@ -150,6 +163,60 @@ try {
     $out3 = & $builder -RealProfile $real -ProfileRoot $profileRoot -PlanPath $offPath -Nonce '9999aaaa' -DriverFile $driverFile -DriverId $driverId -SharedDir $sharedDir
     $plans3 = Read-PlanBlocks ([System.IO.File]::ReadAllText($out3.UserSettings))
     Assert-True ($plans3.Count -eq 1 -and $plans3[0].shield_off) 'backend_shield false reaches the plan block'
+
+    # ---- WP-H-08: modset, options and settings values ----
+    $real2 = Join-Path $root 'owner2'
+    New-Item -ItemType Directory -Force -Path $real2 | Out-Null
+    $cfgWithSettings = ([System.IO.File]::ReadAllText($fixture) -replace "`r`n", "`n") + "mods_settings = {`n`t`"Spaced Mod`" = {`n`t`tkeep_me = 1`n`t}`n`tVMF = {`n`t`tdeveloper_mode = false`n`t`tlist_value = [`n`t`t`t`"a`"`n`t`t]`n`t`tlogging_mode = `"default`"`n`t}`n}`nuse_pc_menu_layout = false`n"
+    [System.IO.File]::WriteAllText((Join-Path $real2 'user_settings.config'), $cfgWithSettings, $utf8)
+    $sets = (Import-PowerShellDataFile -LiteralPath (Join-Path $harness 'modsets.psd1')).Sets
+    $setName = 'character_weapon_variants'
+    $optPlan = Join-Path $planDir 'plan-options.json'
+    [System.IO.File]::WriteAllText($optPlan, ('{ "name": "options-test", "modset": "' + $setName + '", "mods": ["9000000099"], "timeout": 60,' +
+            ' "settings": { "use_pc_menu_layout": true, "max_fps": 60, "raw_text": "30" },' +
+            ' "options": { "VMF": { "developer_mode": true, "list_value": "now a string", "vt2_rig_marker": 2.5 }, "Spaced Mod": { "added": "x \"q\"" }, "gt_dev": { "fresh_mod_block": false } },' +
+            ' "cases": [ { "id": "a", "arena": "keep", "file": "case_a.lua" } ] }'), $utf8)
+    $out4 = & $builder -RealProfile $real2 -ProfileRoot (Join-Path $root 'rig\profile4') -PlanPath $optPlan -Nonce '4444bbbb' -DriverFile $driverFile -DriverId $driverId
+    $cfg4 = [System.IO.File]::ReadAllText($out4.UserSettings)
+    $enabled4 = Get-Enabled $cfg4
+    $setIds = @($sets[$setName].WorkshopIds)
+    Assert-True ((@($setIds | Where-Object { $enabled4[$_] -ne 'true' })).Count -eq 0 -and $enabled4['9000000099'] -eq 'true') "modset: every id of set $setName plus the plan's extra mod is enabled"
+    $p4 = (Read-PlanBlocks $cfg4)[0]
+    Assert-True (($p4.expect_mods -join ',') -eq (@($sets[$setName].ModIds) -join ',')) "modset: expect_mods come from the set ($($p4.expect_mods -join ','))"
+    $resolved = & (Join-Path $harness 'Resolve-RigPlan.ps1') -Plan ([System.IO.File]::ReadAllText($optPlan) | ConvertFrom-Json)
+    Assert-True (($resolved.mods -join ',') -eq ((@($setIds) + '9000000099') -join ',')) 'Resolve-RigPlan: set ids first (VMF first), then plan mods the set lacks'
+    $unknown = $null
+    try { & (Join-Path $harness 'Resolve-RigPlan.ps1') -Plan ('{ "modset": "no-such-set" }' | ConvertFrom-Json) | Out-Null } catch { $unknown = $_.Exception.Message }
+    Assert-True ($unknown -match "modset 'no-such-set' is not in") 'an unknown modset throws'
+    Assert-True ($cfg4 -match '(?m)^use_pc_menu_layout = true$') 'settings: a JSON true is written as SJSON true'
+    Assert-True ($cfg4 -match '(?m)^max_fps = 60$' -and $cfg4 -match '(?m)^raw_text = 30$') 'settings: a number as a number, a string as raw text'
+    $vmfBlock = [regex]::Match($cfg4, '(?ms)^\tVMF = \{\n(.*?)^\t\}\n').Groups[1].Value
+    Assert-True ($vmfBlock -match '(?m)^\t\tdeveloper_mode = true$' -and $vmfBlock -notmatch 'developer_mode = false') 'options: an existing value is replaced'
+    Assert-True ($vmfBlock -match '(?m)^\t\tlist_value = "now a string"$' -and $vmfBlock -notmatch '"a"') 'options: an existing multi-line array is replaced whole'
+    Assert-True ($vmfBlock -match '(?m)^\t\tvt2_rig_marker = 2\.5$' -and $vmfBlock -match '(?m)^\t\tlogging_mode = "default"$') 'options: a new value is added and other values stay'
+    Assert-True ($cfg4 -match '(?ms)^\t"Spaced Mod" = \{\n\t\tkeep_me = 1\n\t\tadded = "x \\"q\\""\n\t\}') 'options: a quoted mod name and an escaped string'
+    Assert-True ($cfg4 -match '(?ms)^\tgt_dev = \{\n\t\tfresh_mod_block = false\n\t\}') 'options: a mod without a block gets one'
+    Assert-True ([regex]::Matches($cfg4, '(?m)^mods_settings = \{$').Count -eq 1) 'options: still one mods_settings table'
+
+    # ---- WP-H-08 boots: -KeepProfile starts from the profile the previous boot left ----
+    $keepRoot = Join-Path $root 'rig\profile5'
+    $out5 = & $builder -RealProfile $real -ProfileRoot $keepRoot -PlanPath $planPath -Nonce '5555aaaa' -DriverFile $driverFile -DriverId $driverId
+    # what boot 1 leaves behind: a setting the game saved and a changed save file
+    [System.IO.File]::AppendAllText($out5.UserSettings, "vt2_rig_boot_marker = `"boot1-5555aaaa`"`n")
+    [System.IO.File]::WriteAllBytes((Join-Path $out5.Vt2Dir 'save_data.sav'), [byte[]](200..240))
+    $savBoot1 = Get-Sha (Join-Path $out5.Vt2Dir 'save_data.sav')
+    $out6 = & $builder -RealProfile $real -ProfileRoot $keepRoot -PlanPath $optPlan -Nonce '6666bbbb' -DriverFile $driverFile -DriverId $driverId -KeepProfile
+    $cfg6 = [System.IO.File]::ReadAllText($out6.UserSettings)
+    Assert-True ($cfg6 -match '(?m)^vt2_rig_boot_marker = "boot1-5555aaaa"$') 'KeepProfile: a setting boot 1 saved survives into boot 2'
+    Assert-True ((Get-Sha (Join-Path $out6.Vt2Dir 'save_data.sav')) -eq $savBoot1) "KeepProfile: boot 1's save is kept, not replaced by the owner's"
+    $plans6 = Read-PlanBlocks $cfg6
+    Assert-True ($plans6.Count -eq 1 -and $plans6[0].nonce -eq '6666bbbb') 'KeepProfile: one plan block, the new boot''s'
+    $enabled6 = Get-Enabled $cfg6
+    Assert-True ($enabled6['9000000099'] -eq 'true' -and $enabled6['3733367409'] -ne 'true') 'KeepProfile: the mod list follows the new boot''s plan'
+    Assert-True ($cfg6 -match '(?m)^use_pc_menu_layout = true$') 'KeepProfile: the new boot''s settings are applied'
+    $keepErr = $null
+    try { & $builder -RealProfile $real -ProfileRoot (Join-Path $root 'rig\empty') -PlanPath $planPath -Nonce '7777cccc' -DriverFile $driverFile -DriverId $driverId -KeepProfile | Out-Null } catch { $keepErr = $_.Exception.Message }
+    Assert-True ($keepErr -match 'KeepProfile: no rig profile to keep') 'KeepProfile without a profile to keep throws'
 
     foreach ($f in $ownerBefore.Keys) { Assert-True ((Get-Sha (Join-Path $real $f)) -eq $ownerBefore[$f]) "owner file unchanged: $f" }
 }

@@ -148,4 +148,52 @@ return function(H, repo_root)
         H.equal(calls.release_reason, "mod_unload")
         H.equal(calls.info, 1)
     end)
+
+    -- WP-COS-05 (audit A3-F03): the embedded MoreItemsLibrary assigns its own
+    -- mod.on_game_state_changed (to retry hook_backend_mirror) BEFORE this
+    -- owner installs; the owner must chain it instead of discarding it.
+    local function chaining_fixture()
+        local trace_calls = 0
+        local mod = { _cos = { apply_cosmetic_unlocks = function() end }, _cos_replay = { on_edge = function() end } }
+        function mod:debug() end
+        function mod:info() end
+        mod._try_install_flow_glow_hook = function() end
+        mod._on_glow_setting_changed = function() end
+        mod._la_dump_mission_state = function() end
+        mod._release_offhand_packages = function() end
+        local deps = {
+            trace = function() trace_calls = trace_calls + 1 end,
+            mh_embed = { reference_summary = function() return { held = 0, exact = 0, over = 0, missing = 0 } end },
+            tpe = { flush = function() end },
+            la_bridge = { uninstall_apply_gate = function() end },
+        }
+        return mod, deps, function() return trace_calls end
+    end
+
+    H.test("Cosmetics lifecycle chains an earlier on_game_state_changed exactly once", function()
+        local mod, deps, traced = chaining_fixture()
+        local earlier = {}
+        mod.on_game_state_changed = function(...) earlier[#earlier + 1] = { ... } end
+        Lifecycle.install(mod, deps)
+        mod.on_game_state_changed("enter", "StateIngame")
+        H.equal(#earlier, 1, "the earlier handler ran exactly once")
+        H.deep_equal(earlier[1], { "enter", "StateIngame" })
+        H.equal(traced(), 1, "the lifecycle body ran too")
+    end)
+
+    H.test("Cosmetics lifecycle body still runs when the earlier handler throws", function()
+        local mod, deps, traced = chaining_fixture()
+        local saved_printf, printed = _G.printf, {}
+        _G.printf = function(fmt, ...) printed[#printed + 1] = string.format(fmt, ...) end
+        local ok, err = pcall(function()
+            mod.on_game_state_changed = function() error("planted earlier failure") end
+            Lifecycle.install(mod, deps)
+            mod.on_game_state_changed("enter", "StateIngame")
+        end)
+        _G.printf = saved_printf
+        if not ok then error(err, 0) end
+        H.equal(traced(), 1, "the lifecycle body ran despite the earlier error")
+        H.equal(#printed, 1, "one printf line names the earlier handler's error")
+        H.truthy(printed[1]:find("planted earlier failure", 1, true))
+    end)
 end

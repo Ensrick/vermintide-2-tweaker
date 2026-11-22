@@ -150,19 +150,32 @@ local function register(Harness, repo_root)
             "backend M.install must install the seeding entry points (and the initial seed)")
         local _, backend_calls = backend:gsub(
             "if mod%._wt374_seed_energy_data then mod%._wt374_seed_energy_data%(%) end", "")
-        Harness.equal(3, backend_calls,
-            "backend must re-seed at the deferred-availability, CWV-transition, and first-unlock seams")
+        -- WP-WT-07: the CWV-transition seam reaches energy through the ordered
+        -- registry; the deferred-availability and first-unlock seams stay direct.
+        Harness.equal(2, backend_calls,
+            "backend must re-seed at the deferred-availability and first-unlock seams")
+        Harness.truthy(backend:find('mod._wt.registry.reconcile("cwv_transition")', 1, true),
+            "the CWV-transition seam must reconcile the registry (energy is owner order 30)")
         local source = read(wt_dir .. "/weapon_tweaker.lua")
         local _, seed_calls = source:gsub(
             "if mod%._wt374_seed_energy_data then mod%._wt374_seed_energy_data%(%) end", "")
         local settings_runtime = read(wt_dir .. "/_wt_settings_runtime.lua")
         local _, runtime_seed_calls = settings_runtime:gsub(
             "if mod%._wt374_seed_energy_data then mod%._wt374_seed_energy_data%(%) end", "")
-        Harness.equal(4, seed_calls + runtime_seed_calls,
-            "WT must re-seed at state change, both setting arms, and the #1002 batch seam")
-        Harness.truthy(source:find(
-            "if mod._wt374_revert_energy_data then mod._wt374_revert_energy_data() end", 1, true),
-            "on_disabled must revert the seeded rows")
+        -- WP-WT-07: state change and the #1002 batch reach energy through the
+        -- registry; both single-setting arms still seed directly.
+        Harness.equal(2, seed_calls + runtime_seed_calls,
+            "WT must re-seed directly at both setting arms")
+        Harness.truthy(source:find('_wt_reg.reconcile("game_state")', 1, true),
+            "the state-change apply pass must reconcile the registry")
+        Harness.truthy(settings_runtime:find('c.reconcile("settings_batch")', 1, true),
+            "the #1002 batch must reconcile the registry")
+        local owners = read(wt_dir .. "/_wt_mutation_owners.lua")
+        Harness.truthy(owners:find('{ id = "energy", order = 30,', 1, true), "energy is a registry owner")
+        Harness.truthy(owners:find('apply = late("_wt374_seed_energy_data"), revert = late("_wt374_revert_energy_data")', 1, true),
+            "the energy owner seeds on apply and reverts on revert_all")
+        Harness.truthy(source:find("    _wt_reg.revert_all()\n", 1, true),
+            "on_disabled must revert the seeded rows through the registry")
     end)
 end
 

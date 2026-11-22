@@ -21,6 +21,20 @@
 --
 -- The loadout write is restored before the case ends (rule R9). Run with the
 -- WP-H-14 backend write shield on.
+--
+-- Seed precondition: CWV registers its Blacksmith seeds into the local backend
+-- ([cwv:592] line, _cwv_item_registration_owner.lua:868). Modded Progression's
+-- fresh-profile route answers get_item_from_id from its own view only
+-- (_mp_fresh_profile_runtime.lua:449-452, routed at :526-539 and :556), so
+-- with mp starting_state = "fresh" the seed is invisible (first lead run
+-- 20261115-162744-lead-cases-a2-9709b2c8: "[mp:fresh] route state=active",
+-- REQUIRE "Outrider seed item in the backend"). Run this case from
+-- qa/runtime/plans/cwv-cases.json, which does not load modded_progression;
+-- a plan that loads mp reads INCONCLUSIVE at the "mp absent" require.
+--
+-- The driver does not call this file's `cleanup` field yet (it runs only
+-- case.cleanups, tools/harness/driver/vt2_rig_driver.lua:674-736), so every
+-- require after the loadout write calls cleanup() itself first.
 
 local MOD_ID = "character_weapon_variants"
 local CAREER = "es_mercenary"
@@ -70,6 +84,7 @@ return {
         for k in pairs(state) do state[k] = nil end
         T.step("preconditions")
         T.require(get_mod(MOD_ID) ~= nil, "character_weapon_variants loaded")
+        T.require(get_mod("mp") == nil, "mp absent (run from qa/runtime/plans/cwv-cases.json)")
         local weapons = rawget(_G, "Weapons")
         local template = type(weapons) == "table" and rawget(weapons, "outrider_grenade_launcher_template")
         T.require(type(template) == "table", "outrider_grenade_launcher_template built")

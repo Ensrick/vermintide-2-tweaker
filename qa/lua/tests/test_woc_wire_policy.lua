@@ -2,6 +2,23 @@ return function(H, repo_root)
 	local policy = dofile(repo_root
 		.. "/weapons_of_chaos/scripts/mods/weapons_of_chaos/_woc_wire_policy.lua")
 
+	-- WP-CIM-07 (#402, #1688): the pure "did WOC create this backend id"
+	-- predicate behind WOC's official loadout guard. WOC relics are local
+	-- MoreItemsLibrary rows `woc_<relic>_NNN` (_woc_boss_weapon_catalog.lua,
+	-- _woc_shared_relic.lua BACKEND_ID).
+	H.test("WOC backend id predicate accepts only WOC relic id shapes", function()
+		H.equal(type(policy.is_woc_backend_id), "function")
+		for _, id in ipairs({ "woc_blightreaper_001", "woc_skarrik_halberd_001", "woc_skarrik_dual_swords_002" }) do
+			H.equal(policy.is_woc_backend_id(id), true, id)
+		end
+		for _, id in ipairs({ "A1B2C3D4E5F60708", "86741005-7eb6-4e01-b147-a2cf84735533",
+				"cwv_es_musket_old_001", "woc_blightreaper", "woc_001", "xwoc_a_001", "" }) do
+			H.equal(policy.is_woc_backend_id(id), false, id)
+		end
+		H.equal(policy.is_woc_backend_id(nil), false)
+		H.equal(policy.is_woc_backend_id(3), false)
+	end)
+
 	H.test("WOC wire policy preserves vanilla items by identity", function()
 		local vanilla = { key = "es_1h_sword", ItemId = "es_1h_sword" }
 		H.equal(policy.safe_item(vanilla, "es_1h_sword", true), vanilla)

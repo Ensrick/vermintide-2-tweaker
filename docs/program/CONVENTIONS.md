@@ -29,7 +29,7 @@ A rig PASS is reported as "auto-verified (R) on <mod> <version> <commit>, run <i
 - Every boot also runs every loaded mod's `/<mod>_regression_test` suite and records each check as an assertion (`T.expect_rt`).
 - Verdicts per case: PASS, FAIL (product wrong), ERROR (script bug), TIMEOUT, SKIP, INCONCLUSIVE (precondition not reached). Only FAIL means the product is wrong.
 
-Script helper API (`T`), usable inside a case:
+Script helper API (`T`), usable inside a case (every helper with its status, the engine call it wraps and the plans that exercise it: `tools/harness/API.md`):
 
 | Call | Meaning |
 |---|---|
