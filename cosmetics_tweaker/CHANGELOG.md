@@ -1,5 +1,11 @@
 # Cosmetics Tweaker — Changelog
 
+## 0.9.235-dev (2026-11-22) -- Release-train re-version, no code change
+
+- Release-train re-version, no code change. Same source as 0.9.234-dev
+  below. Its version claim went stale before it shipped, so the claim
+  broker allocated this fresh version (tools/ship/CLAIMS.md).
+
 ## 0.9.234-dev (2026-11-15) -- Embedded MoreItemsLibrary retry restored and pinned (WP-COS-05)
 
 - The embedded MoreItemsLibrary retries its backend-mirror hook on every game

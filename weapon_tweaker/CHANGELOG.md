@@ -1,5 +1,11 @@
 # Weapon Tweaker Changelog
 
+## 0.12.352-beta (2026-11-22) -- Release-train re-version, no code change
+
+- Release-train re-version, no code change. Same source as 0.12.351-beta
+  below. Its version claim went stale before it shipped, so the claim
+  broker allocated this fresh version (tools/ship/CLAIMS.md).
+
 ## 0.12.351-beta (2026-11-15) -- One ordered registry for weapon-table owners (WP-WT-07) [not-started]
 
 - Every lifecycle event (level change, re-enable, rework master, peer

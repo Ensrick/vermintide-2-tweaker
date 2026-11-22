@@ -63,9 +63,9 @@ try {
     # ---- Invoke-RigBoots.ps1 with a stand-in for run.ps1 (never the game) ----
     $fake = Join-Path $root 'fake-run.ps1'
     Set-Content -LiteralPath $fake -Value @'
-param([string] $Plan, [string] $Name, [string] $RunDir, [string] $RigRoot, [switch] $KeepProfile, [string] $Renderer, [string] $Marker)
+param([string] $Plan, [string] $Name, [string] $RunDir, [string] $RigRoot, [switch] $KeepProfile, [string] $Renderer, [string] $Marker, [switch] $NoOrderCheck)
 $p = [System.IO.File]::ReadAllText($Plan) | ConvertFrom-Json
-Add-Content -LiteralPath (Join-Path $RigRoot 'calls.txt') -Value "$Name keep=$([bool]$KeepProfile) renderer=$Renderer dir=$(Split-Path $RunDir -Leaf)"
+Add-Content -LiteralPath (Join-Path $RigRoot 'calls.txt') -Value "$Name keep=$([bool]$KeepProfile) renderer=$Renderer dir=$(Split-Path $RunDir -Leaf) noorder=$([bool]$NoOrderCheck)"
 $code = [int]$p.fake_exit
 $verdict = switch ($code) { 0 { 'PASS' } 1 { 'FAIL' } default { 'ERROR' } }
 [ordered]@{ isolation = 'OK'; run_end_seen = $true; cases = @([ordered]@{ id = $p.cases[0].id; verdict = $verdict; detail = '' }) } | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath (Join-Path $RunDir 'summary.json')
@@ -89,7 +89,7 @@ exit $code
     }
     $ok = Invoke-Fake '0,0'
     Assert-True ($ok.Exit -eq 0 -and $ok.Calls.Count -eq 2) "two passing boots: both run, exit 0 (exit $($ok.Exit), calls $($ok.Calls.Count))"
-    Assert-True ($ok.Calls[0] -eq 'fake-boot1 keep=False renderer=dx11 dir=boot-1' -and $ok.Calls[1] -eq 'fake-boot2 keep=True renderer=dx11 dir=boot-2') "boot 1 on a fresh profile, boot 2 with -KeepProfile, child arguments passed ($($ok.Calls -join ' | '))"
+    Assert-True ($ok.Calls[0] -eq 'fake-boot1 keep=False renderer=dx11 dir=boot-1 noorder=True' -and $ok.Calls[1] -eq 'fake-boot2 keep=True renderer=dx11 dir=boot-2 noorder=True') "boot 1 on a fresh profile, boot 2 with -KeepProfile, child arguments passed, no order check in boots ($($ok.Calls -join ' | '))"
     Assert-True ($ok.Summary.boots.Count -eq 2 -and $ok.Summary.boots[1].cases[0].id -eq 'c2' -and $ok.Summary.boots_planned -eq 2) 'the run summary lists every boot with its cases'
     $fail = Invoke-Fake '1,0'
     Assert-True ($fail.Exit -eq 1 -and $fail.Calls.Count -eq 2) 'a FAIL in boot 1 still runs boot 2; the run exits 1'

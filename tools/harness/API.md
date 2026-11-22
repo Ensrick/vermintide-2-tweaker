@@ -106,7 +106,7 @@ For cases in a `"deus:<level_key>"` arena (a run level, e.g. `pat_mountain_waste
 |---|---|---|---|---|---|
 | `T.shield()` | driver | a copy of what the backend write shield counted so far (with `blocked_by_name`, and `replied_by_name` and `reply_errors` for the dropped requests it answered, driver 0.4.9) | none (WP-H-14) | none | shield-equip, api-selftest, deus-smoke |
 | `T.shared(name)` | driver | a shared helper table from `qa/runtime/_shared/<name>.lua`, or INCONCLUSIVE | none | none | shield-equip, api-selftest |
-| `T.shot(label)` | lib/shot.lua | records that the case asked for a still (`SHOT ... captured=false`) and returns false; the capture is WP-H-10 | none yet | CONV, all packs | api-selftest |
+| `T.shot(label, hold)` | lib/shot.lua | asks the rig for one still: saves `vt2_rig_shot` in the main update, prints `SHOT REQ`, holds still `hold` s (default 3) while `run.ps1` captures the game window into `<run>\stills\` (`shots.json`), prints `SHOT DONE` and returns the request number (nil when the request could not be saved; at most 5 per case). A case never asserts on the still (README "Stills") | none in the game: host-side `PrintWindow` with `PW_RENDERFULLCONTENT` (`GameProcess.cs` `CaptureStill`) | CONV, all packs | api-selftest, still-keep |
 
 ## Planned
 

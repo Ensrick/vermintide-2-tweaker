@@ -38,6 +38,7 @@ return {
 		T.expect(#T.commands("") > 0, "T.commands lists the registered commands")
 		T.expect_eq(T.shield().installed, true, "T.shield reports the installed write shield")
 		T.expect_eq(type(T.shared("official_mirror")), "table", "T.shared hands out official_mirror")
-		T.expect_eq(T.shot("api selftest still"), false, "T.shot records the request; no capture until WP-H-10")
+		-- WP-H-10: the request number; the still itself is judged outside the game (run.ps1 shots.json)
+		T.expect_eq(type(T.shot("api selftest still")), "number", "T.shot asks the rig for a still")
 	end,
 }

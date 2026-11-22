@@ -1,0 +1,22 @@
+# WP-H-09 step 3: run.ps1 refuses to start a rig run while any of these processes runs (process name, ".exe" optional,
+# one per line, "#" starts a comment). The game is heavy and the rig must not compete with the owner's play.
+# Vermintide 2 itself is always checked as well (vermintide2, vermintide2_dx12, vermintide2_launcher).
+# Each name below is the game executable found in its Steam install folder on the author machine on 2026-11-22.
+vermintide2
+vermintide2_dx12
+vermintide2_launcher
+mm                                      # Dark Messiah Might and Magic
+DungeonSiege
+DungeonSiege2
+k2                                      # Kohan II
+Spider-Man
+Spider-Man2
+MilesMorales
+MiSideFull
+nwmain                                  # Neverwinter Nights
+nwtoolset
+SkyrimSE
+CreationKit
+Stronghold
+Stronghold Crusader Definitive Edition
+Stronghold 1 Definitive Edition
