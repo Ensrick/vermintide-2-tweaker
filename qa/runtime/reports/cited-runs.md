@@ -1,6 +1,6 @@
 # Rig runs cited as evidence
 
-`tools/harness/Remove-OldRuns.ps1` keeps every run folder whose name appears in a file under `qa/runtime/reports/` (WP-H-09 step 5). This file names the runs that the harness code, its tests and `docs/program/wp/H.md` cite as evidence, so the 30-folder retention never removes them. Add a run here when a commit, a case or a card cites it.
+`tools/harness/Remove-OldRuns.ps1` keeps every run folder whose name appears in a file under `qa/runtime/reports/` (WP-H-09 step 5). This file names the runs that the harness code, its tests and `docs/program/wp/H.md` cite as evidence, so retention keeps them whole. Retention runs only when a run is given `-Retain <N>`, and even then it keeps every pruned run's summaries, evidence and plan under `runs/_archive/<run>/`; this list is for the runs whose console log and settings copy must stay too. Add a run here when a commit, a case or a card cites it.
 
 | Run folder | Cited for |
 |---|---|

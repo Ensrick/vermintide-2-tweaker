@@ -15,7 +15,8 @@
   1 if any exited 1, else 2 if any exited 2 or a boot did not run, else 0.
 
   WP-H-09: -Wait <minutes> queues for the lock; every boot runs with -NoOrderCheck (a FAIL re-run alone would
-  rebuild the rig profile the next boot must keep); afterwards Remove-OldRuns.ps1 applies the run-folder retention.
+  rebuild the rig profile the next boot must keep); with -Retain <N> Remove-OldRuns.ps1 prunes older run folders
+  afterwards (by default nothing is pruned).
 #>
 [CmdletBinding()]
 param(
@@ -26,7 +27,7 @@ param(
     [string] $RunScript = (Join-Path $PSScriptRoot 'run.ps1'),
     [string] $LockName = 'Global\Vt2RigSingleInstance',
     [double] $Wait = 0,                             # WP-H-09: minutes to wait for the rig lock
-    [int] $KeepRuns = 30,                           # WP-H-09: run-folder retention; 0 or less keeps all
+    [int] $Retain = 0,                              # WP-H-09: prune run folders beyond the newest N; 0 = prune nothing
     [string] $ReportsDir = (Join-Path $PSScriptRoot '..\..\qa
 untime
 eports')
@@ -81,8 +82,8 @@ foreach ($b in $results) {
     foreach ($c in $b.cases) { $md += "| $($b.boot) | $($b.exit) | $($b.isolation) | $($b.run_end_seen) | $($c.id) | $($c.verdict) | $($c.detail) |" }
 }
 $md | Set-Content -LiteralPath (Join-Path $run 'summary.md') -Encoding utf8
-if ($KeepRuns -gt 0) {
-    try { $null = & (Join-Path $PSScriptRoot 'Remove-OldRuns.ps1') -RunsDir (Join-Path $RigRoot 'runs') -Keep $KeepRuns -ReportsDir $ReportsDir -Protect $run }
+if ($Retain -gt 0) {
+    try { $null = & (Join-Path $PSScriptRoot 'Remove-OldRuns.ps1') -RunsDir (Join-Path $RigRoot 'runs') -Retain $Retain -ReportsDir $ReportsDir -Protect $run }
     catch { Write-Host "retention failed: $($_.Exception.Message)" }
 }
 $summary | ConvertTo-Json -Depth 8

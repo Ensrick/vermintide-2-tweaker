@@ -49,8 +49,8 @@
   when the driver's progress checkpoint stops moving (-StallPlaySeconds in play, -StallLoadSeconds while booting or
   loading) or free RAM falls under -StopFreeGiB; a new crash dump, or an exit without RUN END, makes the running case
   CRASH (Get-RunVerdicts.ps1); a FAIL is re-run once alone in a fresh boot (Invoke-OrderCheck.ps1, not with
-  -NoOrderCheck); afterwards only the newest -KeepRuns run folders and those qa/runtime/reports names are kept
-  (Remove-OldRuns.ps1).
+  -NoOrderCheck); with -Retain <N> only, older run folders that qa/runtime/reports does not name are reduced to their
+  summaries under runs\_archive\ (Remove-OldRuns.ps1); by default nothing is pruned.
 
   Stills (WP-H-10; README "Stills"): when a case calls T.shot, the driver saves a vt2_rig_shot request and holds
   still; this script sees it and captures the game window into <run>\stills\ (GameProcess.cs CaptureStill), listed
@@ -85,7 +85,7 @@ param(
     [switch] $KeepProfile,                  # WP-H-08: a later boot starts from the profile the boot before it left
     [double] $Wait = 0,                     # WP-H-09: minutes to wait for the rig lock (0 = refuse when it is held)
     [switch] $NoOrderCheck,                 # WP-H-09: do not re-run a FAIL alone (Repeat-Plan.ps1, boots, the re-run itself)
-    [int] $KeepRuns = 30,                   # WP-H-09: run folders kept by Remove-OldRuns.ps1; 0 or less keeps all
+    [int] $Retain = 0,                      # WP-H-09: prune run folders beyond the newest N (Remove-OldRuns.ps1); 0 = prune nothing
     [string] $ReportsDir = (Join-Path $PSScriptRoot '..\..\qa\runtime\reports'),
     [string] $BusyProcessesFile = (Join-Path $PSScriptRoot 'busy-processes.txt'),
     [double] $MinFreeGiB = 6,               # WP-H-09: refuse to start below this much free RAM
@@ -121,7 +121,7 @@ if ($planObj -and $planObj.PSObject.Properties['boots'] -and $planObj.boots) {
     $childArgs = @{ Renderer = $Renderer; ExtraArgs = $ExtraArgs; DriverFile = $DriverFile; DriverId = $DriverId; SharedDir = $SharedDir; SlotsFile = $SlotsFile; SteamApps = $SteamApps }
     if ($Visible) { $childArgs.Visible = $true }
     if ($TimeoutSeconds -gt 0) { $childArgs.TimeoutSeconds = $TimeoutSeconds }
-    & (Join-Path $here 'Invoke-RigBoots.ps1') -PlanPath $planPath -Name $Name -RigRoot $RigRoot -ChildArgs $childArgs -RunScript $PSCommandPath -Wait $Wait -LockName $LockName -KeepRuns $KeepRuns -ReportsDir $ReportsDir
+    & (Join-Path $here 'Invoke-RigBoots.ps1') -PlanPath $planPath -Name $Name -RigRoot $RigRoot -ChildArgs $childArgs -RunScript $PSCommandPath -Wait $Wait -LockName $LockName -Retain $Retain -ReportsDir $ReportsDir
     exit $LASTEXITCODE
 }
 
@@ -452,7 +452,7 @@ if ($planObj -and $planObj.PSObject.Properties['sweep'] -and $planObj.sweep -eq 
 $orderCheck = @()
 $failed = @($cases | Where-Object { $_.verdict -eq 'FAIL' } | ForEach-Object { $_.id })
 if ($planObj -and -not $NoOrderCheck -and $isolation -eq 'OK' -and $failed.Count -and $planCaseIds.Count -gt 1) {
-    $orderArgs = @{ Renderer = $Renderer; ExtraArgs = $ExtraArgs; DriverFile = $DriverFile; DriverId = $DriverId; SharedDir = $SharedDir; LibDir = $LibDir; SlotsFile = $SlotsFile; SteamApps = $SteamApps; Wait = $Wait; LockName = $LockName; BusyProcessesFile = $BusyProcessesFile; KeepRuns = 0 }
+    $orderArgs = @{ Renderer = $Renderer; ExtraArgs = $ExtraArgs; DriverFile = $DriverFile; DriverId = $DriverId; SharedDir = $SharedDir; LibDir = $LibDir; SlotsFile = $SlotsFile; SteamApps = $SteamApps; Wait = $Wait; LockName = $LockName; BusyProcessesFile = $BusyProcessesFile }
     if ($Visible) { $orderArgs.Visible = $true }
     $orderCheck = @(& (Join-Path $here 'Invoke-OrderCheck.ps1') -PlanPath $planPath -RunDir $run -CaseIds $failed -RigRoot $RigRoot -RunScript $PSCommandPath -ChildArgs $orderArgs)
     foreach ($o in $orderCheck) {
@@ -463,10 +463,10 @@ if ($planObj -and -not $NoOrderCheck -and $isolation -eq 'OK' -and $failed.Count
 }
 elseif ($planObj -and $failed.Count -and $planCaseIds.Count -gt 1) { $notes.Add('order check skipped' + $(if ($NoOrderCheck) { ' (-NoOrderCheck)' } else { " (isolation $isolation)" })) }
 
-# WP-H-09 step 5: retention, top-level runs only (a boot or a re-run lives inside its parent's folder)
+# WP-H-09 step 5: retention, opt-in (-Retain), top-level runs only (a boot or a re-run lives inside its parent's folder)
 $retention = $null
-if (-not $RunDir -and $KeepRuns -gt 0) {
-    try { $retention = & (Join-Path $here 'Remove-OldRuns.ps1') -RunsDir (Join-Path $RigRoot 'runs') -Keep $KeepRuns -ReportsDir $ReportsDir -Protect $run }
+if (-not $RunDir -and $Retain -gt 0) {
+    try { $retention = & (Join-Path $here 'Remove-OldRuns.ps1') -RunsDir (Join-Path $RigRoot 'runs') -Retain $Retain -ReportsDir $ReportsDir -Protect $run }
     catch { $notes.Add("retention failed: $($_.Exception.Message)") }
 }
 
