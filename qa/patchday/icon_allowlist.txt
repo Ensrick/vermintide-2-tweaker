@@ -1,0 +1,13 @@
+# Literal icon = "<name>" values qa/patchday/icon_atlas.py may not find in an atlas, one name per line, with the reason.
+# chaos_wastes_tweaker _adventure_pool.lua: theme keys, drawn as "twitch_icon_" .. icon (line 678); every
+# twitch_icon_<key> below is in gui_icons_atlas.lua (checked 2026-11-22).
+bay        # twitch_icon_bay
+forest     # twitch_icon_forest
+gorge      # twitch_icon_gorge
+mines      # twitch_icon_mines
+mountain   # twitch_icon_mountain
+temple     # twitch_icon_temple
+tower      # twitch_icon_tower
+town       # twitch_icon_town
+# modded_progression _mp_daily_ui_runtime.lua: a value in the detached runtime_check probe's stub currency, never drawn.
+shillings
