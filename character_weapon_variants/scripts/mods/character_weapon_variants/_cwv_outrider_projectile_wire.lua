@@ -34,36 +34,28 @@ M.DONOR_PROJECTILE_KEY = "dr_deus_01"
 M.GRENADE_PROJECTILE_KEY = "cwv_outrider_grenade_projectile"
 
 -- Pure: plan the projectile-config swap for the clone's action_one rows.
--- Vanilla stores `Projectiles.dr_deus_01` by reference on the donor's fire
--- action (weapon_templates/dr_deus_01.lua:56); the clone is
--- table.clone(..., true), a DEEP copy (foundation scripts/util/table.lua:31-49,
--- the second argument is skip_metatable), so identity against the clone's own
--- projectile_info can never match. Match the DONOR sub-action at the same
--- path by identity instead; when no donor row exists, fall back to the stable
--- `projectile_units_template` field (dr_deus_01: "dr_deus_01_head",
--- dlcs/morris/morris_equipment_settings.lua:227-236). Rows are sorted by
--- sub-action name so the boot log is deterministic. The donor is never written.
-function M.plan_projectile_swap(clone, donor, donor_info)
+-- Vanilla stores `Projectiles.dr_deus_01` by reference only on the template
+-- file's local (weapon_templates/dr_deus_01.lua:56); the registered donor is
+-- `dr_deus_01_template_1 = table.clone(weapon_template)` (dr_deus_01.lua:326)
+-- and the Outrider clone is table.clone(..., true). Both are DEEP copies
+-- (foundation scripts/util/table.lua:31-49), so no identity test against
+-- Projectiles.dr_deus_01 can match, on the clone or on the donor (the boot
+-- log showed rows=0). Match the stable `projectile_units_template` field
+-- (dr_deus_01: "dr_deus_01_head", dlcs/morris/morris_equipment_settings.lua:233)
+-- and refuse to match anything when the donor config lacks it (nil == nil
+-- would otherwise take every projectile row). Rows are sorted by sub-action
+-- name so the boot log is deterministic. The donor is never written.
+function M.plan_projectile_swap(clone, donor_info)
 	local rows = {}
-	if type(donor_info) ~= "table" or type(clone) ~= "table"
+	local units_template = type(donor_info) == "table" and donor_info.projectile_units_template or nil
+	if type(units_template) ~= "string" or units_template == "" or type(clone) ~= "table"
 			or type(clone.actions) ~= "table" or type(clone.actions.action_one) ~= "table" then
 		return rows
 	end
-	local donor_actions = type(donor) == "table" and type(donor.actions) == "table"
-		and donor.actions.action_one or nil
 	for sub_name, sub_action in pairs(clone.actions.action_one) do
-		if type(sub_action) == "table" and type(sub_action.projectile_info) == "table" then
-			local donor_sub = type(donor_actions) == "table" and donor_actions[sub_name] or nil
-			local matched
-			if type(donor_sub) == "table" then
-				matched = donor_sub.projectile_info == donor_info
-			else
-				matched = sub_action.projectile_info.projectile_units_template
-					== donor_info.projectile_units_template
-			end
-			if matched then
-				rows[#rows + 1] = { sub_action_name = sub_name, sub_action = sub_action }
-			end
+		if type(sub_action) == "table" and type(sub_action.projectile_info) == "table"
+				and sub_action.projectile_info.projectile_units_template == units_template then
+			rows[#rows + 1] = { sub_action_name = sub_name, sub_action = sub_action }
 		end
 	end
 	table.sort(rows, function(a, b) return a.sub_action_name < b.sub_action_name end)
@@ -179,19 +171,18 @@ function M.install(mod, ctx)
 		state.reason = "template_missing"
 		return state
 	end
-	-- (#1320) Projectile visual swap, planned against the DONOR's rows. The
-	-- constructor's old guard compared the clone's deep-copied projectile_info
-	-- against Projectiles.dr_deus_01 by identity, which never held, so every
-	-- Outrider shot spawned the Trollhammer torpedo unit. Independent of the
-	-- lookup registration below: a fail-closed lookup must not leave the
-	-- torpedo config on the fire action.
+	-- (#1320) Projectile visual swap, matched by the donor config's
+	-- projectile_units_template. Identity against Projectiles.dr_deus_01 never
+	-- held (clone and donor are both deep copies), so every Outrider shot
+	-- spawned the Trollhammer torpedo unit. Independent of the lookup
+	-- registration below: a fail-closed lookup must not leave the torpedo
+	-- config on the fire action.
 	local projectiles = rawget(_G, "Projectiles")
-	local donor = rawget(weapons, M.DONOR_TEMPLATE_KEY)
 	local donor_info = type(projectiles) == "table"
 		and rawget(projectiles, M.DONOR_PROJECTILE_KEY) or nil
 	local grenade_info = type(projectiles) == "table"
 		and rawget(projectiles, M.GRENADE_PROJECTILE_KEY) or nil
-	local swap_rows = M.plan_projectile_swap(template, donor, donor_info)
+	local swap_rows = M.plan_projectile_swap(template, donor_info)
 	state.projectile_rows = #swap_rows
 	state.projectile_swapped = M.apply_projectile_swap(swap_rows, grenade_info)
 	state.projectile_units_template = type(grenade_info) == "table"
