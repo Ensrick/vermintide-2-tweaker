@@ -20,6 +20,9 @@
 -- Run it with qa/runtime/plans/cim-cases.json, which leaves mp out.
 -- The case never calls a backend commit; it equips and re-equips in the rig
 -- profile only and deletes its craft before the assertions that can end it.
+-- #1933: the delete waits until the hero inventory no longer holds the craft
+-- (equipped slot or queued resync spawn,
+-- simple_inventory_extension.lua:1372-1398, 1428-1440, 546-568).
 
 local MOD_ID = "cim_dev"
 local SLOT = "slot_melee"
@@ -85,16 +88,44 @@ return {
         T.note("auto_equip", tostring(ok) .. " " .. tostring(mode))
         local equipped = BackendUtils.get_loadout_item_id(career, SLOT)
 
+        -- #1933: deleting the craft while it is equipped (or queued on the hero)
+        -- must be refused; deleting it crashed get_skin on the next resync spawn
+        -- (rig run 20261122-054737-cim-cases-fc202dd9).
+        local function delete_craft()
+            if type(cim._cim277_delete_owned_ids) ~= "function" then return 0, "delete not exported" end
+            local ok_delete, removed, err = pcall(cim._cim277_delete_owned_ids, { bid })
+            if not ok_delete then return 0, tostring(removed) end
+            return removed, err
+        end
+        local held_removed, held_err = delete_craft()
+        T.note("delete_while_equipped", tostring(held_removed) .. " " .. tostring(held_err))
+
         T.step("cleanup")
         pcall(BackendUtils.set_loadout_item, original, career, SLOT)
-        if type(cim._cim277_delete_owned_ids) == "function" then
-            pcall(cim._cim277_delete_owned_ids, { bid })
+        -- Put the original back on the hero, wait until no hero inventory slot or
+        -- queued spawn holds the craft, then delete it.
+        local hero = T.local_hero(30)
+        local hero_inventory = hero and ScriptUnit.has_extension(hero, "inventory_system")
+        if hero_inventory then
+            pcall(hero_inventory.create_equipment_in_slot, hero_inventory, SLOT, original)
         end
+        local deletion = cim._cim277_owned_deletion
+        local function hero_holds_craft()
+            if not (deletion and hero_inventory) then return false end
+            return deletion.held_ids({ hero_inventory })[bid] == true
+        end
+        T.wait_until(function() return not hero_holds_craft() end, 20, "hero released the craft")
+        local removed, delete_err = delete_craft()
+        T.note("delete", tostring(removed) .. " " .. tostring(delete_err))
 
         T.expect(injected, "craft injected")
         T.expect(ok == true, "auto-equip returned true")
         T.expect_eq(equipped, bid, "the exact crafted id is equipped")
+        T.expect_eq(held_removed, 0, "delete refused while the craft is equipped (#1933)")
+        T.expect(tostring(held_err):find("still equipped", 1, true) ~= nil, "refusal names the equipped craft (#1933)")
         T.expect_eq(BackendUtils.get_loadout_item_id(career, SLOT), original, "original item re-equipped")
+        T.expect(not hero_holds_craft(), "hero released the craft before the delete")
+        T.expect_eq(removed, 1, "craft deleted after the hero released it")
 
         T.step("the removed round-trip check is gone")
         if type(cim._cim_rt_last) ~= "table" then

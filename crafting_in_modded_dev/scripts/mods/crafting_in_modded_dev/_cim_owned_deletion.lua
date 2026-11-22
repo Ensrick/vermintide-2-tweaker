@@ -323,4 +323,72 @@ function M.execute(deps, owned_ids, foreign_ids)
     return #exact, nil
 end
 
+-- #1933: deleting an id a hero still holds crashed the next frame. A hero
+-- inventory keeps the id in an equipped slot or in a queued resync spawn
+-- (simple_inventory_extension.lua:1428-1440, consumed at :546-568). Returns
+-- the set of backend ids the given inventories hold.
+function M.held_ids(inventories)
+    local held = {}
+    local function hold(item_data)
+        local ok, id = pcall(function() return item_data.backend_id end)
+        if ok and type(id) == "string" and id ~= "" then held[id] = true end
+    end
+    for _, inventory in ipairs(inventories or {}) do
+        pcall(function()
+            for _, slot in pairs(inventory._equipment.slots or {}) do hold(slot.item_data) end
+        end)
+        pcall(function()
+            for _, spawn in pairs(inventory._items_to_spawn or {}) do hold(spawn.item_data) end
+        end)
+    end
+    return held
+end
+
+-- #1933: nil when every id is provably unequipped: no current career
+-- loadout (BackendInterfaceItemPlayfab.equipped_by, :745-758), no saved
+-- loadout (is_equipped_by_any_loadout, :785-800) and no live hero inventory
+-- (`held`) holds it. Otherwise the refusal reason. Fails closed when the
+-- items interface cannot answer.
+function M.equipped_refusal(items, backend_ids, held)
+    for i = 1, #(backend_ids or {}) do
+        local backend_id = backend_ids[i]
+        local ok_current, current = pcall(items.equipped_by, items, backend_id)
+        local ok_saved, saved = pcall(items.is_equipped_by_any_loadout, items, backend_id)
+        if not ok_current or not ok_saved
+                or type(current) ~= "table" or type(saved) ~= "table" then
+            return "could not prove " .. tostring(backend_id) .. " is unequipped"
+        end
+        if #current > 0 or #saved > 0 or (held and held[backend_id]) then
+            return tostring(backend_id) .. " is still equipped; unequip it before deleting"
+        end
+    end
+    return nil
+end
+
+-- #1933: BackendUtils.get_item_units reads get_skin of
+-- `item_data.backend_id or backend_id` whenever no skin is passed
+-- (backend_utils.lua:156-168), and get_skin indexes the backend row with no nil
+-- check (backend_interface_item_playfab.lua:344-347). When that id no longer
+-- resolves, resolve the base units from the item data alone.
+local dangling_logged, dangling_count = {}, 0
+function M.item_units(func, item_data, backend_id, skin, career_name)
+    local id = type(item_data) == "table" and item_data.backend_id or backend_id
+    if skin or type(id) ~= "string" then
+        return func(item_data, backend_id, skin, career_name)
+    end
+    local backend = rawget(_G, "Managers") and Managers.backend
+    local ok_items, items = pcall(function() return backend:get_interface("items") end)
+    if not ok_items or not items then return func(item_data, backend_id, skin, career_name) end
+    local ok_row, row = pcall(items.get_item_from_id, items, id)
+    if ok_row and row ~= nil then return func(item_data, backend_id, skin, career_name) end
+    local base = {}
+    for key, value in pairs(item_data or {}) do base[key] = value end
+    base.backend_id = nil
+    if not dangling_logged[id] and dangling_count < 16 then
+        dangling_logged[id], dangling_count = true, dangling_count + 1
+        pcall(printf, "[cim:1933] get_item_units: backend id %s no longer resolves; base units", id)
+    end
+    return func(base, nil, nil, career_name)
+end
+
 return M
