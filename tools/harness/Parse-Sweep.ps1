@@ -14,17 +14,23 @@
   XPASS and BAD-SHAPE count as FAIL, XFAIL as SKIP (see the formats file). A check that printed nothing is never
   a PASS: a suite whose command returned without output gets one SKIP row; a suite whose command never returned
   (crash or time limit) is INCONCLUSIVE. Each suite's row count is compared with its own summary line (within 5%).
+  With -ExpectMods (the plan's expect_mods), every listed VMF mod id that no suite printed for (its rows, or for a
+  suite without rows any line it printed) gets a suite entry "(missing) <id>" with status "missing" and counts in
+  missing_suites: for example wt_dev when wt took the /wt_regression_test name first. Ids in the formats file's
+  NoSuite list (VMF) are not expected to have a suite.
 
   Writes <OutDir>\sweep.json and <OutDir>\sweep.md when -OutDir is given. Exit codes: 0 no FAIL row, 1 at least
   one FAIL row, 2 input missing or unreadable.
 
 .OUTPUTS
-  [pscustomobject] Rows, Suites, Counts (rows, pass, fail, skip, inconclusive_suites).
+  [pscustomobject] Rows, Suites, Counts (rows, pass, fail, skip, inconclusive_suites, missing_suites).
 #>
 [CmdletBinding()]
 param(
     [Parameter(Mandatory)] [string] $EvidenceFile,
     [string] $LogFile = '',
+    [string[]] $ExpectMods = @(),
+
     [string] $OutDir = '',
     [string] $FormatsFile = (Join-Path $PSScriptRoot 'sweep-formats.psd1'),
     [switch] $Quiet
@@ -46,7 +52,7 @@ $seen = @{}
 $suites = [ordered]@{}
 function Get-Suite([string] $name) {
     if (-not $suites.Contains($name)) {
-        $suites[$name] = [ordered]@{ suite = $name; mods = [System.Collections.Generic.List[string]]::new(); returned = $false; lines = $null; rows = 0; summary = $null; status = $null; count_match = $null }
+        $suites[$name] = [ordered]@{ suite = $name; mods = [System.Collections.Generic.List[string]]::new(); printed = [System.Collections.Generic.List[string]]::new(); returned = $false; lines = $null; rows = 0; summary = $null; status = $null; count_match = $null }
     }
     $suites[$name]
 }
@@ -65,8 +71,9 @@ foreach ($line in [System.IO.File]::ReadAllLines((Resolve-Path -LiteralPath $Evi
     if ($line -match '^NOTE id=\S+ key=lines:(?<cmd>\S+) value="(?<n>\d+)"$') { $s = Get-Suite $Matches.cmd; $s.returned = $true; $s.lines = [int]$Matches.n; continue }
     if ($line -notmatch '^OUT mod=(?<mod>\S+) via=(?<via>\S+) text="(?<text>.*)"$') { continue }
     $mod = $Matches.mod; $via = $Matches.via; $text = $Matches.text
-    if ($via -ne 'echo') { continue }
     $suite = if ($current) { $current } else { Get-Suite '(no suite)' }
+    if (-not $suite.printed.Contains($mod)) { $suite.printed.Add($mod) }
+    if ($via -ne 'echo') { continue }
     $fmt = Get-Format $mod
     $m = [regex]::Match($text, $fmt.Row)
     if ($m.Success) {
@@ -115,19 +122,41 @@ foreach ($s in $suites.Values) {
     }
 }
 
+# A loaded mod no suite printed for: its command was never listed (refused as a duplicate name, or the mod was
+# disabled), so the sweep would otherwise look complete without it.
+$noSuite = @($formats.NoSuite)
+$covered = [System.Collections.Generic.HashSet[string]]::new()
+$silent = [System.Collections.Generic.List[string]]::new()   # command prefixes of suites that printed no line at all
+foreach ($s in @($suites.Values)) {
+    if ($s.suite -eq '(no suite)') { continue }
+    $by = if ($s.mods.Count) { $s.mods } else { $s.printed }
+    foreach ($m in $by) { [void]$covered.Add($m) }
+    if (-not $by.Count -and $s.suite -match '^(?<prefix>.+)_regression_test$') { $silent.Add($Matches.prefix) }
+}
+foreach ($id in $ExpectMods) {
+    if ([string]::IsNullOrWhiteSpace($id) -or $noSuite -contains $id -or $covered.Contains($id)) { continue }
+    # a suite that printed no line names no mod; "<id>_regression_test" (or the id without _dev) still counts as its suite
+    $bare = $id -replace '_dev$', ''
+    if (@($silent | Where-Object { $_ -ieq $id -or $_ -ieq $bare }).Count) { continue }
+    $s = Get-Suite "(missing) $id"
+    $s.mods.Add($id)
+    $s.status = 'missing'
+}
+
 $counts = [ordered]@{
     rows = $rows.Count
     pass = @($rows | Where-Object { $_.verdict -eq 'PASS' }).Count
     fail = @($rows | Where-Object { $_.verdict -eq 'FAIL' }).Count
     skip = @($rows | Where-Object { $_.verdict -eq 'SKIP' }).Count
     inconclusive_suites = @($suites.Values | Where-Object { $_.status -eq 'INCONCLUSIVE' }).Count
+    missing_suites = @($suites.Values | Where-Object { $_.status -eq 'missing' }).Count
 }
 $result = [pscustomobject]@{ Counts = $counts; Suites = @($suites.Values); Rows = $rows.ToArray() }
 
 if ($OutDir) {
     [ordered]@{ evidence = $EvidenceFile; log = $LogFile; counts = $counts; suites = @($suites.Values); rows = $rows.ToArray() } |
         ConvertTo-Json -Depth 6 | Set-Content -LiteralPath (Join-Path $OutDir 'sweep.json') -Encoding utf8
-    $md = @('# Regression sweep', '', "Rows $($counts.rows): PASS $($counts.pass), FAIL $($counts.fail), SKIP $($counts.skip); inconclusive suites $($counts.inconclusive_suites)", '',
+    $md = @('# Regression sweep', '', "Rows $($counts.rows): PASS $($counts.pass), FAIL $($counts.fail), SKIP $($counts.skip); inconclusive suites $($counts.inconclusive_suites); missing suites $($counts.missing_suites)", '',
         '| Suite | Mods | Rows | Summary pass/fail/xfail/skip | Count matches summary | Status |', '|---|---|---|---|---|---|')
     foreach ($s in $suites.Values) {
         $sum = if ($s.summary) { "$($s.summary.pass)/$($s.summary.fail)/$($s.summary.xfail)/$($s.summary.skip)" } else { '-' }
@@ -140,7 +169,7 @@ if ($OutDir) {
     }
     $md | Set-Content -LiteralPath (Join-Path $OutDir 'sweep.md') -Encoding utf8
 }
-if (-not $Quiet) { Write-Host "[sweep] rows=$($counts.rows) pass=$($counts.pass) fail=$($counts.fail) skip=$($counts.skip) inconclusive_suites=$($counts.inconclusive_suites)" }
+if (-not $Quiet) { Write-Host "[sweep] rows=$($counts.rows) pass=$($counts.pass) fail=$($counts.fail) skip=$($counts.skip) inconclusive_suites=$($counts.inconclusive_suites) missing_suites=$($counts.missing_suites)" }
 $result
 if ($counts.fail -gt 0) { exit 1 }
 exit 0
