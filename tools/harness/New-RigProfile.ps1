@@ -76,19 +76,37 @@ if ($planObj -or -not $KeepOwnerMods) {
     $wanted = @(); if ($planObj -and $planObj.mods) { $wanted = @($planObj.mods | ForEach-Object { [string]$_ }) }
     if ($planObj) { $wanted += $DriverId }
     # WP-H-07 local builds: the slot takes the real mod's place in the load order (a copy of the real entry with the
-    # slot id, inserted right before it) and the real id is left disabled.
+    # slot id, inserted right before it) and the real id is left disabled. An entry is bracketed from the "\t{" line
+    # before its "\t\tid" line to the first "\t}" line after it: a real entry's description is free text over many
+    # lines that need not start with tabs (BBCode, blank lines), so no line pattern may be assumed in between. The
+    # fields after id are one-line values and tab-indented arrays, so the first "\t}" after id closes the entry.
     if ($planObj -and $SlotSwaps.Count) {
-        $entryOf = { param([string] $id) '(?m)^\t\{\n(?:\t\t[^\n]*\n)*?\t\tid = "' + $id + '"\n(?:\t\t[^\n]*\n)*?\t\}\n' }
+        $findEntry = {
+            param([string] $text, [string] $id)
+            $idLine = [regex]::Match($text, '(?m)^\t\tid = "' + $id + '"$')
+            if (-not $idLine.Success) { return $null }
+            $open = $text.LastIndexOf("`n`t{`n", $idLine.Index)
+            $close = $text.IndexOf("`n`t}`n", $idLine.Index)
+            $array = [regex]::Match($text, '(?m)^mods = \[$')
+            if ($open -lt 0 -or $close -lt 0 -or -not $array.Success -or $open -lt $array.Index) {
+                throw "mod entry $id found but not bracketed by tab-{ and tab-} lines inside the mods array"
+            }
+            $start = $open + 1
+            $end = $close + 4
+            [pscustomobject]@{ Index = $start; Length = $end - $start; Value = $text.Substring($start, $end - $start) }
+        }
         foreach ($real in @($SlotSwaps.Keys)) {
             $slotId = [string]$SlotSwaps[$real]
             if ($real -notmatch '^\d+$' -or $slotId -notmatch '^\d+$') { throw "slot swap ids must be Workshop numbers: $real -> $slotId" }
-            $cfg = [regex]::Replace($cfg, (& $entryOf $slotId), '')
-            $m = [regex]::Match($cfg, (& $entryOf $real))
-            if ($m.Success) {
-                $copy = $m.Value -replace ('(?m)^\t\tid = "' + $real + '"$'), "`t`tid = `"$slotId`""
-                $copy = $copy -replace '(?m)^\t\tname = "[^"]*"$', "`t`tname = `"VT2 Rig Slot (local build of $real)`""
-                $cfg = $cfg.Insert($m.Index, $copy)
+            # an entry the owner's list already holds for the slot item goes (it would load at its own place)
+            while ($null -ne ($old = & $findEntry $cfg $slotId)) { $cfg = $cfg.Remove($old.Index, $old.Length) }
+            $m = & $findEntry $cfg $real
+            if ($null -eq $m) {
+                throw "slot swap: the real mod $real has no entry in the copied user_settings.config, so slot $slotId has no load position to take (subscribe the real mod, or drop it from local_builds)"
             }
+            $copy = $m.Value -replace ('(?m)^\t\tid = "' + $real + '"$'), "`t`tid = `"$slotId`""
+            $copy = $copy -replace '(?m)^\t\tname = "[^"\n]*"$', "`t`tname = `"VT2 Rig Slot (local build of $real)`""
+            $cfg = $cfg.Insert($m.Index, $copy)
         }
         $wanted = @($wanted | ForEach-Object { if ($SlotSwaps.ContainsKey($_)) { [string]$SlotSwaps[$_] } else { $_ } })
     }
