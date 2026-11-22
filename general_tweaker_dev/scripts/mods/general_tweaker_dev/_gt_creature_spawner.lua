@@ -356,6 +356,7 @@ end
 -- in the main file) can resolve this helper at call time after this module
 -- dofiles. Internal CS hooks keep using the file-local for speed.
 mod._gt_cs_is_in_level = _gt_cs_is_in_level
+mod._gt_cs_is_in_keep = _gt_cs_is_in_keep  -- WP-GT-05: the create_actor guard resolves it at call time
 
 -- Returns (is_host_ready, conflict_director, is_client_ready) — extends
 -- upstream's `mod:get_status` shape for issue 693. The spawn primitives only
@@ -1197,16 +1198,7 @@ if AiBreedSnippets then
     end)
 end
 
--- Defensive aggro init — keep table guaranteed-present so update_aggro
--- doesn't index nil when an enemy spawns with no aggro_list yet.
-if AiUtils then
-    mod:hook(AiUtils, "update_aggro", function(func, unit, blackboard, breed, t, dt, ...)
-        if not blackboard.aggro_list then
-            blackboard.aggro_list = {}
-        end
-        return func(unit, blackboard, breed, t, dt, ...)
-    end)
-end
+-- (WP-GT-05: the AiUtils.update_aggro nil-guard moved to _gt_engine_guards.lua.)
 
 -- Sofia homing skull summon — provide a fallback `sofia_unit_pos` when the
 -- skull is spawned outside a Sofia encounter (i.e. directly from this mod).
@@ -1424,73 +1416,8 @@ if BTConditions then
     end)
 end
 
--- ----------------------------------------------------------------------------
--- Issue #59 secondary fix: defensive nil-guard for BTConditions.at_*_health
--- ----------------------------------------------------------------------------
--- The level-prefix-match fix above (and the `_gt_cs_is_in_level` underscore-
--- boundary match at the top of this file) closes the original Drachenfels crash
--- by sending CW dlc_castle_*_path1 variants down the vanilla run_on_spawn path,
--- which correctly initializes blackboard.current_health_percent before any BT
--- tick reads it. This block is the BELT-AND-SUSPENDERS guard the issue calls
--- out: bias every condition that bare-compares blackboard.current_health_percent
--- against a number toward FALSE (boss has not yet hit the threshold) if the
--- field is nil. Same logic for `less_than_one_health` which reads
--- blackboard.current_health. Closes a hypothetical first-tick race on ANY boss
--- BT (not just Drachenfels) where the BT evaluates a health condition between
--- breed:run_on_spawn and the first AISystem update_blackboard_health tick.
---
--- Per-(breed, condition) printf dedupe -- BT conditions tick continuously, so
--- unfiltered output would spam. One line per save tells us in-game whether the
--- race is actually firing and on which boss, without flooding the console.
-local _gt_bt_health_nil_seen = {}
-local function _gt_bt_health_pct_nil_guard(cond_name)
-    return function(func, blackboard)
-        if blackboard and blackboard.current_health_percent == nil then
-            local breed = blackboard.breed
-            local bname = (breed and breed.name) or "<no-breed>"
-            local key = bname .. "|" .. cond_name
-            if not _gt_bt_health_nil_seen[key] and rawget(_G, "printf") then
-                _gt_bt_health_nil_seen[key] = true
-                printf("[gt_bt:#59] nil-guard suppressed %s on breed=%s (current_health_percent uninitialized -- first-tick race)",
-                    cond_name, bname)
-            end
-            return false
-        end
-        return func(blackboard)
-    end
-end
-local function _gt_bt_health_raw_nil_guard(cond_name)
-    return function(func, blackboard)
-        if blackboard and blackboard.current_health == nil then
-            local breed = blackboard.breed
-            local bname = (breed and breed.name) or "<no-breed>"
-            local key = bname .. "|" .. cond_name
-            if not _gt_bt_health_nil_seen[key] and rawget(_G, "printf") then
-                _gt_bt_health_nil_seen[key] = true
-                printf("[gt_bt:#59] nil-guard suppressed %s on breed=%s (current_health uninitialized -- first-tick race)",
-                    cond_name, bname)
-            end
-            return false
-        end
-        return func(blackboard)
-    end
-end
-if BTConditions then
-    -- Each (BTConditions, <method>) pair is a distinct hook target -- no dup
-    -- risk vs the transitioned_one_third_health hook above (different method).
-    mod:hook(BTConditions, "at_half_health",                _gt_bt_health_pct_nil_guard("at_half_health"))
-    mod:hook(BTConditions, "at_one_third_health",           _gt_bt_health_pct_nil_guard("at_one_third_health"))
-    mod:hook(BTConditions, "at_two_thirds_health",          _gt_bt_health_pct_nil_guard("at_two_thirds_health"))
-    mod:hook(BTConditions, "at_one_fifth_health",           _gt_bt_health_pct_nil_guard("at_one_fifth_health"))
-    mod:hook(BTConditions, "at_three_fifths_health",        _gt_bt_health_pct_nil_guard("at_three_fifths_health"))
-    mod:hook(BTConditions, "can_transition_half_health",    _gt_bt_health_pct_nil_guard("can_transition_half_health"))
-    mod:hook(BTConditions, "can_transition_one_third_health", _gt_bt_health_pct_nil_guard("can_transition_one_third_health"))
-    mod:hook(BTConditions, "less_than_one_health",          _gt_bt_health_raw_nil_guard("less_than_one_health"))
-end
-
--- Issue #59 regression marker -- if a future refactor drops these guards the
--- main-file rt check `bt_health_conditions_nilguarded_marker_present` fails.
-GT_BT_HEALTH_NILGUARD_MARKER_v0_2_149 = "gt-bt-health-conditions-nilguarded-i59"
+-- (WP-GT-05: the issue #59 BTConditions.at_*_health nil-guards and their
+-- GT_BT_HEALTH_NILGUARD_MARKER_v0_2_149 marker moved to _gt_engine_guards.lua.)
 
 -- Keep-navigation crash suite. All of these short-circuit when in the
 -- keep level (no real navmesh for AI to path on). Matches upstream 1:1.
@@ -1515,13 +1442,7 @@ if GwNavQueries then
     end)
 end
 
--- Prevent keep navigation crash — Unit.create_actor with id=-1 in the keep
--- crashes the engine actor allocator. Block only that exact case.
-mod:hook(Unit, "create_actor", function(func, self, id, ...)
-    if not _gt_cs_is_in_keep() or id ~= -1 then
-        return func(self, id, ...)
-    end
-end)
+-- (WP-GT-05: the Unit.create_actor keep guard moved to _gt_engine_guards.lua.)
 
 if BTSkulkAroundAction then
     mod:hook(BTSkulkAroundAction, "get_new_skulk_goal", function(func, self, unit, blackboard, ...)
@@ -1548,24 +1469,8 @@ if BuffSystem and NetworkConstants and NetworkConstants.server_controlled_buff_i
     end)
 end
 
--- Missing-unit guard — when a breed references a unit path that isn't in
--- any loaded package, fall back to `units/hub_elements/empty` so the
--- engine doesn't fatally fail spawn_unit. Same fallback unit upstream uses.
-mod:hook(World, "spawn_unit", function(func, self, unit_name, ...)
-    if Application.can_get("unit", unit_name) then
-        return func(self, unit_name, ...)
-    else
-        return func(self, "units/hub_elements/empty", ...)
-    end
-end)
-
--- Force EnemyPackageLoader to ignore breed limits — the limit is what
--- normally prevents debug spawns from loading the right packages on demand.
-if EnemyPackageLoader then
-    mod:hook(EnemyPackageLoader, "request_breed", function(func, self, breed_name, ignore_breed_limits, ...)
-        return func(self, breed_name, true, ...)
-    end)
-end
+-- (WP-GT-05: the World.spawn_unit and EnemyPackageLoader.request_breed guards
+-- moved to _gt_engine_guards.lua.)
 
 -- Command registration (gt-prefixed to namespace away from upstream's
 -- bare `spawn_unit` / `save_unit` / `selected_units` names).

@@ -10,13 +10,28 @@
 --   * updateHeroAttributes request built at playfab_mirror_base.lua:2885-2909
 --   * mirror._career_data[career][mirror._career_loadouts[career]][slot] written by
 --     set_character_data: playfab_mirror_base.lua:1928-1941
---   * items:get_loadout_item_id / set_loadout_item:
---     scripts/managers/backend_playfab/backend_interface_item_playfab.lua:512, 635
---   * item.key: playfab_mirror_base.lua:1785
+--   * vanilla equip ends in that writer: backend_interface_item_playfab.lua:635-669 (line 665)
+--   * items:get_loadout_item_id / set_loadout_item / get_item_from_id:
+--     scripts/managers/backend_playfab/backend_interface_item_playfab.lua:512, 635, 384-389
+--     (get_item_from_id reads the interface's item table, which is the mirror's
+--     inventory table unless game-mode items are active: lines 56-76)
+--   * item.key: playfab_mirror_base.lua:1785; masterlist rows: item_master_list.lua:111
+--   * SimpleInventoryExtension.get_item_data:
+--     scripts/unit_extensions/default_player_unit/inventory/simple_inventory_extension.lua:1365-1370
 --   * BackendManagerPlayFab.commit(self, skip_queue, commit_complete_callback):
 --     scripts/managers/backend_playfab/backend_manager_playfab.lua:933
 --
--- Tweaker: GUI must not be loaded: this case proves the cim-only path.
+-- Tweaker: GUI may be loaded (gui_tweaker_dev or the public gut); the case
+-- notes which, and its leak check is the same either way.
+--
+-- Modded Progression must not be loaded: its Fresh profile routes the items
+-- interface by design (loadout ids come from the Fresh view and
+-- set_loadout_item writes the Fresh profile, never the native mirror:
+-- modded_progression/_mp_fresh_profile_runtime.lua header, H.get_loadout_item_id,
+-- H.set_loadout_item; rig run 20261115-162744 logged "[mp:fresh] route state=active").
+-- Run it with qa/runtime/plans/cim-cases.json, which leaves mp out.
+--
+-- This case calls Managers.backend:commit (backend write shield on in the rig).
 
 local MOD_ID = "cim_dev"
 local SLOT = "slot_melee"
@@ -36,6 +51,22 @@ local function request_contains(request, needle)
         end
     end
     return false
+end
+
+-- The equipped melee item key from the live loadout: the items interface,
+-- then the native mirror row, then the hero's spawned melee.
+local function equipped_melee_key(items, mirror, backend_id)
+    if backend_id == nil then return nil, "no equipped id" end
+    local ok, row = pcall(items.get_item_from_id, items, backend_id)
+    if ok and type(row) == "table" and type(row.key) == "string" then return row.key, "items interface" end
+    row = rawget(mirror._inventory_items, backend_id)
+    if type(row) == "table" and type(row.key) == "string" then return row.key, "mirror inventory" end
+    local player = Managers.player:local_player()
+    local unit = player and player.player_unit
+    local inventory = unit and Unit.alive(unit) and ScriptUnit.has_extension(unit, "inventory_system")
+    local data = inventory and inventory:get_item_data(SLOT)
+    if type(data) == "table" and type(data.key) == "string" then return data.key, "hero inventory" end
+    return nil, "no source had a key"
 end
 
 local function cleanup()
@@ -74,8 +105,10 @@ return {
         T.require(rawget(_G, "MODDED_REALM") == true, "modded realm")
         local cim = get_mod(MOD_ID)
         T.require(cim ~= nil, "cim_dev loaded")
-        T.require(get_mod("gut") == nil and get_mod("gut_dev") == nil, "Tweaker: GUI not loaded")
         T.require(cim._cim402_guard_installed == true, "career commit guard installed")
+        T.require(get_mod("mp") == nil, "Modded Progression not loaded (its Fresh profile routes the items interface)")
+        local gut = get_mod("gut") and "gut" or (get_mod("gut_dev") and "gut_dev") or "none"
+        T.note("tweaker_gui_loaded", gut)
 
         local backend = Managers.backend
         local mirror = backend:get_backend_mirror()
@@ -85,12 +118,13 @@ return {
         T.require(index ~= nil, "selected loadout index known")
         local original_id = items:get_loadout_item_id(career, SLOT)
         T.require(original_id ~= nil, "melee slot equipped")
-        local original_item = rawget(mirror._inventory_items, original_id)
-        local key = original_item and original_item.key
-        T.require(type(key) == "string", "melee item key known")
+        local key, key_source = equipped_melee_key(items, mirror, original_id)
         T.note("career", career)
         T.note("loadout_index", tostring(index))
         T.note("original_id", tostring(original_id))
+        T.note("original_in_mirror_inventory", tostring(rawget(mirror._inventory_items, original_id) ~= nil))
+        T.note("key_source", key_source)
+        T.require(type(key) == "string", "melee item key known")
         T.note("item_key", key)
 
         state.items = items
@@ -116,7 +150,8 @@ return {
         T.require(injected, "craft injected: " .. tostring(reason))
 
         T.step("equip the craft")
-        items:set_loadout_item(bid, career, SLOT)
+        local ok_equip, equip_result = pcall(items.set_loadout_item, items, bid, career, SLOT)
+        T.note("equip_result", ok_equip and tostring(equip_result) or ("error: " .. tostring(equip_result)))
         local equipped = mirror._career_data[career][index][SLOT] == bid
         if not equipped then cleanup() end
         T.require(equipped, "craft equipped in _career_data")

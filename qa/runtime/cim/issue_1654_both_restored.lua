@@ -4,8 +4,8 @@
 -- failed, and the restore marked none of boot 1's crafts as new. Closes #1654 on
 -- PASS (class R) on the build that carries WP-CIM-04.
 --
--- BLOCKED until the rig keeps one profile across two boots (see boot 1). Without
--- that, boot 1's ids are absent and the case is INCONCLUSIVE.
+-- The rig keeps one profile across the boots (WP-H-08, see boot 1). If boot 1's ids
+-- are absent, the case is INCONCLUSIVE.
 --
 -- Engine reads (Vermintide-2-Source-Code):
 --   * mirror._inventory_items: scripts/managers/backend_playfab/playfab_mirror_base.lua:2494-2545

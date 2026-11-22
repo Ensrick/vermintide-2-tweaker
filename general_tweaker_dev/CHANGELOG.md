@@ -1,5 +1,22 @@
 # General Tweaker Changelog
 
+## 0.2.285-dev (2026-11-22) -- One owner, counters and a switch for the engine guards (WP-GT-05)
+
+- New `_gt_engine_guards.lua` owns every always-on engine nil-guard gt_dev
+  installs (audit finding A6-F03): missing-unit spawns, nil-unit
+  `Unit.get_data`, keep actor creation, breed-limit requests, nil aggro lists,
+  the eight Behaviour Tree health checks, dead fog volumes, and units without a
+  position in whereabouts, round start and the AI commander. The hooks moved
+  unchanged out of the creature spawner, `_gt_hacks.lua` and the entry file.
+- Each guard now counts every time it changes behaviour
+  (`mod._gt_guard_counts`) and logs its first firing as
+  `[gt:guard] <name> fired detail=<detail>`. The bot utility-input guard stays
+  in `_gt_bot_fixes.lua` and counts as `utility_inputs`.
+- `/gt_guards` prints the switch state and every count; `/gt_guards off` and
+  `/gt_guards on` switch all guards at run time so the rig can test other
+  mods with the guards off. The guards stay ON by default, so players see no
+  behaviour change. Not confirmed in game.
+
 ## 0.2.283-dev (2026-11-15) -- Release-train re-version, no code change
 
 - Release-train re-version, no code change. Same source as 0.2.282-dev

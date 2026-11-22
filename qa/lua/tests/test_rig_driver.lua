@@ -67,6 +67,82 @@ return {
         H.truthy(type(settings.vt2_rig_progress) == "table" and settings.vt2_rig_progress.phase == "QUIT", "progress checkpoint ends in QUIT")
     end)
 
+    -- WP-H-08 step 4: the lobby is made private once at KEEP READY (MatchmakingManager.set_game_privacy, read back with
+    -- is_game_private, matchmaking_manager.lua:2246-2255, 2299-2305); a missing or refusing manager is reported only.
+    local function matchmaking_stub(env, is_server)
+        local mm = { calls = {}, private = false }
+        function mm.set_game_privacy(_, is_private)
+            mm.calls[#mm.calls + 1] = { value = is_private, in_coroutine = coroutine.running() ~= nil, keep_ready_before = mm.keep_ready_seen }
+            if is_server then
+                mm.private = is_private and true or false
+            end
+        end
+        function mm.is_game_private()
+            return mm.private
+        end
+        env.Managers.matchmaking = mm
+        return mm
+    end
+
+    H.test("rig driver: the lobby is made private once at KEEP READY; a refusing or missing manager is reported", function()
+        local plan = make_plan({ { id = "pass", src = PASS_CASE } })
+        local object, env, lines = boot(plan)
+        local mm = matchmaking_stub(env, true)
+        H.truthy(run_to_end(object, env), "run completed")
+        H.equal(#mm.calls, 1, "set_game_privacy called once")
+        H.equal(mm.calls[1].value, true, "with true")
+        H.equal(mm.calls[1].in_coroutine, false, "from the driver's update")
+        H.equal(count(lines, tag .. "LOBBY private=true how=set_game_privacy$"), 1, "LOBBY private=true")
+        local keep_at, lobby_at, case_at
+        for i, line in ipairs(lines) do
+            keep_at = keep_at or (line:find(tag .. "KEEP READY") and i)
+            lobby_at = lobby_at or (line:find(tag .. "LOBBY ") and i)
+            case_at = case_at or (line:find(tag .. "CASE BEGIN") and i)
+        end
+        H.truthy(keep_at and lobby_at and case_at and keep_at < lobby_at and lobby_at < case_at, "after KEEP READY, before the first case")
+
+        local plan2 = make_plan({ { id = "pass", src = PASS_CASE } })
+        local object2, env2, lines2 = boot(plan2)
+        matchmaking_stub(env2, false)
+        H.truthy(run_to_end(object2, env2), "run completed (not the server)")
+        H.equal(count(lines2, tag .. "LOBBY private=false how=set_game_privacy$"), 1, "a lobby the call did not change is reported false")
+
+        local plan3 = make_plan({ { id = "pass", src = PASS_CASE } })
+        local object3, env3, lines3 = boot(plan3)
+        H.truthy(run_to_end(object3, env3), "run completed (no matchmaking manager)")
+        H.truthy(first(lines3, tag .. "LOBBY private=unknown how=set_game_privacy err="), "no manager: unknown, with the error")
+        H.equal(count(lines3, tag .. "CASE END id=pass verdict=PASS"), 1, "and the run goes on")
+    end)
+
+    H.test("rig cases profile_forced and save_fresh: pass in a stub game with the forced settings, fail without them", function()
+        local function forced_world(env, on)
+            matchmaking_stub(env, on)
+            env.Managers.mod = { developer_mode_enabled = function() return on end }
+            local settings = on and { developer_mode = true, logging_mode = "custom", output_mode_echo = 3, output_mode_error = 3,
+                output_mode_warning = 3, output_mode_info = 1, output_mode_debug = 1 } or { developer_mode = false, logging_mode = "default" }
+            local vmf = { get = function(_, key) return settings[key] end }
+            env.get_mod = function(name) return name == "VMF" and vmf or nil end
+            env.SaveData = { save_loaded = not on }
+        end
+        local function run_cases(on)
+            local plan = make_plan({
+                { id = "profile-forced", src = read(repo_root .. "/qa/runtime/_rig/profile_forced.lua") },
+                { id = "save-fresh", src = read(repo_root .. "/qa/runtime/_rig/save_fresh.lua") },
+            })
+            local object, env, lines = boot(plan)
+            forced_world(env, on)
+            H.truthy(run_to_end(object, env), "run completed")
+            return lines
+        end
+        local lines = run_cases(true)
+        H.truthy(first(lines, tag .. "CASE END id=profile%-forced verdict=PASS"), "profile-forced passes: " .. tostring(first(lines, tag .. "CASE END id=profile%-forced")))
+        H.truthy(first(lines, tag .. "CASE END id=save%-fresh verdict=PASS"), "save-fresh passes: " .. tostring(first(lines, tag .. "CASE END id=save%-fresh")))
+        local off = run_cases(false)
+        H.truthy(first(off, tag .. "CASE END id=profile%-forced verdict=FAIL .*the mod manager runs in developer mode"), "profile-forced fails without the forced settings")
+        H.truthy(first(off, tag .. "ASSERT id=profile%-forced n=%d+ FAIL label=\"the host's lobby is private\""), "and names the lobby")
+        H.truthy(first(off, tag .. "CASE END id=save%-fresh verdict=FAIL"), "save-fresh fails when a save was loaded")
+    end)
+
     H.test("rig driver: a script that throws ends as ERROR and the run continues", function()
         local plan = make_plan({
             { id = "boom", src = "return { run = function(T) T.step('about to throw') error('planted script error') end }" },
@@ -659,9 +735,9 @@ end }
     end)
 
     H.test("rig arenas: an arena the driver cannot load ends its cases as INCONCLUSIVE", function()
-        local plan = make_plan({ { id = "deus-case", arena = "deus", src = "return { run = function(T) T.expect(true, 'x') end }" } })
+        local plan = make_plan({ { id = "coop-case", arena = "coop", src = "return { run = function(T) T.expect(true, 'x') end }" } })
         local lines = run_mission(plan)
-        H.truthy(first(lines, tag .. "CASE END id=deus%-case verdict=INCONCLUSIVE .*arena not supported by this driver: deus"), "INCONCLUSIVE names the arena")
+        H.truthy(first(lines, tag .. "CASE END id=coop%-case verdict=INCONCLUSIVE .*arena not supported by this driver: coop"), "INCONCLUSIVE names the arena")
         H.truthy(first(lines, tag .. "RUN END"), "run still ends")
     end)
 

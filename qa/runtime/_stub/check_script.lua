@@ -34,7 +34,7 @@ end
 local ARENAS = { boot = true, keep = true, deus = true, coop = true }
 
 local function valid_arena(arena)
-    return type(arena) == "string" and (ARENAS[arena] or arena:match("^mission:[%w_]+$") or arena:match("^level:[%w_]+$")) and true or false
+    return type(arena) == "string" and (ARENAS[arena] or arena:match("^mission:[%w_]+$") or arena:match("^level:[%w_]+$") or arena:match("^deus:[%w_]+$")) and true or false
 end
 
 local function strip_comments(source)
@@ -71,7 +71,7 @@ local function check(path, expected_issue)
 
     if type(def.run) ~= "function" then problem("field run must be a function") end
     if not valid_arena(def.arena) then
-        problem("field arena must be boot, keep, deus, coop, mission:<level_key> or level:<level_key> (got " .. tostring(def.arena) .. ")")
+        problem("field arena must be boot, keep, deus, deus:<level_key>, coop, mission:<level_key> or level:<level_key> (got " .. tostring(def.arena) .. ")")
     end
     if type(def.issue) ~= "number" or def.issue < 0 or def.issue % 1 ~= 0 then
         problem("field issue must be an issue number, or 0 for none (got " .. tostring(def.issue) .. ")")

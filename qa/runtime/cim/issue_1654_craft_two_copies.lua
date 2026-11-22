@@ -3,10 +3,10 @@
 -- Crafts two saved copies of the hero's current melee key; boot 2
 -- (issue_1654_both_restored.lua) proves both come back. #1654 (class R).
 --
--- BLOCKED until the rig keeps one profile across two boots: today run.ps1 rebuilds
--- the profile from the owner copy before every run (tools/harness/New-RigProfile.ps1,
--- docs/program/wp/H.md rule 4), so boot 2 cannot see these crafts and reports
--- INCONCLUSIVE, never FAIL.
+-- The rig keeps one profile across the plan's boots (WP-H-08,
+-- tools/harness/Invoke-RigBoots.ps1: every boot after the first runs with
+-- New-RigProfile.ps1 -KeepProfile), so boot 2 sees these crafts. If the ids do not
+-- carry over, boot 2 reports INCONCLUSIVE, never FAIL.
 --
 -- Engine reads (Vermintide-2-Source-Code):
 --   * mirror._inventory_items rows: scripts/managers/backend_playfab/playfab_mirror_base.lua:2494-2545
