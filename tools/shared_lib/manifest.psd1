@@ -74,6 +74,14 @@
             )
         }
         @{
+            # WP-T-01 steps 1-3: the one regression runner whose printf lines the
+            # rig sweep parses (tools/harness/sweep-formats.psd1, Log). Consumers
+            # are added per mod by the T-01 roll-out cards; until then it is
+            # declared with none so the canonical source stays in the census.
+            Source = "_lib_regression_runner.lua"
+            Consumers = @()
+        }
+        @{
             Source = "_lib_modded_realm_authority.lua"
             Consumers = @(
                 "cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_lib_modded_realm_authority.lua"
