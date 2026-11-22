@@ -433,6 +433,7 @@ local suites = {
     "test_gut_loadout_lifecycle_owner",
     "test_gut_exit_snapshot",
     "test_gut_loadout_isolation",
+    "test_gut_native_loadout_writers",
     "test_gt_dummy_collision_policy",
     "test_gt_player_stat_snapshot_policy",
     "test_gut_simple_ui_bounds",
