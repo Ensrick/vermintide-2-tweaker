@@ -22,7 +22,17 @@ function M.install(mod, deps)
     local tpe = deps.tpe
     local la_bridge = deps.la_bridge
 
+    -- WP-COS-05 (A3-F03): the embedded MoreItemsLibrary installs its own
+    -- on_game_state_changed earlier (it retries hook_backend_mirror there).
+    -- Chain it so that retry is not discarded; its error never stops this body.
+    local previous = mod.on_game_state_changed
     mod.on_game_state_changed = function(status, state_name)
+        if type(previous) == "function" then
+            local chained_ok, chained_err = pcall(previous, status, state_name)
+            if not chained_ok and printf then
+                printf("[cos:lifecycle] earlier on_game_state_changed raised: %s", tostring(chained_err))
+            end
+        end
         -- [heap-probe] v0.9.35-dev: per-state-transition lua_heap sampler, mirror of
         -- weapon_tweaker's, for the 1 GiB lua_heap OOM diagnosis. cosmetics is the
         -- once the largest UNMEASURED suspect: before #565 it sync-loaded 74

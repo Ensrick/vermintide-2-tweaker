@@ -1,5 +1,14 @@
 # Weapon Tweaker Changelog
 
+## 0.12.352-dev (2026-11-15) -- Mirror ordered owner registry (WP-WT-07) [not-started]
+
+- Mirror public 0.12.351-beta: one ordered reconcile for the weapon-table
+  owners at every lifecycle event, and a full reverse-order revert on disable
+  (including the three damage-profile repoints). The Dev Hold-Pose disable
+  overlay still runs first.
+- Runtime parity, Dev namespace and the friends-only overlay are unchanged.
+  No in-game acceptance is claimed.
+
 ## 0.12.351-dev (2026-11-15) -- Mirror pure 3P animation resolver (WP-WT-06) [not-started]
 
 - Mirror public 0.12.350-beta: the funnel decision lives in

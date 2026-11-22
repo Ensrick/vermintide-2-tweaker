@@ -155,9 +155,10 @@ $script:qaScopeWtHistory = @(
     'qa/run_all.ps1', 'qa/run_selftests.ps1', 'tools/hooks/pre-commit.ps1'
 )
 # WP-H-13: rig test scripts and plans, the stub and checker they are read with,
-# and the checker's fixtures.
+# and the checker's fixtures. WP-H-06: the helper table and the driver it is checked against.
 $script:qaScopeRuntimeScripts = @(
-    'qa/runtime/', 'qa/check_runtime_scripts.ps1', 'qa/_test_fixtures/runtime_scripts/'
+    'qa/runtime/', 'qa/check_runtime_scripts.ps1', 'qa/_test_fixtures/runtime_scripts/',
+    'tools/harness/API.md', 'tools/harness/driver/'
 )
 function Test-QaScope {
     param(

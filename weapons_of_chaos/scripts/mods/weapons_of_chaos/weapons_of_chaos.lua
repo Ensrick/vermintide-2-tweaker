@@ -1,6 +1,6 @@
 local mod = get_mod("WOC")
 
-local MOD_VERSION = "0.1.64-dev"
+local MOD_VERSION = "0.1.65-dev"
 
 mod:info("Weapons of Chaos v%s loading", MOD_VERSION)
 
@@ -140,6 +140,7 @@ local ITEM_KEY    = "woc_blightreaper"
 local BACKEND_ID  = ITEM_KEY .. "_001"
 local BASE_WEAPON = "es_1h_sword"                       -- Kruber 1H sword (clone source)
 local _wire_policy = mod:dofile("scripts/mods/weapons_of_chaos/_woc_wire_policy")
+mod:dofile("scripts/mods/weapons_of_chaos/_woc_career_commit_guard")({ mod = mod, guard = mod:dofile("scripts/mods/weapons_of_chaos/_lib_official_loadout_guard"), is_owned_id = _wire_policy.is_woc_backend_id, rt_register = _rt_register, print_line = printf }) -- #402 WP-CIM-07
 local _moveset = mod:dofile("scripts/mods/weapons_of_chaos/_woc_blightreaper_moveset")
 local _WIRE_PROTECTED_TRAITS = {
 	[_moveset.POISON_TRAIT] = true,

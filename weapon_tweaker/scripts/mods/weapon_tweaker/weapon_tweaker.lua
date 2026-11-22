@@ -91,7 +91,7 @@ mod:info("[mem-probe] wt weapon_backend: +%.1f MB lua (NOT in the boot_lua total
 -- definitions, lifecycle stub, and dead-only formula checks were deleted under
 -- #433. Saved br_* values remain untouched and the prefix stays reserved.
 
-local MOD_VERSION = "0.12.350-beta"
+local MOD_VERSION = "0.12.351-beta"
 _MEM_PROBE_T0_WT = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 
 -- v0.12.73: source-pattern marker constant for the /wt_regression_test
@@ -933,25 +933,29 @@ local function _dbg_dump_local_player_loadout()
     end
 end
 
+-- WP-WT-07: one ordered reconcile for the owners that write Weapons, damage
+-- profiles or settings tables; revert_all runs the reverse (on_disabled). The
+-- owner table, its order and what stays unregistered: _wt_mutation_owners.lua.
+local _wt_reg = mod:dofile("scripts/mods/weapon_tweaker/_wt_mutation_registry").new(function(fmt, ...)
+    pcall(printf, "[wt:REG] " .. fmt, ...)
+end)
+mod._wt.registry = _wt_reg
+mod:dofile("scripts/mods/weapon_tweaker/_wt_mutation_owners").register(_wt_reg, mod, {
+    apply_weapon_unlocks = apply_weapon_unlocks, clear_weapon_unlocks = clear_weapon_unlocks,
+    patch_career_actions = patch_career_actions_on_weapons, clear_career_actions = clear_career_action_injections,
+    history_owner = _wt_history_owner, bolt_runtime = _wt_bolt_staff_overcharge_runtime,
+})
+
 -- WP-WT-01: the one apply pass, shared by state changes and re-enable.
 local function _wt_apply_all()
     mod:info("Weapon Tweaker: Baseline Active")
     mod._force_load_deepwood_runtime_package(true)
-    apply_weapon_unlocks()
     -- #368: CWV registers clone definitions from its own state-enter callback.
     -- Reconcile once more on the following frame so WT is the deterministic
     -- final can_wield writer regardless of VMF callback ordering.
     mod._wt368_deferred_availability = true
-    patch_career_actions_on_weapons()
+    _wt_reg.reconcile("game_state")
     apply_trait_filters()
-    if mod._wt_reconcile_history_owner_stack then
-        mod._wt_reconcile_history_owner_stack("game_state")
-    elseif mod._wt_apply_axe_balance then
-        mod._wt_apply_axe_balance(nil, false)
-    end
-    if mod._wt_apply_fire_sword then mod._wt_apply_fire_sword(nil, false) end
-    if mod._wt374_seed_energy_data then mod._wt374_seed_energy_data() end
-    _wt_bolt_staff_overcharge_runtime.apply()
     -- Re-attempt the Necromancer FX force-load (idempotent). DLC ownership can be
     -- unresolved at mod-init even for owners; by any state transition it's resolved,
     -- so this guarantees bw_necromancer's soul_rip particles are resident before the
@@ -1008,24 +1012,13 @@ end
 -- them via the entry's file-local aliases from the manifest.
 mod.on_disabled = function()
     if weapon_backend.overcharge_presentation then pcall(weapon_backend.overcharge_presentation.restore) end
-    _wt_bolt_staff_overcharge_runtime.revert()
-    _wt_history_owner:restore()
-    if mod._wt_apply_fire_sword then mod._wt_apply_fire_sword(nil, true) end
-    if mod._wt374_revert_energy_data then mod._wt374_revert_energy_data() end
-    clear_weapon_unlocks()
-    clear_career_action_injections()
+    _wt_reg.revert_all()
     revert_trait_pools()
     mod:info("Weapon Tweaker disabled — cross-career unlocks, ability action injections, and trait-pool filters reverted")
 end
 
 local _wt_rework_runtime = _wt_rework_master_runtime_module.new(
-    mod, _wt_rework_master, function()
-        if mod.wt_apply_priest_punch_buff then mod.wt_apply_priest_punch_buff() end
-        if mod.wt_apply_brett_buff then mod.wt_apply_brett_buff() end
-        _wt_bolt_staff_overcharge_runtime.apply()
-        if mod._wt_apply_axe_balance then mod._wt_apply_axe_balance(nil, false) end
-        if mod._wt_apply_fire_sword then mod._wt_apply_fire_sword(nil, false) end
-    end)
+    mod, _wt_rework_master, function() _wt_reg.reconcile("rework_master") end)
 mod._wt.rework_master_runtime = _wt_rework_runtime
 
 -- WP-WT-01: re-enable re-applies the saved settings. Must precede the #943
@@ -1039,6 +1032,7 @@ end
 
 mod:dofile("scripts/mods/weapon_tweaker/_wt_settings_runtime").install({
     mod = mod, rework_runtime = _wt_rework_runtime, is_active = mod._wt.is_active,
+    reconcile = function(reason) return _wt_reg.reconcile(reason) end,
     master_toggles = _wt_master_toggles, backend = weapon_backend,
     apply_weapon_unlocks = apply_weapon_unlocks,
     patch_career_actions = patch_career_actions_on_weapons,

@@ -1,7 +1,7 @@
 local mod = get_mod("character_weapon_variants")
 _MEM_PROBE_T0_CWV = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 
-local MOD_VERSION = "0.1.573-dev"
+local MOD_VERSION = "0.1.574-dev"
 mod._cwv_acquisition = mod:dofile("scripts/mods/character_weapon_variants/_cwv_acquisition")
 mod._cwv_old_musket_interrupt = mod:dofile("scripts/mods/character_weapon_variants/_cwv_old_musket_interrupt")
 mod._cwv_dev_anim_picker = mod:dofile("scripts/mods/character_weapon_variants/cwv_dev_anim_picker")
@@ -250,9 +250,9 @@ mod:command("cwv_regression_test", "Run regression smoke checks for past bugs", 
 end)
 mod:info("[regression-test-command] registered as /cwv_regression_test")
 
--- #1145: checks register from the module that owns the guarded code (§2.2a
--- rule 6), keeping marker and reader in one file (the #1148 scope-loss class).
+-- #1145: checks register from the module that owns the guarded code (§2.2a rule 6), keeping marker and reader in one file (#1148).
 mod._cwv_rewield.install_checks(mod, _rt_register)
+mod:dofile("scripts/mods/character_weapon_variants/_cwv_career_commit_guard")({ mod = mod, guard = mod:dofile("scripts/mods/character_weapon_variants/_lib_official_loadout_guard"), is_owned_id = mod._cwv_acquisition.is_cwv_backend_id, rt_register = _rt_register, print_line = printf }) -- #402 WP-CIM-07
 
 -- ============================================================================
 -- Debug-mode logging helper (v0.1.336; gate renamed v0.1.340)

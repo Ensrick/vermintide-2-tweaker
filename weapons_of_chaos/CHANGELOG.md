@@ -1,5 +1,23 @@
 # Weapons of Chaos — Changelog
 
+## v0.1.65-dev (2026-11-15) - Keep WOC relic ids out of the career-data commit (#402, #1688)
+
+- New hook on `PlayFabMirrorAdventure._check_career_data` through the shared
+  official loadout guard (`_lib_official_loadout_guard.lua`, the library
+  Crafting in Modded and Character Weapon Variants use): for the vanilla call
+  only, every WOC relic id in the career loadouts is swapped for the
+  server-side value of that slot, the returned loadouts are detached, and the
+  relic id is put back so it stays equipped for the session. An
+  `updateHeroAttributes` request can no longer carry a WOC id, with or without
+  Tweaker: GUI installed (WP-CIM-07).
+- New pure predicate `_woc_wire_policy.is_woc_backend_id` (`woc_<relic>_NNN`).
+  Log line `[woc:402] scrubbed=N unsafe=N`, at most 12 per session;
+  regression check `issue402_career_commit_guard`.
+- Known consequence: without Tweaker: GUI's modded loadouts a WOC relic is no
+  longer equipped after a restart.
+- Not confirmed in game. The rig case is
+  `qa/runtime/woc/issue_402_career_commit_scrub.lua`.
+
 ## v0.1.64-dev (2026-11-15) - Regression verdicts always reach the game log (WP-CWV-06)
 
 - `/woc_regression_test` now writes every verdict to the game log with

@@ -59,7 +59,9 @@
             # added with the stable half of the card (PR #1824 holds that tree).
             Source = "_lib_official_loadout_guard.lua"
             Consumers = @(
+                "character_weapon_variants/scripts/mods/character_weapon_variants/_lib_official_loadout_guard.lua"
                 "crafting_in_modded_dev/scripts/mods/crafting_in_modded_dev/_lib_official_loadout_guard.lua"
+                "weapons_of_chaos/scripts/mods/weapons_of_chaos/_lib_official_loadout_guard.lua"
             )
         }
         @{
@@ -70,6 +72,14 @@
                 "career_tweaker/scripts/mods/career_tweaker/_lib_rt_runner.lua"
                 "crafting_in_modded_dev/scripts/mods/crafting_in_modded_dev/_lib_rt_runner.lua"
             )
+        }
+        @{
+            # WP-T-01 steps 1-3: the one regression runner whose printf lines the
+            # rig sweep parses (tools/harness/sweep-formats.psd1, Log). Consumers
+            # are added per mod by the T-01 roll-out cards; until then it is
+            # declared with none so the canonical source stays in the census.
+            Source = "_lib_regression_runner.lua"
+            Consumers = @()
         }
         @{
             Source = "_lib_modded_realm_authority.lua"

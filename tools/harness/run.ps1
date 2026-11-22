@@ -19,7 +19,8 @@
     }
   Case files are Lua source that returns a table { issue = <n>, timeout = <s>, run = function(T) ... end }.
   Case file paths are relative to the plan file. Every qa/runtime/_shared/*.lua travels with the plan
-  (T.shared(<name>) in a case). See tools/harness/README.md.
+  (T.shared(<name>) in a case), and so does every driver helper group in tools/harness/driver/lib/*.lua
+  (tools/harness/API.md). See tools/harness/README.md.
 
   Optional plan fields (WP-H-02): "expect_mods" (VMF mod ids the smoke case asserts are loaded),
   "host_expect_log" / "host_forbid_log" (regex lists checked on the final log) and "host_allow_log"
@@ -34,6 +35,10 @@
   rig refuses (exit 3). The slot id takes the real id's place in the profile's mod list and the real id is
   disabled; the load banner must show the staged version (an expected line), and summary.json records the
   build's commit, version and whether the real Workshop folder stayed byte-identical.
+
+  Several boots (WP-H-08): "boots": [ { "cases": [...] }, { "cases": [...], "modset": "..." } ] instead of top-level
+  "cases" runs the boots in order on one rig profile; every boot after the first starts from the profile the one
+  before it left. Each boot's evidence is in <run>\boot-<i>\; the run's summary lists every boot (Split-BootPlan.ps1).
 
   Exit code: 0 = run completed and every case PASS; 1 = at least one FAIL, a forbidden log line or a missing
   expected line; 2 = ERROR/TIMEOUT/INCONCLUSIVE or the run did not complete; 3 = rig refused to start or isolation
@@ -55,12 +60,15 @@ param(
     [string] $DriverFile = (Join-Path $PSScriptRoot 'driver/vt2_rig_driver.lua'),
     [string] $DriverId = '3839345856',      # private Workshop item: the rig bootstrap
     [string] $SharedDir = (Join-Path $PSScriptRoot '..\..\qa\runtime\_shared'),
+    [string] $LibDir = (Join-Path $PSScriptRoot 'driver\lib'),        # WP-H-06 driver helper groups (T.set, T.shot, ...)
     [string] $SlotsFile = (Join-Path $PSScriptRoot 'slots.psd1'),     # WP-H-07 rig slots for plan local_builds
     [string] $RigRoot = (Join-Path $env:LOCALAPPDATA 'vt2-harness'),
     [string] $SteamApps = '',               # default: resolved from HKCU:\Software\Valve\Steam SteamPath
     [string] $StopOnLog = '',               # no-plan experiments: stop when this regex appears in the log
     [int] $StopDelaySeconds = 5,
-    [switch] $KeepOwnerMods                 # no-plan experiments: leave the copied mod list as it is
+    [switch] $KeepOwnerMods,                # no-plan experiments: leave the copied mod list as it is
+    [string] $RunDir = '',                  # WP-H-08: evidence folder of one boot of a plan with boots (Invoke-RigBoots.ps1)
+    [switch] $KeepProfile                   # WP-H-08: a later boot starts from the profile the boot before it left
 )
 $ErrorActionPreference = 'Stop'
 $here = $PSScriptRoot
@@ -73,9 +81,25 @@ $planObj = $null
 if ($Plan) {
     $planPath = (Resolve-Path -LiteralPath $Plan).Path
     $planObj = Get-Content -LiteralPath $planPath -Raw | ConvertFrom-Json
+    # WP-H-08: "modset" fills mods and expect_mods (New-RigProfile.ps1 resolves the plan the same way)
+    try { $planObj = & (Join-Path $PSScriptRoot 'Resolve-RigPlan.ps1') -Plan $planObj }
+    catch { Write-Host "RIG REFUSED: plan: $($_.Exception.Message)"; exit 3 }
     if (-not $Name) { $Name = $planObj.name }
 }
 if (-not $Name) { throw 'Give -Plan or -Name.' }
+
+# ---------- boots (WP-H-08) ----------
+# A plan with "boots" runs once per boot, in order, on one rig profile: boot 1 starts from a fresh copy of the
+# owner's profile, every later boot from the profile the boot before it left (save, settings, mod data), so a case
+# can check what survives a restart. Invoke-RigBoots.ps1 holds the rig lock across the boots and runs this script
+# once per boot (Split-BootPlan.ps1 writes each boot's plan; evidence in <run>\boot-<i>\).
+if ($planObj -and $planObj.PSObject.Properties['boots'] -and $planObj.boots) {
+    $childArgs = @{ Renderer = $Renderer; ExtraArgs = $ExtraArgs; DriverFile = $DriverFile; DriverId = $DriverId; SharedDir = $SharedDir; SlotsFile = $SlotsFile; SteamApps = $SteamApps }
+    if ($Visible) { $childArgs.Visible = $true }
+    if ($TimeoutSeconds -gt 0) { $childArgs.TimeoutSeconds = $TimeoutSeconds }
+    & (Join-Path $here 'Invoke-RigBoots.ps1') -PlanPath $planPath -Name $Name -RigRoot $RigRoot -ChildArgs $childArgs -RunScript $PSCommandPath
+    exit $LASTEXITCODE
+}
 
 # ---------- preflight ----------
 try {
@@ -117,7 +141,7 @@ if (-not $mutex.WaitOne(0)) { Write-Host 'RIG REFUSED: another rig run holds the
 
 $nonce = -join ((1..8) | ForEach-Object { '{0:x}' -f (Get-Random -Maximum 16) })
 $stamp = (Get-Date).ToUniversalTime().ToString('yyyyMMdd-HHmmss')
-$run = Join-Path $RigRoot "runs\$stamp-$Name-$nonce"
+$run = if ($RunDir) { $RunDir } else { Join-Path $RigRoot "runs\$stamp-$Name-$nonce" }
 New-Item -ItemType Directory -Force -Path $run | Out-Null
 $watched = 'user_settings.config', 'save_data.sav', 'launcher.config'
 $before = @{}; foreach ($f in $watched) { $before[$f] = Get-FileSha (Join-Path $realProfile $f) }
@@ -134,7 +158,7 @@ if ($planObj) {
 
 # ---------- profile ----------
 $profileArgs = @{ RealProfile = $realProfile; ProfileRoot = (Join-Path $RigRoot 'profile'); DriverId = $DriverId; KeepOwnerMods = $KeepOwnerMods }
-if ($planObj) { $profileArgs.PlanPath = $planPath; $profileArgs.Nonce = $nonce; $profileArgs.DriverFile = $DriverFile; $profileArgs.SharedDir = $SharedDir }
+if ($planObj) { $profileArgs.PlanPath = $planPath; $profileArgs.Nonce = $nonce; $profileArgs.DriverFile = $DriverFile; $profileArgs.SharedDir = $SharedDir; $profileArgs.LibDir = $LibDir }
 if ($localBuilds.Count) {
     $swaps = @{}; $versions = @{}
     foreach ($lb in $localBuilds) { $swaps[$lb.real_id] = $lb.slot_id; if ($lb.version) { $versions[$lb.mod_id] = $lb.version } }
@@ -146,6 +170,8 @@ function Get-FolderHashes([string] $dir) {
     ($h.GetEnumerator() | ForEach-Object { "$($_.Key)=$($_.Value)" }) -join ';'
 }
 $realFoldersBefore = @{}; foreach ($lb in $localBuilds) { $realFoldersBefore[$lb.real_id] = Get-FolderHashes $lb.real_dir }
+# WP-H-08: a later boot of a plan with boots keeps the profile the boot before it left
+if ($KeepProfile) { $profileArgs.KeepProfile = $true }
 try { $rigProfile = & (Join-Path $here 'New-RigProfile.ps1') @profileArgs }
 catch { Write-Host "RIG REFUSED: profile: $($_.Exception.Message)"; $mutex.ReleaseMutex(); exit 3 }
 $profileRoot = $rigProfile.ProfileRoot
@@ -283,13 +309,24 @@ elseif ($planObj -and $runEnd -and $cases.Count -gt 0) {
 }
 elseif (-not $planObj) { $exit = 0 }
 if (($forbidHits.Count -or $expectMisses.Count) -and $exit -ne 3) { $exit = 1 }
+# WP-H-03: a plan with "sweep": true turns the regression suites' output into sweep.json / sweep.md; a FAIL row
+# fails the run (exit 1). A suite that never returned, or a plan mod no suite printed for (missing_suites), leaves an
+# otherwise passing run incomplete (exit 2).
+$sweep = $null
+if ($planObj -and $planObj.PSObject.Properties['sweep'] -and $planObj.sweep -eq $true) {
+    $expectMods = @(); if ($planObj.PSObject.Properties['expect_mods'] -and $planObj.expect_mods) { $expectMods = @($planObj.expect_mods | ForEach-Object { [string]$_ }) }
+    $sweepResult = & (Join-Path $here 'Parse-Sweep.ps1') -EvidenceFile (Join-Path $run 'evidence.txt') -LogFile ([string]$logPath) -OutDir $run -ExpectMods $expectMods -Quiet
+    $sweep = $sweepResult.Counts
+    if ($sweep.fail -gt 0 -and $exit -ne 3) { $exit = 1 }
+    elseif (($sweep.inconclusive_suites + $sweep.missing_suites) -gt 0 -and $exit -eq 0) { $exit = 2 }
+}
 $summary = [ordered]@{
     run = "$stamp-$Name-$nonce"; name = $Name; nonce = $nonce; verdict = $verdict; exit = $exit; isolation = $isolation
     private_desktop = (-not $Visible); renderer = $Renderer; arguments = $arguments; run_end_seen = $runEnd
     keep_ready_seconds = $hostLog.KeepReadySeconds; keep_ready_driver_t = $hostLog.KeepReadyDriverT
     backend_shield = [bool]$shieldOn; shield_installed_before_first_commit = $shieldFirst
     host_forbid_hits = $forbidHits; host_expect_misses = $expectMisses; host_allowed = @($hostLog.Allowed)
-    loaded_versions = $hostLog.LoadedVersions; local_builds = @($localBuilds); level_loads = @($hostLog.LevelLoads)
+    loaded_versions = $hostLog.LoadedVersions; local_builds = @($localBuilds); level_loads = @($hostLog.LevelLoads); sweep = $sweep
     marks_seconds = $marks; cases = $cases; script_errors = $scriptErrors; evidence_lines = $lines.Count
     log = $evidenceLog; log_source = $logSource; notes = $notes
 }
@@ -304,6 +341,7 @@ foreach ($p in $expectMisses) { $md += "Expected log line missing: ``$p``" }
 foreach ($a in @($hostLog.Allowed)) { $md += "Allowed log line ($($a.rule)): ``$($a.line)`` -- $($a.reason)" }
 foreach ($lb in $localBuilds) { $md += "Local build: $($lb.mod) $($lb.version) at $($lb.commit)$(if ($lb.dirty) { ' (dirty)' }) in slot $($lb.slot) ($($lb.slot_id)) | real folder unchanged: $($lb.real_folder_unchanged)" }
 foreach ($ll in @($hostLog.LevelLoads)) { $md += "Level load: $($ll.level) $(if ($ll.failed) { $ll.failed } else { "$($ll.seconds) s" })" }
+if ($sweep) { $md += "Regression sweep: rows $($sweep.rows), PASS $($sweep.pass), FAIL $($sweep.fail), SKIP $($sweep.skip), inconclusive suites $($sweep.inconclusive_suites), missing suites $($sweep.missing_suites) (sweep.md)" }
 if (@($hostLog.LoadedVersions.Keys).Count) { $md += "Load banners: $((@($hostLog.LoadedVersions.Keys) | ForEach-Object { "$_ $($hostLog.LoadedVersions[$_])" }) -join ', ')" }
 $md | Set-Content -LiteralPath (Join-Path $run 'summary.md') -Encoding utf8
 $summary | ConvertTo-Json -Depth 6

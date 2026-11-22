@@ -150,9 +150,13 @@ return function(H, repo_root)
             -- stay published on `mod`, not turned into module locals.
             H.equal(count_plain(entry, "mod._wt431_brace_repoint = function()"), 0)
             H.equal(count_plain(entry, "mod.wt_apply_priest_punch_buff = function()"), 0)
-            -- The entry still dispatches the punch buff from the rework runtime.
+            -- WP-WT-07: the rework runtime reconciles the ordered registry, whose
+            -- priest_punch owner dispatches the punch buff by its mod field.
             H.equal(count_plain(entry,
-                "if mod.wt_apply_priest_punch_buff then mod.wt_apply_priest_punch_buff() end"), 1)
+                'function() _wt_reg.reconcile("rework_master") end'), 1)
+            local owners = read(stream.dir .. "_wt_mutation_owners.lua")
+            H.equal(count_plain(owners,
+                'apply = late("wt_apply_priest_punch_buff"), revert = late("wt_apply_priest_punch_buff")'), 1)
         end)
 
         H.test(stream.tag .. ": neither owner registers a hook or a command", function()
