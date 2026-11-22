@@ -1,5 +1,11 @@
 # Weapons of Chaos — Changelog
 
+## v0.1.66-dev (2026-11-22) - Release-train re-version, no code change
+
+- Release-train re-version, no code change. Same source as 0.1.65-dev
+  below. Its version claim went stale before it shipped, so the claim
+  broker allocated this fresh version (tools/ship/CLAIMS.md).
+
 ## v0.1.65-dev (2026-11-15) - Keep WOC relic ids out of the career-data commit (#402, #1688)
 
 - New hook on `PlayFabMirrorAdventure._check_career_data` through the shared
