@@ -1,0 +1,13 @@
+{
+  "name": "save-fresh",
+  "purpose": "WP-H-08 part 3 acceptance: the fresh save fixture (no save file) and what every rig profile forces: mod developer mode, VMF logging to the log file, a private lobby.",
+  "mods": ["1369573612"],
+  "expect_mods": ["VMF"],
+  "save": "fresh",
+  "timeout": 300,
+  "cases": [
+    { "id": "smoke-keep", "arena": "keep", "file": "../_rig/smoke_keep.lua" },
+    { "id": "save-fresh", "arena": "keep", "file": "../_rig/save_fresh.lua" },
+    { "id": "profile-forced", "arena": "keep", "file": "../_rig/profile_forced.lua" }
+  ]
+}

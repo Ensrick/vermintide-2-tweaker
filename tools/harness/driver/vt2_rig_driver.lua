@@ -32,10 +32,12 @@
 -- 0.4.9 (WP-H-05): arenas "deus" (the Chaos Wastes hub) and "deus:<level_key>" (a run level, loaded from the hub);
 -- the backend write shield drops the run start's deusRunStarted request (SHIELD_DROP_REQUESTS) and answers the
 -- game's callback on the next update with the result shape a successful response has (deliver_shield_replies).
+--
+-- 0.4.10 (WP-H-08 step 4): at KEEP READY the host's lobby is made private (make_lobby_private, LOBBY line).
 
 local plan, nonce = ...
 
-local DRIVER_VERSION = "0.4.9"
+local DRIVER_VERSION = "0.4.10"
 local driver = {}
 
 local function find_mod(name)
@@ -1023,6 +1025,29 @@ end
 -- back to the copy taken at KEEP READY before the game quits, so no change is left pending for a later commit.
 -- Raw field writes through OM.restore (qa/runtime/_shared/official_mirror.lua); never a commit. Off together
 -- with the shield (plan backend_shield = false).
+-- WP-H-08 step 4: nobody may join a rig run. MatchmakingManager.set_game_privacy(true) marks the host's lobby private
+-- (lobby data is_private = "true") and tells the clients (Vermintide-2-Source-Code/scripts/managers/matchmaking/
+-- matchmaking_manager.lua:2246-2255; it acts only on a server whose lobby is joined), and is_game_private reads it back
+-- (:2299-2305). Not set_in_progress_game_privacy (:2263-2279): that also switches matchmaking state, which the keep does
+-- not need. Once, at KEEP READY; the lobby stays the same through the plan's levels. A failure is printed, never raised.
+local function make_lobby_private()
+	local ok, private = pcall(function ()
+		local matchmaking = Managers.matchmaking
+
+		matchmaking:set_game_privacy(true)
+
+		return matchmaking:is_game_private()
+	end)
+
+	S.lobby_private = ok and private == true
+
+	if ok then
+		out("LOBBY private=%s how=set_game_privacy", tostring(private == true))
+	else
+		out("LOBBY private=unknown how=set_game_privacy err=%s", q(private))
+	end
+end
+
 local function take_official_snapshot()
 	local OM = S.shared.official_mirror
 
@@ -1471,6 +1496,7 @@ driver.update = function (_, dt)
 			install_shield()
 			out("KEEP READY level=%s t=%.1f", tostring(level_key()), S.t)
 			S.keep_ready = true
+			make_lobby_private()
 			take_official_snapshot()
 			begin_arena(1)
 		end
