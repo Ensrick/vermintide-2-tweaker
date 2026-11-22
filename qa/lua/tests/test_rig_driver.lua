@@ -143,6 +143,40 @@ return {
         H.truthy(first(off, tag .. "CASE END id=save%-fresh verdict=FAIL"), "save-fresh fails when a save was loaded")
     end)
 
+    -- WP-H-09: the progress checkpoint is the liveness signal and the crash record (driver 0.4.11)
+    H.test("rig driver: progress checkpoints carry seq, the running case and the verdicts so far, at least every 15 s", function()
+        local LONG_CASE = "return { run = function(T) T.wait(40) T.expect(true, 'waited') end }"
+        local plan = make_plan({ { id = "long", src = LONG_CASE }, { id = "fail", src = FAIL_CASE } })
+        local object, env, lines, settings = boot(plan)
+        local snaps = {}
+        local save = env.Application.save_user_settings
+        env.Application.save_user_settings = function()
+            local p = settings.vt2_rig_progress
+            if type(p) == "table" then
+                snaps[#snaps + 1] = { seq = p.seq, t = p.t, phase = p.phase, note = p.note, current = p.current, verdicts = p.verdicts }
+            end
+            return save()
+        end
+        H.truthy(run_to_end(object, env), "run completed")
+        local final = settings.vt2_rig_progress
+        H.equal(final.verdicts, "long=PASS;fail=FAIL", "the last checkpoint lists every verdict in order")
+        H.equal(final.current, "", "no case running at the end")
+        local last_seq, max_gap, saw_running, saw_alive = snaps[1] and snaps[1].seq - 1 or 0, 0, false, false
+        for i, snap in ipairs(snaps) do
+            -- other saves (the results at RUN END) repeat the last checkpoint; a checkpoint never skips a number
+            H.truthy(snap.seq == last_seq or snap.seq == last_seq + 1, "seq counts every checkpoint (" .. tostring(last_seq) .. " then " .. tostring(snap.seq) .. ")")
+            last_seq = snap.seq
+            if i > 1 then
+                max_gap = math.max(max_gap, snap.t - snaps[i - 1].t)
+            end
+            saw_running = saw_running or (snap.current == "long" and snap.note == "case long begin")
+            saw_alive = saw_alive or (snap.note == "alive" and snap.current == "long" and snap.verdicts == "")
+        end
+        H.truthy(saw_running, "a checkpoint when the case begins names it as running")
+        H.truthy(saw_alive, "periodic checkpoints during the 40 s case name it as running")
+        H.truthy(max_gap <= 15.11, "no two checkpoints more than 15 s plus one update (0.1 s) of driver time apart (" .. tostring(max_gap) .. ")")
+    end)
+
     H.test("rig driver: a script that throws ends as ERROR and the run continues", function()
         local plan = make_plan({
             { id = "boom", src = "return { run = function(T) T.step('about to throw') error('planted script error') end }" },

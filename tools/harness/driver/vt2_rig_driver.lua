@@ -34,10 +34,14 @@
 -- game's callback on the next update with the result shape a successful response has (deliver_shield_replies).
 --
 -- 0.4.10 (WP-H-08 step 4): at KEEP READY the host's lobby is made private (make_lobby_private, LOBBY line).
+--
+-- 0.4.11 (WP-H-09): the vt2_rig_progress checkpoint is also saved when a case begins and every 15 s, and carries a
+-- sequence number, the running case and the verdicts so far, so run.ps1 can tell a stalled run from a live one and
+-- recover finished verdicts after a crash cut the buffered log short (proven fact 6).
 
 local plan, nonce = ...
 
-local DRIVER_VERSION = "0.4.10"
+local DRIVER_VERSION = "0.4.11"
 local driver = {}
 
 local function find_mod(name)
@@ -91,6 +95,8 @@ local S = {
 	game_state = "?",
 	t = 0,
 	hb_at = 0,
+	cp_at = 0,
+	cp_seq = 0,
 	hb_seq = 0,
 	phase_at = 0,
 	arena_index = 0,
@@ -149,15 +155,30 @@ local SHIELD_DROP_REQUESTS = {
 
 -- The console log is written through a buffer, so the orchestrator cannot rely on it for liveness.
 -- A settings save is a real file write: it is the live progress channel.
+-- WP-H-09: also the liveness signal (run.ps1 ends a run whose seq has not moved for 60 s in play, 240 s in loading)
+-- and, after a crash, the only record of the verdicts the lost log tail held: current is the running case (empty
+-- between cases), verdicts lists "<case id>=<VERDICT>" for every finished case, in order, separated by ";".
 local function checkpoint(note)
+	S.cp_at = S.t
+	S.cp_seq = S.cp_seq + 1
+
 	pcall(function ()
+		local verdicts = {}
+
+		for i = 1, #S.results do
+			verdicts[i] = tostring(S.results[i].id) .. "=" .. tostring(S.results[i].verdict)
+		end
+
 		Application.set_user_setting("vt2_rig_progress", {
 			nonce = nonce,
 			phase = S.phase,
 			t = S.t,
+			seq = S.cp_seq,
 			note = tostring(note or ""),
 			done = #S.results,
 			total = #S.cases,
+			current = S.current and S.current.status == "PENDING" and S.current.id or "",
+			verdicts = table.concat(verdicts, ";"),
 		})
 		Application.save_user_settings()
 	end)
@@ -982,6 +1003,7 @@ local function start_case(case)
 	case.T = new_T(case)
 	case.co = coroutine.create(case.def.run)
 	S.current = case
+	checkpoint("case " .. case.id .. " begin")
 end
 
 local function step_case(case)
@@ -1472,6 +1494,11 @@ driver.update = function (_, dt)
 
 	install_shield()
 	deliver_shield_replies()
+
+	-- WP-H-09 liveness: a checkpoint at least every 15 s, in every phase
+	if S.t - S.cp_at >= 15 then
+		checkpoint("alive")
+	end
 
 	if S.t - S.hb_at >= 5 then
 		S.hb_at = S.t
