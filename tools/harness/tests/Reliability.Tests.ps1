@@ -7,8 +7,10 @@
   - Get-RunVerdicts.ps1 on canned console logs, through the same evidence-line extraction run.ps1 uses: every
     verdict kind (PASS, FAIL, ERROR, TIMEOUT, INCONCLUSIVE, CRASH), a crash that cut the log short (verdicts from the
     progress checkpoint), host stops (stalled, low RAM, host time limit) and the exit codes.
-  - Remove-OldRuns.ps1 on a temporary runs folder: the newest N and the report-named folders stay, a folder holding a
-    junction is skipped and its target untouched, other folders are never touched, -WhatIf removes nothing.
+  - Remove-OldRuns.ps1 on a temporary runs folder (opt-in -Retain): the newest N and the report-named folders stay
+    whole; an older one keeps its summaries, evidence and plan (also a boot's) under _archive\<run>\ and loses its
+    bulky files; a folder holding a junction is skipped and its target untouched; other folders are never touched;
+    -WhatIf removes nothing; without -Retain run.ps1 prunes nothing.
   - Repeat-Plan.ps1 and Invoke-OrderCheck.ps1 with a stand-in for run.ps1 (never the game).
   - run.ps1's lock queue and busy-process refusal on a private lock name and a fake Steam library. Every one of
     these runs is refused before launch (a free-RAM floor no machine meets, no bootstrap in the fake library and a
@@ -92,6 +94,11 @@ try {
     New-Item -ItemType Directory -Force -Path $runs | Out-Null
     $names = @()
     for ($i = 1; $i -le 8; $i++) { $n = ('2026111{0}-0{0}0000-smoke-keep-{1:x8}' -f ($i % 10), (0xabc000 + $i)); $names += $n; New-Item -ItemType Directory -Force -Path (Join-Path $runs $n) | Out-Null; Set-Content -LiteralPath (Join-Path $runs "$n\summary.json") -Value '{}' }
+    # the oldest run has the full set of files: what the archive keeps, and the bulky rest
+    $full = @($names | Sort-Object)[0]
+    foreach ($f in 'summary.md', 'sweep.json', 'evidence.txt', 'plan.json', 'console.log', 'user_settings.after.config', 'boot-1\summary.json', 'boot-1\console.log', 'crash\crash_dump-1.dmp', 'stills\001-a.png') {
+        $fp = Join-Path $runs "$full\$f"; New-Item -ItemType Directory -Force -Path (Split-Path $fp) | Out-Null; Set-Content -LiteralPath $fp -Value "content of $f"
+    }
     $sorted = @($names | Sort-Object -Descending)
     $oldest = $sorted[-1]; $secondOldest = $sorted[-2]; $linked = $sorted[-3]
     $reports = Join-Path $root 'reports'
@@ -102,16 +109,27 @@ try {
     Set-Content -LiteralPath (Join-Path $target 'keep.txt') -Value 'must survive'
     New-Item -ItemType Junction -Path (Join-Path $runs "$linked\link") -Target $target | Out-Null
     New-Item -ItemType Directory -Force -Path (Join-Path $runs 'not-a-run'), (Join-Path $runs 'profile') | Out-Null
-    $dry = & (Join-Path $harness 'Remove-OldRuns.ps1') -RunsDir $runs -Keep 4 -ReportsDir $reports -WhatIf -Quiet
-    Assert-True (@(Get-ChildItem -LiteralPath $runs -Directory).Count -eq 10 -and $dry.Removed.Count -eq 2) "retention -WhatIf lists what it would remove and removes nothing (would remove $($dry.Removed -join ', '))"
-    $ret = & (Join-Path $harness 'Remove-OldRuns.ps1') -RunsDir $runs -Keep 4 -ReportsDir $reports -Protect (Join-Path $runs $sorted[4]) -Quiet
+    $noRetain = $null; try { & (Join-Path $harness 'Remove-OldRuns.ps1') -RunsDir $runs -Retain 0 -Quiet | Out-Null } catch { $noRetain = $_.Exception.Message }
+    Assert-True ($noRetain -match 'Retain must be 1 or more') 'retention: -Retain 0 is refused (leaving it out is how nothing is pruned)'
+    $runPs1Text = [System.IO.File]::ReadAllText((Join-Path $harness 'run.ps1'))
+    Assert-True ($runPs1Text -match '\[int\] \$Retain = 0,' -and $runPs1Text -match 'if \(-not \$RunDir -and \$Retain -gt 0\)' -and [System.IO.File]::ReadAllText((Join-Path $harness 'Invoke-RigBoots.ps1')) -match '\[int\] \$Retain = 0,') 'retention: run.ps1 and Invoke-RigBoots.ps1 prune only when given -Retain (default 0)'
+    $dry = & (Join-Path $harness 'Remove-OldRuns.ps1') -RunsDir $runs -Retain 4 -ReportsDir $reports -WhatIf -Quiet
+    Assert-True (@(Get-ChildItem -LiteralPath $runs -Directory).Count -eq 10 -and $dry.Removed.Count -eq 2 -and -not (Test-Path -LiteralPath (Join-Path $runs '_archive'))) "retention -WhatIf lists what it would prune and changes nothing (would prune $($dry.Removed -join ', '))"
+    $ret = & (Join-Path $harness 'Remove-OldRuns.ps1') -RunsDir $runs -Retain 4 -ReportsDir $reports -Protect (Join-Path $runs $sorted[4]) -Quiet
     $left = @(Get-ChildItem -LiteralPath $runs -Directory | ForEach-Object Name)
     Assert-True ((@($sorted[0..3] | Where-Object { $left -notcontains $_ })).Count -eq 0) 'retention keeps the newest N'
     Assert-True ($left -contains $sorted[4]) 'retention keeps a -Protect folder'
     Assert-True ($left -contains $secondOldest -and $ret.Referenced -contains $secondOldest) 'retention keeps a folder a report names'
     Assert-True ($left -contains $linked -and $ret.Skipped -contains $linked -and (Test-Path -LiteralPath (Join-Path $target 'keep.txt'))) 'retention skips a folder holding a junction; the junction target is untouched'
-    Assert-True ($left -notcontains $oldest -and $ret.Removed -contains $oldest) 'retention removes an old, unnamed run folder'
-    Assert-True ($left -contains 'not-a-run' -and $left -contains 'profile') 'retention never touches a folder that is not a run'
+    Assert-True ($left -notcontains $oldest -and $ret.Removed -contains $oldest) 'retention prunes an old, unnamed run folder'
+    $arch = Join-Path $runs "_archive\$oldest"
+    $kept = @('summary.json', 'summary.md', 'sweep.json', 'evidence.txt', 'plan.json', 'boot-1\summary.json')
+    Assert-True ((@($kept | Where-Object { -not (Test-Path -LiteralPath (Join-Path $arch $_)) })).Count -eq 0 -and (Get-Content -LiteralPath (Join-Path $arch 'evidence.txt') -Raw) -match 'content of evidence.txt') "retention: the pruned run's summaries, sweep, evidence and plan (also a boot's) are under _archive\<run>\"
+    $archFiles = @(Get-ChildItem -LiteralPath $arch -File -Recurse | ForEach-Object { [System.IO.Path]::GetRelativePath($arch, $_.FullName) })
+    Assert-True ($archFiles.Count -eq $kept.Count) "retention: nothing bulky in the archive ($($archFiles -join ', '))"
+    Assert-True ($left -contains '_archive' -and $left -contains 'not-a-run' -and $left -contains 'profile') 'retention never touches a folder that is not a run (_archive included)'
+    $again = & (Join-Path $harness 'Remove-OldRuns.ps1') -RunsDir $runs -Retain 1 -ReportsDir $reports -Quiet
+    Assert-True ((Test-Path -LiteralPath (Join-Path $arch 'summary.json')) -and $again.Removed -notcontains '_archive') 'retention: a later prune leaves the archive alone'
     Remove-Item -LiteralPath (Join-Path $runs "$linked\link") -Force
 
     # ---------- a stand-in for run.ps1 (never the game) ----------
