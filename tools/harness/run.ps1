@@ -52,6 +52,12 @@
   -NoOrderCheck); afterwards only the newest -KeepRuns run folders and those qa/runtime/reports names are kept
   (Remove-OldRuns.ps1).
 
+  Stills (WP-H-10; README "Stills"): when a case calls T.shot, the driver saves a vt2_rig_shot request and holds
+  still; this script sees it and captures the game window into <run>\stills\ (GameProcess.cs CaptureStill), listed
+  in shots.json and summary.json "shots". Plan "require_stills": true makes a missing, wrong-sized (plan
+  "still_size", default [1280, 720]) or too dark (plan "still_min_brightness", default 8 of 255) still a note and
+  the run at least exit 2.
+
 .NOTES
   Never starts if any Vermintide process exists. Never kills a process it did not start (job object).
   Nothing is written to the persistent environment. The Steam library is found from the registry
@@ -231,6 +237,8 @@ $proc = $null; $verdict = 'UNKNOWN'; $notes = [System.Collections.Generic.List[s
 $marks = [ordered]@{}; $logPath = $null; $logSource = $null; $stopAt = $null; $text = ''; $lastHb = $started; $lastNote = ''
 # WP-H-09 liveness and resource floor: the driver's checkpoint (seq, t) must keep moving; free RAM must stay above the floor
 $hostStop = ''; $hostStopDetail = ''; $lastProgressAt = $started; $lastProgressKey = ''; $progressPhase = ''
+# WP-H-10 stills: one capture per vt2_rig_shot request, while the driver holds still
+$shots = [System.Collections.Generic.List[object]]::new(); $lastShotSeq = 0; $shotStamp = [datetime]::MinValue
 $patterns = [ordered]@{
     realm = 'realm = (modded|official)'; mods_scan = 'Starting mod scan'; splash = 'StateSplashScreen'; title = 'StateTitleScreen'
     loading = 'StateLoading'; ingame = 'StateIngame'; run_begin = '\[vt2t:' + $nonce + '\] RUN BEGIN'; keep_ready = '\[vt2t:' + $nonce + '\] KEEP READY'
@@ -283,6 +291,36 @@ try {
                 if ($freeGiB -lt $StopFreeGiB) {
                     $hostStop = 'low-ram'; $hostStopDetail = "$([math]::Round($freeGiB, 2)) GiB free, floor $StopFreeGiB GiB"
                     $notes.Add("low RAM: $hostStopDetail"); $verdict = 'LOW-RAM-KILLED'; $proc.Kill(); break
+                }
+            } catch { }
+        }
+        if ($planObj) {
+            try {
+                $cfgFile = Join-Path $rigVt2 'user_settings.config'
+                $cfgStamp = [System.IO.File]::GetLastWriteTimeUtc($cfgFile)
+                if ($cfgStamp -ne $shotStamp) {
+                    $shotStamp = $cfgStamp
+                    $sm = [regex]::Match([System.IO.File]::ReadAllText($cfgFile), '(?ms)^vt2_rig_shot = \{.*?^\}')
+                    if ($sm.Success -and $sm.Value -match 'nonce = "' + $nonce + '"') {
+                        $sseq = [int][regex]::Match($sm.Value, '(?m)^\tseq = (\d+)').Groups[1].Value
+                        if ($sseq -gt $lastShotSeq) {
+                            for ($k = $lastShotSeq + 1; $k -lt $sseq; $k++) { $shots.Add([ordered]@{ seq = $k; ok = $false; error = 'the next request replaced it before the host saw it' }) }
+                            $lastShotSeq = $sseq
+                            $sCase = [regex]::Match($sm.Value, '(?m)^\tcase = "([^"]*)"').Groups[1].Value
+                            $sLabel = [regex]::Match($sm.Value, '(?m)^\tlabel = "([^"]*)"').Groups[1].Value
+                            $stillDir = Join-Path $run 'stills'
+                            New-Item -ItemType Directory -Force -Path $stillDir | Out-Null
+                            $safe = (($sCase + '-' + $sLabel) -replace '[^A-Za-z0-9_.-]', '_'); if ($safe.Length -gt 60) { $safe = $safe.Substring(0, 60) }
+                            $png = Join-Path $stillDir ('{0:000}-{1}.png' -f $sseq, $safe)
+                            $still = $proc.CaptureStill($png)
+                            $shots.Add([ordered]@{
+                                seq = $sseq; case = $sCase; label = $sLabel; ok = $still.Ok; route = $still.Route; window = $still.Window
+                                file = $(if ($still.Ok) { "stills\$(Split-Path -Leaf $png)" } else { $null }); width = $still.Width; height = $still.Height
+                                mean_brightness = [math]::Round($still.MeanBrightness, 1); error = $still.Error; seconds = [math]::Round(($now - $started).TotalSeconds, 1)
+                            })
+                            Write-Host ("  [{0,5:N0}s] still {1} {2}: {3}" -f ($now - $started).TotalSeconds, $sseq, $sLabel, $(if ($still.Ok) { "$($still.Width)x$($still.Height) mean $([math]::Round($still.MeanBrightness, 1))" } else { $still.Error }))
+                        }
+                    }
                 }
             } catch { }
         }
@@ -383,6 +421,22 @@ if ($isolation -ne 'OK') { $exit = 3 }
 elseif ($planObj) { $exit = $runVerdicts.Exit }
 else { $exit = 0 }
 if (($forbidHits.Count -or $expectMisses.Count) -and $exit -ne 3) { $exit = 1 }
+# WP-H-10: every saved still request must have a still; with "require_stills" each must also be the right size and not black
+$shotRequests = @($lines | Where-Object { $_ -match '^SHOT REQ .* saved=true' }).Count
+if ($shots.Count) { $shots | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath (Join-Path $run 'shots.json') -Encoding utf8 }
+if ($planObj -and $planObj.PSObject.Properties['require_stills'] -and $planObj.require_stills -eq $true) {
+    $wantSize = @(1280, 720); if ($planObj.PSObject.Properties['still_size'] -and $planObj.still_size) { $wantSize = @($planObj.still_size | ForEach-Object { [int]$_ }) }
+    $floor = 8; if ($planObj.PSObject.Properties['still_min_brightness']) { $floor = [double]$planObj.still_min_brightness }
+    $bad = @()
+    if ($shots.Count -lt $shotRequests -or $shotRequests -eq 0) { $bad += "$($shots.Count) still(s) for $shotRequests saved request(s)" }
+    foreach ($sh in $shots) {
+        if (-not $sh.ok) { $bad += "still $($sh.seq): $($sh.error)" }
+        elseif ($sh.width -ne $wantSize[0] -or $sh.height -ne $wantSize[1]) { $bad += "still $($sh.seq): $($sh.width)x$($sh.height), want $($wantSize[0])x$($wantSize[1])" }
+        elseif ($sh.mean_brightness -lt $floor) { $bad += "still $($sh.seq): mean brightness $($sh.mean_brightness) under $floor" }
+    }
+    foreach ($b in $bad) { $notes.Add("require_stills: $b") }
+    if ($bad.Count -and $exit -eq 0) { $exit = 2 }
+}
 # WP-H-03: a plan with "sweep": true turns the regression suites' output into sweep.json / sweep.md; a FAIL row
 # fails the run (exit 1). A suite that never returned, or a plan mod no suite printed for (missing_suites), leaves an
 # otherwise passing run incomplete (exit 2).
@@ -424,7 +478,7 @@ $summary = [ordered]@{
     private_desktop = (-not $Visible); renderer = $Renderer; arguments = $arguments; run_end_seen = $runEnd
     keep_ready_seconds = $hostLog.KeepReadySeconds; keep_ready_driver_t = $hostLog.KeepReadyDriverT
     backend_shield = [bool]$shieldOn; shield_installed_before_first_commit = $shieldFirst
-    save = $rigProfile.Save; lobby_private = $lobbyPrivate
+    save = $rigProfile.Save; lobby_private = $lobbyPrivate; shot_requests = $shotRequests; shots = @($shots)
     host_forbid_hits = $forbidHits; host_expect_misses = $expectMisses; host_allowed = @($hostLog.Allowed)
     loaded_versions = $hostLog.LoadedVersions; local_builds = @($localBuilds); level_loads = @($hostLog.LevelLoads); sweep = $sweep
     marks_seconds = $marks; cases = $cases; script_errors = $scriptErrors; evidence_lines = $lines.Count
@@ -441,6 +495,7 @@ foreach ($p in $expectMisses) { $md += "Expected log line missing: ``$p``" }
 foreach ($a in @($hostLog.Allowed)) { $md += "Allowed log line ($($a.rule)): ``$($a.line)`` -- $($a.reason)" }
 foreach ($lb in $localBuilds) { $md += "Local build: $($lb.mod) $($lb.version) at $($lb.commit)$(if ($lb.dirty) { ' (dirty)' }) in slot $($lb.slot) ($($lb.slot_id)) | real folder unchanged: $($lb.real_folder_unchanged)" }
 foreach ($ll in @($hostLog.LevelLoads)) { $md += "Level load: $($ll.level) $(if ($ll.failed) { $ll.failed } else { "$($ll.seconds) s" })" }
+foreach ($sh in $shots) { $md += "Still $($sh.seq) ($($sh.case), $($sh.label)): $(if ($sh.ok) { "$($sh.file) $($sh.width)x$($sh.height) mean brightness $($sh.mean_brightness) via $($sh.route)" } else { "not captured: $($sh.error)" })" }
 if ($sweep) { $md += "Regression sweep: rows $($sweep.rows), PASS $($sweep.pass), FAIL $($sweep.fail), SKIP $($sweep.skip), inconclusive suites $($sweep.inconclusive_suites), missing suites $($sweep.missing_suites) (sweep.md)" }
 if (@($hostLog.LoadedVersions.Keys).Count) { $md += "Load banners: $((@($hostLog.LoadedVersions.Keys) | ForEach-Object { "$_ $($hostLog.LoadedVersions[$_])" }) -join ', ')" }
 $md | Set-Content -LiteralPath (Join-Path $run 'summary.md') -Encoding utf8

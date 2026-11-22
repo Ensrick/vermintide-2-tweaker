@@ -3,7 +3,7 @@
   "mods": ["1369573612"],
   "arenas": ["keep", "mission:military", "keep"],
   "timeout": 900,
-  "host_expect_log": ["SET RESTORE id=api-set mod=VMF setting=vt2_rig_api_selftest", "SHOT id=api-core n=1 label=\"api selftest still\" captured=false", "EQUIP RESTORE id=api-inventory career=\\S+ slot=slot_melee item="],
+  "host_expect_log": ["SET RESTORE id=api-set mod=VMF setting=vt2_rig_api_selftest", "SHOT REQ id=api-core n=1 seq=1 label=\"api selftest still\" hold=3 saved=true", "EQUIP RESTORE id=api-inventory career=\\S+ slot=slot_melee item="],
   "cases": [
     { "id": "api-core", "arena": "keep", "file": "../_rig/api_core.lua" },
     { "id": "api-set", "arena": "keep", "file": "../_rig/api_set.lua" },

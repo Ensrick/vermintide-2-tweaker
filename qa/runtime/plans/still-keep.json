@@ -1,0 +1,12 @@
+{
+  "name": "still-keep",
+  "purpose": "WP-H-10 acceptance: one still of the keep from a private-desktop run; run.ps1 checks it is 1280x720 and not black (require_stills).",
+  "mods": ["1369573612"],
+  "expect_mods": ["VMF"],
+  "timeout": 300,
+  "require_stills": true,
+  "cases": [
+    { "id": "smoke-keep", "arena": "keep", "file": "../_rig/smoke_keep.lua" },
+    { "id": "still-keep", "arena": "keep", "file": "../_rig/still_keep.lua" }
+  ]
+}
