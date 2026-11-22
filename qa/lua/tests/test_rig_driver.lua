@@ -267,6 +267,44 @@ return {
         H.equal(count(lines, tag .. "RUN END .* fail=0 .* inconclusive=1"), 1, "RUN END counts it as inconclusive")
     end)
 
+    -- A case file's own cleanup field: once per started case, every verdict, in the main update, error as a NOTE.
+    H.test("rig driver: a case's own cleanup runs once after every verdict, outside the coroutine, errors as a NOTE", function()
+        local function with_cleanup(id, body, cleanup_body)
+            return { id = id, src = "return { timeout = 1, run = function(T) " .. body .. " end, cleanup = function(T) "
+                .. "vt2_cleanups[#vt2_cleanups + 1] = { id = '" .. id .. "', in_coroutine = coroutine.running() ~= nil, has_T = T ~= nil and T.case_id == '" .. id .. "' } "
+                .. (cleanup_body or "") .. " end }" }
+        end
+        local plan = make_plan({
+            with_cleanup("c-pass", "T.expect(true, 'ok')"),
+            with_cleanup("c-fail", "T.expect(false, 'planted failure')"),
+            with_cleanup("c-error", "error('planted script error')"),
+            with_cleanup("c-inconclusive", "T.require(false, 'planted precondition')"),
+            with_cleanup("c-timeout", "T.wait(30)"),
+            with_cleanup("c-cleanup-raises", "T.expect(true, 'ok')", "error('planted cleanup error')"),
+            { id = "no-cleanup", src = PASS_CASE },
+            { id = "c-never-started", arena = "deus", src = "return { run = function(T) end, cleanup = function() vt2_cleanups[#vt2_cleanups + 1] = { id = 'c-never-started' } end }" },
+        })
+        local object, env, lines = boot(plan)
+        env.vt2_cleanups = {}
+        H.truthy(run_to_end(object, env), "run completed")
+        local ran = {}
+        for _, row in ipairs(env.vt2_cleanups) do
+            ran[#ran + 1] = row.id
+            H.equal(row.in_coroutine, false, row.id .. ": cleanup ran in the main update")
+            H.equal(row.has_T, true, row.id .. ": cleanup got the case's T")
+        end
+        H.equal(table.concat(ran, ","), "c-pass,c-fail,c-error,c-inconclusive,c-timeout,c-cleanup-raises",
+            "each started case's cleanup ran once, in case order; the never-started case's did not")
+        for id, verdict in pairs({ ["c-pass"] = "PASS", ["c-fail"] = "FAIL", ["c-error"] = "ERROR", ["c-inconclusive"] = "INCONCLUSIVE",
+            ["c-timeout"] = "TIMEOUT", ["c-cleanup-raises"] = "PASS" }) do
+            H.truthy(first(lines, tag .. "CASE END id=" .. id:gsub("%-", "%%-") .. " verdict=" .. verdict), id .. " keeps verdict " .. verdict)
+        end
+        H.truthy(first(lines, tag .. "NOTE id=c%-cleanup%-raises key=case_cleanup_error value=\".*planted cleanup error"), "cleanup error recorded as a NOTE")
+        H.truthy(first(lines, tag .. "CASE CLEANUP id=c%-cleanup%-raises ok=false"), "CASE CLEANUP ok=false line")
+        H.equal(count(lines, tag .. "CASE CLEANUP id=c%-pass ok=true"), 1, "CASE CLEANUP line once")
+        H.equal(count(lines, tag .. "CASE CLEANUP id=no%-cleanup"), 0, "no line for a case without cleanup")
+    end)
+
     H.test("rig bootstrap: inert unless the command line nonce matches the plan", function()
         local plan = make_plan({ { id = "pass", src = PASS_CASE } })
         local object, _, lines = boot(plan, { command_line_nonce = "ffffffff" })

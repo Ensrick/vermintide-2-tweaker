@@ -730,9 +730,33 @@ local function run_main_jobs()
 	end
 end
 
+-- A case file's own `cleanup` field (a function; it gets the case's T): run once when a case that started ends,
+-- whatever the verdict (PASS, FAIL, ERROR, INCONCLUSIVE, TIMEOUT), here in the main update and before the helpers'
+-- cleanups. Its error is recorded as a NOTE and never changes the verdict. It must not wait (T.wait, T.frames,
+-- T.wait_until, T.main need the case coroutine) and should be safe to call after the case already undid its work.
+-- A case that never started (load error, arena not reached) has nothing to undo, so its cleanup is not called.
+local function run_case_cleanup(case)
+	local def = case.def
+
+	if case.case_cleanup_ran or not case.co or type(def) ~= "table" or type(def.cleanup) ~= "function" then
+		return
+	end
+
+	case.case_cleanup_ran = true
+
+	local ok, err = pcall(def.cleanup, case.T)
+
+	if not ok then
+		out("NOTE id=%s key=case_cleanup_error value=%s", case.id, q(err))
+	end
+
+	out("CASE CLEANUP id=%s ok=%s", case.id, tostring(ok))
+end
+
 local function finish_case(case, verdict, detail)
 	S.main_jobs = {}
 
+	run_case_cleanup(case)
 	run_cleanups(case)
 
 	case.status = verdict
