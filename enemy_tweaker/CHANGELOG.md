@@ -1,5 +1,46 @@
 # Enemy Tweaker Changelog
 
+## 0.7.66-dev (2026-11-22): custom breeds register once the network exists (#1915) [verify-fix]
+
+- Cause (rig run `20261115-165106-sweep-dev-5a5b1668`, console.log:2847-2850):
+  at mod load `Network.type_info` errors with "Network config not loaded", so
+  the #1413 registrar refused both custom breeds with
+  `damage_source_cap_unavailable`; the 0.7.65 cap probe showed all three
+  capacities later (damage_source 16384, statistics_path 1024,
+  damage_hotjoin_sync 16384; console.log:6335-6338).
+- The Warlord and Chosen owners now queue their declarative specs at load
+  (Warlord first, then Chosen, so the wire order is unchanged). New
+  `_et_custom_breed_scheduler.lua`, loaded by the parity owner, runs the queue
+  once, on the first trigger whose `capacity_verdicts()` reports a cap for all
+  three axes: an immediate try at load (a VMF reload with the network up), the
+  return of `StateLoadingRestartNetwork._init_network` (after
+  `LobbyInternal.init_client` and `network_constants`,
+  `state_loading_restart_network.lua:124,161`), and a backstop on
+  `GameNetworkManager.init` (`game_network_manager.lua:59`), plus a trigger in
+  `mod.update` once `NetworkConstants` exists. VMF keeps hooks inactive while a
+  mod is disabled (VMF `hooks.lua:125,147`) but still runs its update
+  (`events.lua:44-51`), so a VMF-disabled copy registers too and the wire rows
+  stay index-identical. Host and client both register before any session;
+  later triggers are no-ops.
+- Exact parity (#451B) is built after the deferred registration. VMF refuses
+  `network_register` once all mods have loaded, so the parity owner registers
+  `et_custom_breeds_exact_v1` at load with a forwarder and hands the library's
+  receiver to it during the deferred `install()`. Until then the fence and
+  spawn floor stay closed (vanilla donors, "parity-unavailable").
+- The Warlord clone is now taken after the Champion elite-pool retune may have
+  run, so the Warlord records the four pristine Champion fields at load and
+  restores them on the clone (800-HP boss block unchanged).
+- Logs: `[et:451] custom-breed registration deferred trigger=... waiting=...`
+  (bounded, one per trigger) and `... ran trigger=... jobs=2 ready=ok`; the
+  Warlord and Chosen result rows name the trigger; the #324 diagnostic and
+  cap-probe load notes say "deferred".
+- Offline: new `test_et_issue1915_deferred_breed_registration` (scheduler,
+  both hook timings, the immediate try, the disabled-copy update trigger, client registration before a
+  strict breed-map decode, forwarder delivery under VMF's late-register
+  refusal, fence closed before ready, pristine Warlord donor, wiring); the
+  parity fixture gets load-time caps so the existing parity, #1497 and
+  registrar suites keep their contracts.
+
 ## 0.7.65-dev (2026-10-17): capacity-authority probe for the Warlord registration refusal (#324) [diagnostics-armed]
 
 - Evidence: in 12 of 12 tester logs on 0.7.64-dev the transactional custom-breed

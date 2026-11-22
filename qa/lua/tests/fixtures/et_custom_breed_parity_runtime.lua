@@ -63,15 +63,42 @@ return function(H, repo_root)
             queued_counts[name] = supplied_queued[name] or 0
         end
         local roster = options.roster or {}
+        -- #1915: the parity owner runs the queued registrar jobs only once
+        -- capacity_verdicts reports all three caps. By default the caps exist
+        -- at load (the immediate try), which keeps the load-time contract of
+        -- every pre-#1915 test; caps_at_load = false models a cold boot.
+        local caps = { available = options.caps_at_load ~= false }
+        local register_calls = {}
+        local vmf = { network_initialized = false, register_calls = 0 }
         local registrar = {
             marker_key = ctx.marker_key,
             schema = ctx.registrar_schema,
             validate_all_registered = function() return true end,
+            capacity_verdicts = function()
+                if caps.available then
+                    return {
+                        damage_source_id = "cap:16384",
+                        statistics_path_lookup = "cap:1024",
+                        damage_hotjoin_sync = "cap:16384",
+                    }
+                end
+                return {
+                    damage_source_id = "damage_source_cap_unavailable",
+                    statistics_path_lookup = "statistics_path_cap_unavailable",
+                    damage_hotjoin_sync = "health_sync_cap_unavailable",
+                }
+            end,
+            register = function(spec)
+                register_calls[#register_calls + 1] = spec
+                if options.register then return options.register(spec) end
+                return true, "registered"
+            end,
         }
         local mod = {
             _et = {
                 CustomBreedIdentity = Identity,
                 CustomBreedRegistrar = registrar,
+                CustomBreedJobs = options.jobs,
                 rpc_schema = 1,
                 rt_register = function(name, fn, opts)
                     checks[name] = fn
@@ -79,6 +106,10 @@ return function(H, repo_root)
                 end,
             },
             dofile = function(_, path)
+                if path == "scripts/mods/enemy_tweaker/_et_custom_breed_scheduler" then
+                    return assert(loadfile(repo_root
+                        .. "/enemy_tweaker/scripts/mods/enemy_tweaker/_et_custom_breed_scheduler.lua"))()
+                end
                 H.equal(path,
                     "scripts/mods/enemy_tweaker/_lib_peer_parity")
                 if options.parity_unavailable then error("parity unavailable") end
@@ -92,6 +123,11 @@ return function(H, repo_root)
                 safe_hooks[class .. "." .. method] = callback
             end,
             network_register = function(_, channel, callback)
+                -- VMF network.lua:216-220 refuses once all mods have loaded.
+                if vmf.network_initialized then
+                    error("(network_register): you can't register new rpc after mod initialization")
+                end
+                vmf.register_calls = vmf.register_calls + 1
                 H.equal(channel, "et_custom_breeds_exact_v1")
                 receiver = callback
             end,
@@ -109,9 +145,20 @@ return function(H, repo_root)
             echo = function() end,
             get_name = function() return "enemy_tweaker" end,
         }
+        if options.vmf_class_methods then
+            -- A VMF mod object reaches network_register through VMFMod
+            -- (vmf_mod_data.lua:14 class; network.lua:216), not as a raw field.
+            setmetatable(mod, { __index = {
+                network_register = rawget(mod, "network_register"),
+            } })
+            rawset(mod, "network_register", nil)
+        end
         local runtime = {
             ctx = ctx,
             mod = mod,
+            caps = caps,
+            vmf = vmf,
+            register_calls = register_calls,
             hooks = hooks,
             safe_hooks = safe_hooks,
             checks = checks,

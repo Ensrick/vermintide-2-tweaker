@@ -1016,8 +1016,14 @@ return function(H, C)
             .. "/enemy_tweaker/scripts/mods/enemy_tweaker/_et_boss_ideas.lua")
         H.equal(warlord:find("NLLib.register_named", 1, true), nil)
         H.equal(chosen:find("NLLib.register_named", 1, true), nil)
-        H.truthy(warlord:find("Registrar.register({", 1, true) ~= nil)
-        H.truthy(chosen:find("Registrar.register({", 1, true) ~= nil)
+        -- #1915: both owners queue one declarative spec; the scheduler loaded
+        -- by the parity owner submits it to Registrar.register later.
+        H.truthy(warlord:find("jobs[#jobs + 1] = { spec = {", 1, true) ~= nil)
+        H.truthy(chosen:find("jobs[#jobs + 1] = { spec = {", 1, true) ~= nil)
+        H.equal(warlord:find("Registrar.register(", 1, true), nil,
+            "Warlord registers at load again (#1915)")
+        H.equal(chosen:find("Registrar.register(", 1, true), nil,
+            "Chosen registers at load again (#1915)")
         H.truthy(chosen:find("issue1413_atomic_custom_breed_registration", 1, true) ~= nil)
         H.truthy(warlord:find("issue324_warlord_diag_armed", 1, true) ~= nil,
             "#324 combat diagnostics must remain out of the registrar migration")

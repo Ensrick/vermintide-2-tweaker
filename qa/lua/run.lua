@@ -121,6 +121,7 @@ local suites = {
     "test_et_issue324_capacity_authority",
     "test_et_custom_breed_parity",
     "test_et_issue1497_local_host_fence",
+    "test_et_issue1915_deferred_breed_registration",
     "test_et_pacing_tick_guard",
     "test_rt_harness_context_absent",
     "test_rig_driver",

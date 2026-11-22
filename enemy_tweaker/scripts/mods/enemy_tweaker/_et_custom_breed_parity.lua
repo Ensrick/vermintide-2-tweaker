@@ -1,29 +1,54 @@
 -- Exact peer/catalog floor for Enemy Tweaker custom breeds (#451B).
--- Loaded after both registrar transactions and before every hot-join or spawn
--- hook. The canonical copied parity library owns transport/replay semantics;
--- this file owns only Enemy's identity, engine seams, and vanilla-donor floor.
+-- Loaded after both registrar owners queued their jobs and before every
+-- hot-join or spawn hook. The canonical copied parity library owns
+-- transport/replay semantics; this file owns only Enemy's identity, engine
+-- seams, vanilla-donor floor, and (#1915) when the registration runs.
 
 local mod = get_mod("enemy_tweaker")
 local ET = mod._et
 local Identity = ET.CustomBreedIdentity
 local Registrar = ET.CustomBreedRegistrar
 
-local snapshot, snapshot_reason = Identity.capture({
-    breeds = rawget(_G, "Breeds"),
-    network_lookup = rawget(_G, "NetworkLookup"),
-    marker_key = Registrar.marker_key,
-    registrar_schema = Registrar.schema,
-})
-ET.CustomBreedIdentitySnapshot = snapshot
+local CHANNEL = "et_custom_breeds_exact_v1"
 
+-- #1915 deferred registration. The registrar cannot prove the three wire
+-- capacities at mod load (see _et_custom_breed_scheduler.lua), so the identity
+-- snapshot and the exact parity instance exist only after the queued Warlord
+-- and Chosen jobs ran. Until then `snapshot` and `parity` stay nil, and every
+-- floor below fails closed ("parity-unavailable": vanilla donors only).
+local snapshot, snapshot_reason = nil, "deferred"
 local parity
-if snapshot then
-    local load_ok, factory = pcall(function()
-        return mod:dofile("scripts/mods/enemy_tweaker/_lib_peer_parity")
-    end)
-    if load_ok and type(factory) == "function" then
+
+-- Parity option P1 (Enemy-only): VMF refuses mod:network_register once all mods
+-- have loaded (VMF network.lua:216-220; vmf_loader.lua:66-70 builds the network
+-- dictionary at that point). The channel is therefore registered here, at load,
+-- with a forwarder; the library instance built after the deferred registration
+-- hands its receiver to the forwarder instead of to VMF.
+local lib_receiver = nil
+local function _forward_channel(...)
+    local receiver = lib_receiver
+    if receiver then return receiver(...) end
+end
+local channel_ok = type(mod.network_register) == "function"
+    and pcall(mod.network_register, mod, CHANNEL, _forward_channel) or false
+
+local factory_ok, factory = pcall(function()
+    return mod:dofile("scripts/mods/enemy_tweaker/_lib_peer_parity")
+end)
+
+local function _install_parity()
+    snapshot, snapshot_reason = Identity.capture({
+        breeds = rawget(_G, "Breeds"),
+        network_lookup = rawget(_G, "NetworkLookup"),
+        marker_key = Registrar.marker_key,
+        registrar_schema = Registrar.schema,
+    })
+    ET.CustomBreedIdentitySnapshot = snapshot
+
+    local installed_instance
+    if snapshot and channel_ok and factory_ok and type(factory) == "function" then
         local create_ok, instance = pcall(factory, mod, {
-            channel = "et_custom_breeds_exact_v1",
+            channel = CHANNEL,
             schema = ET.rpc_schema,
             mod_id = "enemy_tweaker",
             mod_label = "Enemy Tweaker",
@@ -31,27 +56,85 @@ if snapshot then
             wire_identity = snapshot.identity,
         })
         if create_ok and type(instance) == "table" then
+            -- install() registers its receiver through mod:network_register.
+            -- Shadow that method on this mod object for the one call so the
+            -- receiver reaches the load-time forwarder, then put back the exact
+            -- prior raw value (nil on a VMF mod object, whose method lives on
+            -- VMFMod: VMF network.lua:216). A late mod.update is fine: VMF reads
+            -- mod.update on every frame (VMF events.lua:10-14).
+            local own_register = rawget(mod, "network_register")
+            rawset(mod, "network_register", function(_, channel, receiver)
+                if channel == CHANNEL and type(receiver) == "function" then
+                    lib_receiver = receiver
+                end
+            end)
             local install_ok, committed = pcall(instance.install, instance)
+            rawset(mod, "network_register", own_register)
             local status_ok, installed = false, false
             if install_ok and committed == true
                     and type(instance.is_installed) == "function" then
                 status_ok, installed = pcall(instance.is_installed, instance)
             end
-            if status_ok and installed == true then parity = instance end
+            if status_ok and installed == true and lib_receiver then
+                installed_instance = instance
+            else
+                lib_receiver = nil
+            end
         end
+    end
+    parity = installed_instance
+
+    ET.CustomBreedParity = parity
+    mod._et_custom_breed_peer_parity = parity
+
+    if parity then
+        pcall(printf, "[et:451] exact custom-breed parity installed identity=%s",
+            snapshot.identity)
+    else
+        pcall(printf, "[et:451] WARN exact custom-breed parity unavailable (%s); custom spawns use vanilla donors",
+            tostring(snapshot_reason or (channel_ok and "install-failed" or "channel-unregistered")))
     end
 end
 
-ET.CustomBreedParity = parity
-mod._et_custom_breed_peer_parity = parity
+-- One scheduler per module load. Jobs were queued by _et_skaven_warlord_breed
+-- and _et_boss_ideas in manifest order; the queue runs once, on the first
+-- trigger that finds all three capacities, and then installs parity.
+local Scheduler = mod:dofile("scripts/mods/enemy_tweaker/_et_custom_breed_scheduler")
+local jobs = rawget(ET, "CustomBreedJobs") or {}
+ET.CustomBreedJobs = jobs
+local scheduler = Scheduler.new({
+    registrar = Registrar,
+    jobs = jobs,
+    on_ready = _install_parity,
+    log = function(fmt, ...) pcall(printf, fmt, ...) end,
+})
+ET.CustomBreedScheduler = scheduler
 
-if parity then
-    pcall(printf, "[et:451] exact custom-breed parity installed identity=%s",
-        snapshot.identity)
-else
-    pcall(printf, "[et:451] WARN exact custom-breed parity unavailable (%s); custom spawns use vanilla donors",
-        tostring(snapshot_reason or "install-failed"))
-end
+-- (a) Immediate try: a VMF reload with the network already up registers now.
+scheduler.try("load")
+
+-- (b) Primary trigger, on return of StateLoadingRestartNetwork._init_network:
+-- LobbyInternal.init_client has run (state_loading_restart_network.lua:124)
+-- and network_constants.lua has been dofiled (:161), so the capacities exist.
+-- hook_safe runs inside the same on_enter call (:19-23), right after the host
+-- or join setup is started (:184-211) and before the sub-state's first update
+-- (:229-266). NetworkState decodes breed maps by index
+-- (network_state_spec.lua:278-297) through strict lookups
+-- (network_lookup.lua:2346-2364), so host and client both register before any
+-- session; the registrar has no is_server gate. The class is global from
+-- boot: boot.lua:1300 requires state_loading, whose line 5 requires this
+-- sub-state, before mods load (boot.lua:389-413).
+mod:hook_safe("StateLoadingRestartNetwork", "_init_network", function()
+    scheduler.try("restart_network")
+end)
+
+-- (c) Backstop for a session that reaches StateIngame without restarting the
+-- network: NetworkConstants exists after game_network_manager.lua:59, and
+-- StateIngame builds the manager (state_ingame.lua:277 -> :2192) before it adds
+-- the local player whose statistics clone the per-breed rows (:305).
+mod:hook_safe("GameNetworkManager", "init", function()
+    scheduler.try("game_network_manager")
+end)
 
 local function _exact_safe()
     if type(parity) ~= "table" then return false, "parity-unavailable" end
@@ -133,6 +216,15 @@ local previous_update = mod.update
 mod.update = function(dt)
     if type(dt) == "number" and dt == dt and dt > 0 and dt < math.huge then
         hot_join_clock = hot_join_clock + dt
+    end
+    -- (d) #1915 trigger that also runs while Enemy Tweaker is VMF-disabled:
+    -- VMF calls every mod's update regardless of its enabled state (VMF
+    -- events.lua:44-51), but keeps its hooks inactive (hooks.lua:125,147), so
+    -- (b) and (c) never fire for a disabled copy. Registration therefore stays
+    -- eager and index-identical either way (DEVELOPMENT.md doctrine). Free
+    -- until network_constants.lua has created NetworkConstants; once-only.
+    if not scheduler.done() and rawget(_G, "NetworkConstants") ~= nil then
+        scheduler.try("update")
     end
     if previous_update then previous_update(dt) end
 end
