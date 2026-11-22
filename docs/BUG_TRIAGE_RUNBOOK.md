@@ -474,6 +474,24 @@ shipping. Agent publication is headless and opens no interactive window.
 
 ---
 
+## Game update procedure
+
+After every game patch, before anything ships (game patch 6.12 removed `IngameUI.not_in_modded` and several atlas icons, and the mods found out from player reports: #1671, #1686, #1687):
+
+1. Update the decompile checkout (`Vermintide-2-Source-Code`, next to this repository) to the new game build.
+2. Run `pwsh -NoProfile -File qa/check_patch_day.ps1` from a worktree. It prints one line per part:
+   - the decompile's HEAD;
+   - `hooks`: literal hook targets that no longer resolve, along the whole `class(X, Parent)` chain;
+   - `icons`: literal icon names missing from every icon atlas;
+   - the two planted self-tests;
+   - `qa/check_integration.ps1` once it exists;
+   - the offline Lua suite.
+   It exits 2 when a part fails. Without a decompile it prints `SKIP` and exits 0.
+3. Fix every finding in the mod code (the canary never edits mods). An expected miss goes into `qa/patchday/hook_allowlist.txt` or `qa/patchday/icon_allowlist.txt`, one entry per line, with the reason.
+4. Then ship, through the normal procedure (PROJECT_STANDARDS.md section 6.6).
+
+The rig's nightly run (`tools/harness/Invoke-NightlyRun.ps1`) runs this canary first when it sees a new game build id.
+
 ## WHAT THE USER SAYS -> WHAT YOU DO
 
 | Report shape | First move |

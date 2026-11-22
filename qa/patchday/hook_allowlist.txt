@@ -1,0 +1,5 @@
+# Hook targets qa/patchday/hook_targets.py may not resolve in the decompile, one Class.method per line, with the reason.
+# Found by the 2026-11-13 audit (B2): 4 expected misses among the literal string hooks. Add a line only with a reason.
+VMFOptionsView.initialize_checkbox_widget   # VMF's own options view, not vanilla (weapon_tweaker/_wt_master_toggles.lua)
+VMFOptionsView.callback_setting_changed     # VMF's own options view (weapon_tweaker/_wt_master_toggles.lua, chaos_wastes_tweaker_dev/_ct_settings_lifecycle_owner.lua)
+HeroWindowCraftingInventory._update_crafting_material_panel   # behind rawget(_G, "HeroWindowCraftingInventory"); the class is gone in the current build (crafting_in_modded_dev/standard_forge.lua)
