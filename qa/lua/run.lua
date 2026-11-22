@@ -168,6 +168,7 @@ local suites = {
     "test_gt_level_control_backend_guard",
     "test_gt_host_request_policy",
     "test_gt_world",
+    "test_gt_engine_guards",
     "test_wt_passive_charge",
     "test_wt_deepwood_runtime",
     "test_wt_energy_seed",
