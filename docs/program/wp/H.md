@@ -351,7 +351,7 @@ The rig lets an agent verify mod behaviour against the running game with no huma
 
 **Steps.**
 1. Try, in this order, and keep the first that returns a non-black 1280x720 image from a private-desktop run: an engine call if one exists (`type(rawget(_G, "FrameCapture"))`, `type(Application.save_render_target)` are printed in the driver's `PROBE` line); `PrintWindow` with the full-content flag from a helper thread attached to the private desktop; Windows Graphics Capture; as a last resort a visible-desktop run mode used only for still packs.
-2. Protocol: the driver prints `SHOT REQ` and waits on a settings checkpoint acknowledgement; `run.ps1` captures and acknowledges.
+2. Protocol, one-way: the game cannot read anything the host writes while it runs. The driver's `PROBE` line shows `io=nil`, and user settings are read only at start, so no acknowledgement can reach it. `T.shot(label, hold)` saves a `vt2_rig_shot` request into the user settings (a real file write, the same channel as the progress checkpoint), prints `SHOT REQ`, holds still for `hold` seconds (default 3) and prints `SHOT DONE`. `run.ps1` sees the new request on its 0.5 s tick and captures once into `<run>\stills\`; `shots.json` records the result. A case never asserts on a still.
 3. `tools/harness/Review-Stills.md`: the prompt for a vision-capable agent (image plus the issue's expected sentence; answer PASS, FAIL or CANNOT-TELL with a reason). Under OD-02 only presence or absence may close.
 4. Attach stills and state dumps to the generated human list (WP-G-07).
 
