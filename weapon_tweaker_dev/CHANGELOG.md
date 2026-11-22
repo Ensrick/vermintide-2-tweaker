@@ -1,5 +1,11 @@
 # Weapon Tweaker Changelog
 
+## 0.12.353-dev (2026-11-22) -- Release-train re-version, no code change
+
+- Release-train re-version, no code change. Same source as 0.12.352-dev
+  below. Its version claim went stale before it shipped, so the claim
+  broker allocated this fresh version (tools/ship/CLAIMS.md).
+
 ## 0.12.352-dev (2026-11-15) -- Mirror ordered owner registry (WP-WT-07) [not-started]
 
 - Mirror public 0.12.351-beta: one ordered reconcile for the weapon-table
