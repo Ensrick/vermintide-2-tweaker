@@ -164,6 +164,60 @@ try {
     $plans3 = Read-PlanBlocks ([System.IO.File]::ReadAllText($out3.UserSettings))
     Assert-True ($plans3.Count -eq 1 -and $plans3[0].shield_off) 'backend_shield false reaches the plan block'
 
+    # ---- WP-H-08: modset, options and settings values ----
+    $real2 = Join-Path $root 'owner2'
+    New-Item -ItemType Directory -Force -Path $real2 | Out-Null
+    $cfgWithSettings = ([System.IO.File]::ReadAllText($fixture) -replace "`r`n", "`n") + "mods_settings = {`n`t`"Spaced Mod`" = {`n`t`tkeep_me = 1`n`t}`n`tVMF = {`n`t`tdeveloper_mode = false`n`t`tlist_value = [`n`t`t`t`"a`"`n`t`t]`n`t`tlogging_mode = `"default`"`n`t}`n}`nuse_pc_menu_layout = false`n"
+    [System.IO.File]::WriteAllText((Join-Path $real2 'user_settings.config'), $cfgWithSettings, $utf8)
+    $sets = (Import-PowerShellDataFile -LiteralPath (Join-Path $harness 'modsets.psd1')).Sets
+    $setName = 'character_weapon_variants'
+    $optPlan = Join-Path $planDir 'plan-options.json'
+    [System.IO.File]::WriteAllText($optPlan, ('{ "name": "options-test", "modset": "' + $setName + '", "mods": ["9000000099"], "timeout": 60,' +
+            ' "settings": { "use_pc_menu_layout": true, "max_fps": 60, "raw_text": "30" },' +
+            ' "options": { "VMF": { "developer_mode": true, "list_value": "now a string", "vt2_rig_marker": 2.5 }, "Spaced Mod": { "added": "x \"q\"" }, "gt_dev": { "fresh_mod_block": false } },' +
+            ' "cases": [ { "id": "a", "arena": "keep", "file": "case_a.lua" } ] }'), $utf8)
+    $out4 = & $builder -RealProfile $real2 -ProfileRoot (Join-Path $root 'rig\profile4') -PlanPath $optPlan -Nonce '4444bbbb' -DriverFile $driverFile -DriverId $driverId
+    $cfg4 = [System.IO.File]::ReadAllText($out4.UserSettings)
+    $enabled4 = Get-Enabled $cfg4
+    $setIds = @($sets[$setName].WorkshopIds)
+    Assert-True ((@($setIds | Where-Object { $enabled4[$_] -ne 'true' })).Count -eq 0 -and $enabled4['9000000099'] -eq 'true') "modset: every id of set $setName plus the plan's extra mod is enabled"
+    $p4 = (Read-PlanBlocks $cfg4)[0]
+    Assert-True (($p4.expect_mods -join ',') -eq (@($sets[$setName].ModIds) -join ',')) "modset: expect_mods come from the set ($($p4.expect_mods -join ','))"
+    $resolved = & (Join-Path $harness 'Resolve-RigPlan.ps1') -Plan ([System.IO.File]::ReadAllText($optPlan) | ConvertFrom-Json)
+    Assert-True (($resolved.mods -join ',') -eq ((@($setIds) + '9000000099') -join ',')) 'Resolve-RigPlan: set ids first (VMF first), then plan mods the set lacks'
+    $unknown = $null
+    try { & (Join-Path $harness 'Resolve-RigPlan.ps1') -Plan ('{ "modset": "no-such-set" }' | ConvertFrom-Json) | Out-Null } catch { $unknown = $_.Exception.Message }
+    Assert-True ($unknown -match "modset 'no-such-set' is not in") 'an unknown modset throws'
+    Assert-True ($cfg4 -match '(?m)^use_pc_menu_layout = true$') 'settings: a JSON true is written as SJSON true'
+    Assert-True ($cfg4 -match '(?m)^max_fps = 60$' -and $cfg4 -match '(?m)^raw_text = 30$') 'settings: a number as a number, a string as raw text'
+    $vmfBlock = [regex]::Match($cfg4, '(?ms)^\tVMF = \{\n(.*?)^\t\}\n').Groups[1].Value
+    Assert-True ($vmfBlock -match '(?m)^\t\tdeveloper_mode = true$' -and $vmfBlock -notmatch 'developer_mode = false') 'options: an existing value is replaced'
+    Assert-True ($vmfBlock -match '(?m)^\t\tlist_value = "now a string"$' -and $vmfBlock -notmatch '"a"') 'options: an existing multi-line array is replaced whole'
+    Assert-True ($vmfBlock -match '(?m)^\t\tvt2_rig_marker = 2\.5$' -and $vmfBlock -match '(?m)^\t\tlogging_mode = "default"$') 'options: a new value is added and other values stay'
+    Assert-True ($cfg4 -match '(?ms)^\t"Spaced Mod" = \{\n\t\tkeep_me = 1\n\t\tadded = "x \\"q\\""\n\t\}') 'options: a quoted mod name and an escaped string'
+    Assert-True ($cfg4 -match '(?ms)^\tgt_dev = \{\n\t\tfresh_mod_block = false\n\t\}') 'options: a mod without a block gets one'
+    Assert-True ([regex]::Matches($cfg4, '(?m)^mods_settings = \{$').Count -eq 1) 'options: still one mods_settings table'
+
+    # ---- WP-H-08 boots: -KeepProfile starts from the profile the previous boot left ----
+    $keepRoot = Join-Path $root 'rig\profile5'
+    $out5 = & $builder -RealProfile $real -ProfileRoot $keepRoot -PlanPath $planPath -Nonce '5555aaaa' -DriverFile $driverFile -DriverId $driverId
+    # what boot 1 leaves behind: a setting the game saved and a changed save file
+    [System.IO.File]::AppendAllText($out5.UserSettings, "vt2_rig_boot_marker = `"boot1-5555aaaa`"`n")
+    [System.IO.File]::WriteAllBytes((Join-Path $out5.Vt2Dir 'save_data.sav'), [byte[]](200..240))
+    $savBoot1 = Get-Sha (Join-Path $out5.Vt2Dir 'save_data.sav')
+    $out6 = & $builder -RealProfile $real -ProfileRoot $keepRoot -PlanPath $optPlan -Nonce '6666bbbb' -DriverFile $driverFile -DriverId $driverId -KeepProfile
+    $cfg6 = [System.IO.File]::ReadAllText($out6.UserSettings)
+    Assert-True ($cfg6 -match '(?m)^vt2_rig_boot_marker = "boot1-5555aaaa"$') 'KeepProfile: a setting boot 1 saved survives into boot 2'
+    Assert-True ((Get-Sha (Join-Path $out6.Vt2Dir 'save_data.sav')) -eq $savBoot1) "KeepProfile: boot 1's save is kept, not replaced by the owner's"
+    $plans6 = Read-PlanBlocks $cfg6
+    Assert-True ($plans6.Count -eq 1 -and $plans6[0].nonce -eq '6666bbbb') 'KeepProfile: one plan block, the new boot''s'
+    $enabled6 = Get-Enabled $cfg6
+    Assert-True ($enabled6['9000000099'] -eq 'true' -and $enabled6['3733367409'] -ne 'true') 'KeepProfile: the mod list follows the new boot''s plan'
+    Assert-True ($cfg6 -match '(?m)^use_pc_menu_layout = true$') 'KeepProfile: the new boot''s settings are applied'
+    $keepErr = $null
+    try { & $builder -RealProfile $real -ProfileRoot (Join-Path $root 'rig\empty') -PlanPath $planPath -Nonce '7777cccc' -DriverFile $driverFile -DriverId $driverId -KeepProfile | Out-Null } catch { $keepErr = $_.Exception.Message }
+    Assert-True ($keepErr -match 'KeepProfile: no rig profile to keep') 'KeepProfile without a profile to keep throws'
+
     foreach ($f in $ownerBefore.Keys) { Assert-True ((Get-Sha (Join-Path $real $f)) -eq $ownerBefore[$f]) "owner file unchanged: $f" }
 }
 finally {
