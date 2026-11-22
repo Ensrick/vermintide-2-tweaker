@@ -352,6 +352,7 @@ local suites = {
     "test_cim_direct_craft",
     "test_cim_official_verify_rollup",
     "test_cim_bulk_cleanup",
+    "test_cim_1933_delete_equipped",
     "test_cim_cwv_template_selector",
     "test_cim_cwv_template_catalog",
     "test_cim_keep_forge_interaction",

@@ -582,6 +582,22 @@ mod._cim277_delete_owned_ids = function(backend_ids, foreign_ids)
         return 0, "CIM ownership contract is unavailable"
     end
 
+    -- #1933: never delete an id a loadout or a live hero inventory still holds;
+    -- the hero's next resync spawn would crash in get_skin.
+    local inventories = {}
+    pcall(function()
+        for _, player in pairs(Managers.player:players()) do
+            local unit = player.player_unit
+            local inventory = unit and Unit.alive(unit)
+                and ScriptUnit.has_extension(unit, "inventory_system")
+            if inventory then inventories[#inventories + 1] = inventory end
+        end
+    end)
+    local held = deletion.held_ids(inventories)
+    local refusal = deletion.equipped_refusal(items, backend_ids, held)
+        or deletion.equipped_refusal(items, foreign_ids, held)
+    if refusal then return 0, refusal end
+
     return deletion.execute({
         records = _get_forged_weapons(),
         item_master = ItemMasterList,

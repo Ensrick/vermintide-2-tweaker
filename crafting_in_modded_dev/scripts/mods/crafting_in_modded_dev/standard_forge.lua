@@ -1404,23 +1404,20 @@ end)
 -- issue 390: units rescue for cim-crafted CWV variants
 -- ============================================================
 -- The vanilla equip/preview path re-resolves item_data from `item_data.name`
--- (backend_utils / world_hero_previewer:674), which for a CWV clone is the
--- BASE weapon name -> ItemMasterList[base] -> base mesh + inherited
--- attachments. CWV's own get_item_units override forces the variant units back
--- in, but it only fires for backend_ids matching `cwv_<key>_NNN`. We now mint
--- exactly that pattern (_make_craft_synth), so CWV's hook can rescue our crafts
--- once its match pattern is widened past the literal `_001`. This hook is the
--- cim-side safety net that forces the variant units regardless, so the MESH is
--- correct even before that CWV-side widen lands. Grip/scale transforms still
--- come from CWV's create_equipment hook (which also keys on the backend_id
--- pattern) -- those need the widened pattern to apply.
---
--- Pre-flight grep confirmed cim does not otherwise hook (BackendUtils,
--- get_item_units); it only CALLS it. VMF chains this cim hook after CWV's own
--- (different mod), so we see (and, idempotently, re-affirm) CWV's result.
+-- (backend_utils / world_hero_previewer:674): for a CWV clone that is the BASE
+-- weapon -> base mesh + inherited attachments. CWV's own get_item_units
+-- override forces the variant units back only for backend_ids matching
+-- `cwv_<key>_NNN` (the pattern _make_craft_synth mints). This hook is the
+-- cim-side safety net that forces the variant units regardless; grip/scale
+-- transforms still come from CWV's create_equipment hook. cim does not
+-- otherwise hook BackendUtils.get_item_units; VMF chains this hook after CWV's
+-- own, so we see (and idempotently re-affirm) CWV's result.
+-- #1933: a backend id that no longer resolves resolves the base units.
 if rawget(_G, "BackendUtils") then
     mod:hook(BackendUtils, "get_item_units", function(func, item_data, backend_id, skin, career_name)
-        local result = func(item_data, backend_id, skin, career_name)
+        local guard, result = mod._cim277_owned_deletion
+        if guard then result = guard.item_units(func, item_data, backend_id, skin, career_name)
+        else result = func(item_data, backend_id, skin, career_name) end
         if type(result) ~= "table" or type(backend_id) ~= "string" then return result end
         local craft = mod._cim_get_craft and mod._cim_get_craft(backend_id)
         local ckey = craft and craft.item_key

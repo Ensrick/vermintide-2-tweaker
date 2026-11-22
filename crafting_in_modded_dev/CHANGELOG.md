@@ -1,5 +1,22 @@
 # Crafting in Modded Changelog
 
+## 0.8.158-dev (2026-11-22) -- Never delete a craft a hero still holds (#1933)
+
+- Deleting a crafted item that was still equipped crashed the game on the
+  next frame: the hero's queued respawn of that weapon re-read its units, and
+  the vanilla skin lookup indexed the deleted backend row (rig run
+  20261122-054737). The shared delete path (`/forge_delete`, bulk cleanup,
+  Salvage) now refuses any id that a current or saved career loadout or a
+  live hero inventory (equipped slot or queued respawn) still holds, and
+  refuses when that cannot be proven.
+- The `BackendUtils.get_item_units` hook resolves the base units when the
+  backend id no longer resolves instead of letting vanilla read the missing
+  row; it logs `[cim:1933] get_item_units: backend id <id> no longer resolves;
+  base units` once per id.
+- New offline suite `test_cim_1933_delete_equipped`; rig case
+  `wp_cim_11_auto_equip` now checks the refusal and deletes its craft only
+  after the hero released it. Not confirmed in game.
+
 ## 0.8.157-dev (2026-11-15) -- Remove the dormant loadout-persistence path (WP-CIM-11)
 
 - Removed the modded-loadout persistence machinery that was forced off at
