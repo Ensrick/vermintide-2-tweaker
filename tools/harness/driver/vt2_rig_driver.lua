@@ -39,9 +39,14 @@
 -- sequence number, the running case and the verdicts so far, so run.ps1 can tell a stalled run from a live one and
 -- recover finished verdicts after a crash cut the buffered log short (proven fact 6).
 
+--
+-- 0.4.12: the run quits through StateIngame's own exit (request_quit). Setting Boot.quit_game directly skipped
+-- Managers.mechanism:handle_ingame_exit and network_manager:leave_game; every deus-smoke run then crashed in the
+-- engine's teardown (vermintide2_dx12.exe+0x305826, lead runs 20261122-050650, -055440, -055734).
+
 local plan, nonce = ...
 
-local DRIVER_VERSION = "0.4.11"
+local DRIVER_VERSION = "0.4.12"
 local driver = {}
 
 local function find_mod(name)
@@ -1139,6 +1144,36 @@ end
 -- ---------------------------------------------------------------------------
 -- End of run
 -- ---------------------------------------------------------------------------
+-- Quits the way the game's own quit does. StateIngame._check_exit treats a set _quit_game like the "quit_game"
+-- transition (Vermintide-2-Source-Code/scripts/game_state/state_ingame.lua:1315-1340: exit_type "quit_game", peers
+-- disconnected, the game session left). Two seconds later, with the session closed, it calls
+-- Managers.mechanism:handle_ingame_exit and sets Boot.quit_game itself (:1538-1580). StateIngame.on_close sets the
+-- same field outside the keep (:2122-2141). In the keep, on_close first commits the PlayFab stats
+-- (_commit_playfab_stats, :2145-2153); the rig never calls a backend commit, so it sets the field directly.
+-- The state object comes from the mod manager's on_game_state_changed (mod_manager.lua:489-495, passed by
+-- GameStateMachine._change_state, game_state_machine.lua:13-26). Outside StateIngame, or without the object, the
+-- driver sets Boot.quit_game as before. If the game has not quit QUIT_FALLBACK_SECONDS later, it sets
+-- Boot.quit_game too (driver.update).
+local QUIT_FALLBACK_SECONDS = 30
+
+local function request_quit()
+	local state = S.game_state_object
+
+	S.quit_at = S.t
+
+	if S.game_state == "StateIngame" and type(state) == "table" and state.exit_type == nil then
+		state._quit_game = true
+		S.quit_via = "StateIngame"
+
+		out("QUIT via=StateIngame._quit_game t=%.1f", S.t)
+	else
+		S.quit_via = "Boot"
+		Boot.quit_game = true
+
+		out("QUIT via=Boot.quit_game state=%s t=%.1f", tostring(S.game_state), S.t)
+	end
+end
+
 local function finish_run(reason)
 	local counts = { PASS = 0, FAIL = 0, ERROR = 0, TIMEOUT = 0, INCONCLUSIVE = 0, SKIP = 0 }
 
@@ -1167,7 +1202,7 @@ local function finish_run(reason)
 	set_phase("QUIT")
 
 	if plan.quit ~= false then
-		Boot.quit_game = true
+		request_quit()
 	end
 end
 
@@ -1489,6 +1524,13 @@ driver.update = function (_, dt)
 	S.t = S.t + dt
 
 	if S.phase == "QUIT" then
+		if S.quit_via == "StateIngame" and not S.quit_forced and S.t - S.quit_at > QUIT_FALLBACK_SECONDS then
+			S.quit_forced = true
+			Boot.quit_game = true
+
+			out("QUIT via=Boot.quit_game reason=%s t=%.1f", q("StateIngame did not quit in " .. QUIT_FALLBACK_SECONDS .. " s"), S.t)
+		end
+
 		return
 	end
 
@@ -1595,9 +1637,10 @@ driver.update = function (_, dt)
 	end
 end
 
-driver.on_game_state_changed = function (_, status, state_name)
+driver.on_game_state_changed = function (_, status, state_name, state_object)
 	if status == "enter" then
 		S.game_state = state_name
+		S.game_state_object = state_object
 
 		out("STATE enter=%s t=%.1f", tostring(state_name), S.t)
 	end

@@ -177,6 +177,57 @@ return {
         H.truthy(max_gap <= 15.11, "no two checkpoints more than 15 s plus one update (0.1 s) of driver time apart (" .. tostring(max_gap) .. ")")
     end)
 
+    -- Driver 0.4.12: the run quits through StateIngame's own exit (state_ingame.lua:1315-1340, 1538-1580): the driver
+    -- sets the state's _quit_game; the state then leaves the session and sets Boot.quit_game itself. Without the state
+    -- object (or outside StateIngame) the driver sets Boot.quit_game as before; if the state never quits, after 30 s.
+    local function run_with_state(state, exits_after)
+        local plan = make_plan({ { id = "pass", src = PASS_CASE } })
+        local object, env, lines = boot(plan)
+        callback(object, "on_game_state_changed", "enter", "StateTitleScreen")
+        callback(object, "update", 0.1)
+        callback(object, "on_game_state_changed", "enter", "StateIngame", state)
+        local quit_seen_at
+        for i = 1, 20000 do
+            -- the stand-in StateIngame: _quit_game set -> two seconds later it quits the game itself
+            if exits_after and state._quit_game and not quit_seen_at then
+                quit_seen_at = i
+            end
+            if quit_seen_at and i - quit_seen_at >= exits_after then
+                state.exit_type = "quit_game"
+                env.Boot.quit_game = true
+            end
+            callback(object, "update", 0.1)
+            if env.Boot.quit_game then
+                break
+            end
+        end
+        return lines, env
+    end
+
+    H.test("rig driver: the run quits through StateIngame's own exit; Boot.quit_game only as the fallback", function()
+        local state = { NAME = "StateIngame", _quit_game = false }
+        local lines, env = run_with_state(state, 20)
+        H.truthy(first(lines, tag .. "RUN END"), "RUN END")
+        H.equal(state._quit_game, true, "the driver set StateIngame's _quit_game")
+        H.equal(count(lines, tag .. "QUIT via=StateIngame%._quit_game"), 1, "QUIT via=StateIngame line")
+        H.equal(count(lines, tag .. "QUIT via=Boot"), 0, "no fallback: the state quit the game itself")
+        H.equal(env.Boot.quit_game, true, "the game quit")
+
+        local stuck = { NAME = "StateIngame", _quit_game = false }
+        local stuck_lines, stuck_env = run_with_state(stuck, nil)
+        H.equal(stuck._quit_game, true, "asked the state first")
+        local fallback = first(stuck_lines, tag .. "QUIT via=Boot%.quit_game reason=\"StateIngame did not quit in 30 s\"")
+        H.truthy(fallback, "after 30 s the driver sets Boot.quit_game itself")
+        local asked_t = tonumber((first(stuck_lines, tag .. "QUIT via=StateIngame") or ""):match("t=([%d%.]+)$"))
+        local forced_t = tonumber((fallback or ""):match("t=([%d%.]+)$"))
+        H.truthy(asked_t and forced_t and forced_t - asked_t >= 30 and forced_t - asked_t < 31, "about 30 s later (" .. tostring(asked_t) .. " -> " .. tostring(forced_t) .. ")")
+        H.equal(stuck_env.Boot.quit_game, true, "the game quit")
+
+        local plain_lines, plain_env = run_with_state(nil, nil)
+        H.truthy(first(plain_lines, tag .. "QUIT via=Boot%.quit_game state=StateIngame"), "no state object: Boot.quit_game at once, as before 0.4.12")
+        H.equal(plain_env.Boot.quit_game, true, "the game quit")
+    end)
+
     H.test("rig driver: a script that throws ends as ERROR and the run continues", function()
         local plan = make_plan({
             { id = "boom", src = "return { run = function(T) T.step('about to throw') error('planted script error') end }" },
