@@ -59,7 +59,9 @@
             # added with the stable half of the card (PR #1824 holds that tree).
             Source = "_lib_official_loadout_guard.lua"
             Consumers = @(
+                "character_weapon_variants/scripts/mods/character_weapon_variants/_lib_official_loadout_guard.lua"
                 "crafting_in_modded_dev/scripts/mods/crafting_in_modded_dev/_lib_official_loadout_guard.lua"
+                "weapons_of_chaos/scripts/mods/weapons_of_chaos/_lib_official_loadout_guard.lua"
             )
         }
         @{
