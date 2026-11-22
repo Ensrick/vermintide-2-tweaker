@@ -1,0 +1,14 @@
+RUN BEGIN driver=0.4.11 plan="cim-cases" cases=6 arenas="keep" realm=modded
+CASE BEGIN id=smoke_keep issue=0 arena=keep level=inn_level
+CASE END id=smoke_keep verdict=PASS asserts=10 failed=0 t=0.0
+CASE BEGIN id=issue_402_career_commit_scrub issue=402 arena=keep level=inn_level
+CASE END id=issue_402_career_commit_scrub verdict=INCONCLUSIVE asserts=2 failed=0 t=0.1 detail="regression suite of cim_dev ran earlier in this boot"
+CASE BEGIN id=issue_80_cim_commit_callback issue=80 arena=keep level=inn_level
+CASE END id=issue_80_cim_commit_callback verdict=PASS asserts=2 failed=0 t=0.3
+CASE BEGIN id=issue_80_cim_standard_bench_opens issue=80 arena=keep level=inn_level
+CASE END id=issue_80_cim_standard_bench_opens verdict=PASS asserts=1 failed=0 t=4.4
+CASE BEGIN id=issue_1654_store_backup issue=1654 arena=keep level=inn_level
+CASE END id=issue_1654_store_backup verdict=PASS asserts=4 failed=0 t=1.2
+CASE BEGIN id=issue_430_join_lock issue=430 arena=keep level=inn_level
+CASE END id=issue_430_join_lock verdict=PASS asserts=3 failed=0 t=0.5
+RUN END reason="plan complete" cases=6 pass=5 fail=0 error=0 timeout=0 inconclusive=1 t=60.0

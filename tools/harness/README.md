@@ -96,6 +96,30 @@ Arenas `deus` (the Chaos Wastes hub, `morris_hub`) and `deus:<level_key>` (one l
 
 Every run start enqueues the cloud script `deusRunStarted` (`DeusMechanism._setup_run`, `deus_mechanism.lua:1213`; `backend_interface_deus_playfab.lua:100-116`), which resets the account's rolled-over run coins. The write shield drops it before it is sent (`SHIELD blocked=deusRunStarted ... reply=next-update`) and, on the next update, answers the game's callback the way a successful response does (driver 0.4.9): `PlayFabRequestQueue.playfab_request_success_cb` calls `success_callback(result)` (`scripts/managers/backend_playfab/playfab_request_queue.lua:241-265`) only after `update` sent the request (`:116-176`), never inside the enqueue, and the callback passes the result to `PlayFabMirrorBase.handle_deus_result` (`backend_interface_deus_playfab.lua:108-111`), which indexes `result.FunctionResult` and applies only the fields present (`playfab_mirror_base.lua:2668-2687`). The faked result is `{ FunctionResult = {} }`, so no server value is invented and the mirror keeps the client's own prediction (`predict_deus_run_started`, `:2695-2697`). The driver prints `SHIELD replied=deusRunStarted ok=<true|false> err=...`, and `T.shield()` counts `replied_by_name` and `reply_errors` (an error in the game's callback is reported, never raised). `Read-HostLog.ps1` also forbids the game's own `Enqueuing ExecuteCloudScript request deusRunStarted` line by default. Level-end rewards are not reached by any rig plan. Helpers for run levels: `T.deus_run_controller`, `T.grant_boon`, `T.has_boon`, `T.deus_coins`, `T.set_deus_coins` (`tools/harness/API.md`). Acceptance plan: `qa/runtime/plans/deus-smoke.json` (keep, hub, one level, keep).
 
+## Evidence and nightly runs (WP-H-11)
+
+- **Evidence comment.** `pwsh -File tools/harness/Publish-Evidence.ps1 -Run <run folder>` writes `<run>\evidence\<issue>.md` for every case with an issue number (the `issue=` of its `CASE BEGIN` line). The file holds the comment of `docs/program/PLAN.md` section 7 in rule R7's words, then the facts that are not part of the comment: why it would or would not close, and each case's verdict and commit source. A plan with `boots` is read per boot. Field sources:
+  - `<mod>`: the script's `qa/runtime/<folder>`.
+  - `<version>`: that mod's load banner in `summary.json` `loaded_versions`.
+  - `<commit>`: the staged local build with that version, else the harness checkout's `repo_commit`.
+  - Game build: `summary.json` `game_build`, which `run.ps1` reads from `appmanifest_552500.acf`.
+  - Not covered: the scripts' own `not_covered` fields.
+- **When an issue would close.** All of these must hold:
+  - every case of the issue in the run is PASS;
+  - every script `qa/runtime/index.json` lists for the issue ran in that run;
+  - every listed script's class is R, S or U;
+  - no case of the issue is in `qa/runtime/quarantine.txt`;
+  - the run's game build is the current one;
+  - nothing the comment needs was left unrecorded.
+  Each condition that fails is named as the reason the issue stays open.
+- **Posting.** `-Post -WhatIf` lists what would be commented on and closed. `-Post` itself refuses (exit 3) in two cases: while `qa/check_pr_autoclose.ps1` still demands a `user-confirmed` closure receipt (WP-G-01 has not landed: the card's stop condition), and when run by an agent (agents never comment on or close issues). One comment per issue per run; no labels.
+- **Index.** `qa/runtime/index.json` maps issue number to scripts and class. `tools/harness/New-RuntimeIndex.ps1` generates it from each script's own fields, read in the engine-free sandbox of `qa/runtime/_stub/index_script.lua`. `qa/check_runtime_scripts.ps1` fails when the committed file differs: a new issue script without an entry, or a stale entry. After adding or renaming an issue script, run `pwsh -NoProfile -File tools/harness/New-RuntimeIndex.ps1` and commit `index.json`.
+- **Nightly run.** `tools/harness/Invoke-NightlyRun.ps1` runs the smoke and sweep plans and writes `qa/runtime/reports/nightly-<date>.md`; it publishes nothing.
+  - It refuses (one line in `<RigRoot>\nightly.log`) while the owner is active (last input under 30 minutes ago, `GetLastInputInfo`) or a game runs. A game here is any name in `busy-processes.txt`, or any process started from a Steam library's `steamapps\common`. It checks again before every plan.
+  - On patch day (a new build id in `appmanifest_552500.acf` since the last nightly), it runs the canary `qa/check_patch_day.ps1` first (WP-T-04, once it exists) and the smoke plans before the sweeps. It lists every stored evidence record of an older build.
+  - It is started by a scheduled task that is **disabled by default**, through a windowless `pythonw` launcher. The owner registers and enables it (`tools/harness/nightly/README.md`); no agent does.
+- Offline: `tools/harness/tests/Evidence.Tests.ps1`. It covers the exact comment text of a recorded run (`tests/fixtures/evidence-run`), the closing rules, the `-Post` refusal, the index check, the nightly refusals and patch-day path with pretend idle time and processes, and the disabled task XML. Nothing is posted, registered or run.
+
 ## Stills (WP-H-10)
 
 `T.shot(label, hold)` (helper group `lib/shot.lua`) asks for one still of the game at that moment. The routes the card lists, in its order:

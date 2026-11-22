@@ -9,6 +9,8 @@
 # non-empty backend_shield_reason (only plans that test commit behaviour itself may switch the shield off).
 # API (WP-H-06): every T.<name> used in qa/runtime/**/*.lua and every stub name is a row of tools/harness/API.md,
 # and each row's status agrees with the driver and its helper groups (tools/harness/driver/lib/); see Test-ApiDoc.
+# Index (WP-H-11 step 3): qa/runtime/index.json must equal what tools/harness/New-RuntimeIndex.ps1 generates from the
+# scripts' own issue and class fields, so an issue-closing script without an entry (or a stale entry) fails here.
 #
 # Shape only: a script that passes here can still FAIL in the game. The stub never proves a behaviour.
 # -SelfTest first proves that the fixtures under qa/_test_fixtures/runtime_scripts/ pass or fail with the
@@ -222,6 +224,14 @@ if ($SelfTest) {
 }
 
 $result = Invoke-RuntimeScriptCheck -ScanRoot $Root
+$realRuntime = Join-Path $repoRoot 'qa\runtime'
+if ([System.IO.Path]::GetFullPath($Root).TrimEnd('\') -eq [System.IO.Path]::GetFullPath($realRuntime).TrimEnd('\')) {
+    $global:LASTEXITCODE = 0
+    & (Join-Path $repoRoot 'tools\harness\New-RuntimeIndex.ps1') -RepoRoot $repoRoot -Check -Quiet
+    if ($LASTEXITCODE -ne 0) {
+        $result.Errors.Add('qa/runtime/index.json is out of date (an issue-closing script has no entry, or an entry is stale): run pwsh -NoProfile -File tools/harness/New-RuntimeIndex.ps1')
+    }
+}
 if ($result.Errors.Count -gt 0) {
     foreach ($e in $result.Errors) { Write-Host "[runtime_scripts] ERROR -- $e" -ForegroundColor Red }
     Write-Host "[runtime_scripts] FAILED -- $($result.Errors.Count) problem(s) in $($result.Scripts) script(s) and $($result.Plans) plan(s)." -ForegroundColor Red

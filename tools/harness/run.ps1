@@ -149,6 +149,10 @@ try {
         }
     }
     $acf = Get-Content -LiteralPath (Join-Path $steamApps 'appmanifest_552500.acf') -Raw
+    # WP-H-11: the game build and the harness checkout's commit go into summary.json (Publish-Evidence.ps1 cites both)
+    $gameBuild = [regex]::Match($acf, '"buildid"\s+"(\d+)"').Groups[1].Value
+    $repoCommit = ''
+    try { $repoCommit = [string](& git -C (Join-Path $here '..\..') rev-parse HEAD 2>$null) } catch { }
     if ($acf -notmatch '"StateFlags"\s+"4"') { throw 'VT2 is not fully installed (StateFlags is not 4).' }
     $exe = if ($Renderer -eq 'dx12') { Join-Path $install.BinariesDx12 'vermintide2_dx12.exe' } else { Join-Path $install.Binaries 'vermintide2.exe' }
     if (-not (Test-Path -LiteralPath $exe)) { throw "Game exe not found: $exe" }
@@ -479,6 +483,7 @@ $summary = [ordered]@{
     keep_ready_seconds = $hostLog.KeepReadySeconds; keep_ready_driver_t = $hostLog.KeepReadyDriverT
     backend_shield = [bool]$shieldOn; shield_installed_before_first_commit = $shieldFirst
     save = $rigProfile.Save; lobby_private = $lobbyPrivate; shot_requests = $shotRequests; shots = @($shots)
+    game_build = $gameBuild; repo_commit = $repoCommit.Trim()
     host_forbid_hits = $forbidHits; host_expect_misses = $expectMisses; host_allowed = @($hostLog.Allowed)
     loaded_versions = $hostLog.LoadedVersions; local_builds = @($localBuilds); level_loads = @($hostLog.LevelLoads); sweep = $sweep
     marks_seconds = $marks; cases = $cases; script_errors = $scriptErrors; evidence_lines = $lines.Count
