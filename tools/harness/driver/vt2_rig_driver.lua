@@ -23,10 +23,21 @@
 -- tools/harness/API.md lists every helper.
 --
 -- 0.4.7 (WP-H-06 actor group): T.teleport takes { x, y, z } or a Vector3Box and builds the Vector3 in the main update.
+--
+-- 0.4.8: T.teleport refreshes the unit's POSITION_LOOKUP entry before teleport_to. The mod update runs first in the
+-- frame (Boot.game_update, scripts/boot.lua:750-751), before StateIngame.pre_update refreshes the lookup
+-- (scripts/game_state/state_ingame.lua:805-808), so the entry still held the previous frame's Vector3 and
+-- teleport_to's set_falling_height raised "Vector3 expected, got userdata" (lead run 20261122-024431-api-selftest).
+--
+-- 0.4.9 (WP-H-05): arenas "deus" (the Chaos Wastes hub) and "deus:<level_key>" (a run level, loaded from the hub);
+-- the backend write shield drops the run start's deusRunStarted request (SHIELD_DROP_REQUESTS) and answers the
+-- game's callback on the next update with the result shape a successful response has (deliver_shield_replies).
+--
+-- 0.4.10 (WP-H-08 step 4): at KEEP READY the host's lobby is made private (make_lobby_private, LOBBY line).
 
 local plan, nonce = ...
 
-local DRIVER_VERSION = "0.4.7"
+local DRIVER_VERSION = "0.4.10"
 local driver = {}
 
 local function find_mod(name)
@@ -107,7 +118,33 @@ local S = {
 		blocked_keep_decorations = 0,
 		saw_update_hero_attributes = 0,
 		saw_requests = 0,
+		blocked_requests = 0,
+		blocked_by_name = {},
+		replied_requests = 0,
+		replied_by_name = {},
+		reply_errors = 0,
 	},
+	-- callbacks of dropped requests, answered on the next update (deliver_shield_replies)
+	shield_replies = {},
+}
+
+-- WP-H-05: cloud scripts the shield never sends. deusRunStarted is enqueued by every Chaos Wastes run start
+-- (DeusMechanism._setup_run, Vermintide-2-Source-Code/scripts/managers/game_mode/mechanisms/deus_mechanism.lua:1213;
+-- BackendInterfaceDeusPlayFab.deus_run_started, scripts/managers/backend_playfab/backend_interface_deus_playfab.lua:
+-- 100-116) and resets the account's rolled-over run coins (the client predicts it: playfab_mirror_base.lua:2695-2697).
+-- A dropped request gets a negative id (its only caller ignores it), and its success callback is answered on the next
+-- update the way a successful response answers it: PlayFabRequestQueue.playfab_request_success_cb calls
+-- success_callback(result) with the ExecuteCloudScript result (scripts/managers/backend_playfab/
+-- playfab_request_queue.lua:241-265), only after update sent the request (:116-176), never inside the enqueue
+-- call. deusRunStarted's callback hands it
+-- to PlayFabMirrorBase.handle_deus_result (backend_interface_deus_playfab.lua:108-111), which needs a FunctionResult
+-- table and applies only the fields present in it (playfab_mirror_base.lua:2668-2687). The driver never invents
+-- server values, so the faked result has an empty FunctionResult: the mirror keeps the client's own prediction.
+-- Each entry builds the result for one request.
+local SHIELD_DROP_REQUESTS = {
+	deusRunStarted = function ()
+		return { FunctionResult = {} }
+	end,
 }
 
 -- The console log is written through a buffer, so the orchestrator cannot rely on it for liveness.
@@ -289,14 +326,37 @@ end
 -- Vermintide-2-Source-Code/scripts/settings/level_settings.lua:50-57), so debug_load_level can return to it.
 local KEEP_LEVEL = "inn_level"
 
+-- WP-H-05 Chaos Wastes. The hub is morris_hub, whose LevelSettings.mechanism is "deus"
+-- (Vermintide-2-Source-Code/levels/honduras_dlcs/morris/level_settings_morris.lua:15-29), so loading it from the keep
+-- switches the mechanism (scripts/game_state/components/level_transition_handler.lua apply_defaults_to_level_data;
+-- scripts/managers/game_mode/game_mechanism_manager.lua:480-531). A run level ("deus:<level_key>", a key such as
+-- pat_mountain_wastes_path1, level_settings_morris.lua:93-142) is started from the hub: in the deus mechanism
+-- debug_load_level sets up a run on a debug seed for that level (mechanisms/deus_mechanism.lua:1002-1015, 1023-1052).
+local DEUS_HUB = "morris_hub"
+
 local function arena_level(arena)
 	if arena == "keep" then
 		return KEEP_LEVEL
+	elseif arena == "deus" then
+		return DEUS_HUB
 	end
 
-	local key = arena:match("^mission:(.+)$") or arena:match("^level:(.+)$")
+	local key = arena:match("^mission:(.+)$") or arena:match("^level:(.+)$") or arena:match("^deus:(.+)$")
 
 	return key
+end
+
+local function current_mechanism()
+	local mechanism = Managers.mechanism
+
+	return mechanism and mechanism.current_mechanism_name and mechanism:current_mechanism_name()
+end
+
+-- The level an arena must pass through first: a run level needs the deus mechanism, which only the hub switches to.
+local function arena_via(arena)
+	if arena:match("^deus:.+$") and current_mechanism() ~= "deus" then
+		return DEUS_HUB
+	end
 end
 
 -- Host-side level change (Vermintide-2-Source-Code/scripts/managers/game_mode/game_mechanism_manager.lua:880-892;
@@ -537,8 +597,13 @@ local function new_T(case)
 	end
 
 	-- Moves a unit that has a teleport_to locomotion (PlayerUnitLocomotionExtension.teleport_to,
-	-- default_player_unit/player_unit_locomotion_extension.lua:1005). position: { x, y, z } or a Vector3Box (built into a
-	-- Vector3 inside the main update, like T.spawn's offset), or a Vector3 (it reaches the engine one update later).
+	-- default_player_unit/player_unit_locomotion_extension.lua:1005). position: { x, y, z } or a Vector3Box, made into a
+	-- Vector3 inside the same main update that calls teleport_to; a Vector3 is passed as it is, so it must be alive in
+	-- that update (one returned by an earlier T.main is a dead temporary).
+	-- teleport_to ends in status_extension:set_falling_height, which reads POSITION_LOOKUP[unit].z
+	-- (generic/generic_status_extension.lua:2586-2593). The main update runs before the frame refreshes that lookup
+	-- (boot.lua:750-751 before state_ingame.lua:808), so the entry is the previous frame's Vector3: refresh it first,
+	-- as the game's own debug teleport does (scripts/managers/debug/debug_manager.lua:1089-1093).
 	function T.teleport(unit, position)
 		local moved = T.main(function ()
 			local locomotion = unit and ScriptUnit.has_extension(unit, "locomotion_system")
@@ -560,6 +625,12 @@ local function new_T(case)
 				if unboxed and value ~= nil then
 					target = value
 				end
+			end
+
+			local lookup = rawget(_G, "POSITION_LOOKUP")
+
+			if lookup and lookup[unit] ~= nil then
+				lookup[unit] = Unit.world_position(unit, 0)
 			end
 
 			locomotion:teleport_to(target)
@@ -954,6 +1025,29 @@ end
 -- back to the copy taken at KEEP READY before the game quits, so no change is left pending for a later commit.
 -- Raw field writes through OM.restore (qa/runtime/_shared/official_mirror.lua); never a commit. Off together
 -- with the shield (plan backend_shield = false).
+-- WP-H-08 step 4: nobody may join a rig run. MatchmakingManager.set_game_privacy(true) marks the host's lobby private
+-- (lobby data is_private = "true") and tells the clients (Vermintide-2-Source-Code/scripts/managers/matchmaking/
+-- matchmaking_manager.lua:2246-2255; it acts only on a server whose lobby is joined), and is_game_private reads it back
+-- (:2299-2305). Not set_in_progress_game_privacy (:2263-2279): that also switches matchmaking state, which the keep does
+-- not need. Once, at KEEP READY; the lobby stays the same through the plan's levels. A failure is printed, never raised.
+local function make_lobby_private()
+	local ok, private = pcall(function ()
+		local matchmaking = Managers.matchmaking
+
+		matchmaking:set_game_privacy(true)
+
+		return matchmaking:is_game_private()
+	end)
+
+	S.lobby_private = ok and private == true
+
+	if ok then
+		out("LOBBY private=%s how=set_game_privacy", tostring(private == true))
+	else
+		out("LOBBY private=unknown how=set_game_privacy err=%s", q(private))
+	end
+end
+
 local function take_official_snapshot()
 	local OM = S.shared.official_mirror
 
@@ -1141,6 +1235,32 @@ local function shield_keep_decorations(mirror)
 	out("SHIELD keep_decorations installed t=%.1f state=%s", S.t, tostring(S.game_state))
 end
 
+-- Answers the callbacks of requests the shield dropped, one update after the enqueue (see SHIELD_DROP_REQUESTS). An
+-- error in the game's callback is reported and counted; it never stops the run.
+local function deliver_shield_replies()
+	local replies = S.shield_replies
+
+	if #replies == 0 then
+		return
+	end
+
+	S.shield_replies = {}
+
+	for i = 1, #replies do
+		local reply = replies[i]
+		local ok, err = pcall(reply.callback, reply.result)
+
+		S.shield.replied_requests = S.shield.replied_requests + 1
+		S.shield.replied_by_name[reply.name] = (S.shield.replied_by_name[reply.name] or 0) + 1
+
+		if not ok then
+			S.shield.reply_errors = S.shield.reply_errors + 1
+		end
+
+		out("SHIELD replied=%s ok=%s err=%s case=%s", reply.name, tostring(ok), q(ok and "" or tostring(err)), S.current and S.current.id or "-")
+	end
+end
+
 local function install_shield()
 	if plan.backend_shield == false then
 		return
@@ -1172,6 +1292,24 @@ local function install_shield()
 		-- function name of every other cloud-script request the game builds
 		-- (the game itself logs "Enqueuing ExecuteCloudScript request" at playfab_request_queue.lua:49).
 		rawset(queue, "enqueue", function (self, request, ...)
+			local drop = type(request) == "table" and SHIELD_DROP_REQUESTS[request.FunctionName]
+
+			if drop then
+				local name = request.FunctionName
+				local success_callback = ...
+
+				S.shield.blocked_requests = S.shield.blocked_requests + 1
+				S.shield.blocked_by_name[name] = (S.shield.blocked_by_name[name] or 0) + 1
+
+				out("SHIELD blocked=%s case=%s reply=%s", tostring(name), S.current and S.current.id or "-", type(success_callback) == "function" and "next-update" or "none")
+
+				if type(success_callback) == "function" then
+					S.shield_replies[#S.shield_replies + 1] = { name = name, callback = success_callback, result = drop(request) }
+				end
+
+				return -S.shield.blocked_requests
+			end
+
 			pcall(function ()
 				local name = type(request) == "table" and request.FunctionName
 
@@ -1289,10 +1427,19 @@ local function begin_arena(index)
 		return
 	end
 
+	local via = arena_via(arena)
+
+	S.then_level = nil
+
+	if via and via ~= level_key() then
+		S.then_level = wanted_level
+		wanted_level = via
+	end
+
 	if wanted_level == level_key() then
 		set_phase("SETTLE")
 	else
-		out("LOAD arena=%s level=%s from=%s", arena, tostring(wanted_level), tostring(level_key()))
+		out("LOAD arena=%s level=%s from=%s%s", arena, tostring(wanted_level), tostring(level_key()), S.then_level and (" then=" .. S.then_level) or "")
 
 		local ok, err = pcall(load_level, wanted_level)
 
@@ -1324,6 +1471,7 @@ driver.update = function (_, dt)
 	end
 
 	install_shield()
+	deliver_shield_replies()
 
 	if S.t - S.hb_at >= 5 then
 		S.hb_at = S.t
@@ -1348,6 +1496,7 @@ driver.update = function (_, dt)
 			install_shield()
 			out("KEEP READY level=%s t=%.1f", tostring(level_key()), S.t)
 			S.keep_ready = true
+			make_lobby_private()
 			take_official_snapshot()
 			begin_arena(1)
 		end
@@ -1367,7 +1516,35 @@ driver.update = function (_, dt)
 		elseif world_ready() and level_key() == S.wanted_level and S.t - S.phase_at > 3 then
 			install_shield()
 			out("LEVEL READY level=%s t=%.1f load_seconds=%.1f", tostring(level_key()), S.t, S.t - S.phase_at)
-			set_phase("SETTLE")
+
+			-- WP-H-05: the hub was only the way in; now load the run level from it
+			local next_level = S.then_level
+
+			if next_level then
+				S.then_level = nil
+				S.wanted_level = next_level
+				out("LOAD arena=%s level=%s from=%s mechanism=%s", tostring(S.arenas[S.arena_index]), next_level, tostring(level_key()), tostring(current_mechanism()))
+
+				local ok, err = pcall(load_level, next_level)
+
+				if ok then
+					set_phase("LOADING")
+				else
+					out("LOAD FAILED arena=%s err=%s", tostring(S.arenas[S.arena_index]), q(err))
+
+					local arena = S.arenas[S.arena_index]
+
+					for i = 1, #S.cases do
+						if S.cases[i].status == "PENDING" and S.cases[i].arena == arena then
+							finish_case(S.cases[i], "INCONCLUSIVE", "level load raised: " .. tostring(err))
+						end
+					end
+
+					begin_arena(S.arena_index + 1)
+				end
+			else
+				set_phase("SETTLE")
+			end
 		end
 	elseif S.phase == "SETTLE" then
 		if not world_ready() then

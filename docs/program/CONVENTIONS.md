@@ -25,7 +25,7 @@ A rig PASS is reported as "auto-verified (R) on <mod> <version> <commit>, run <i
 
 - `tools/harness/run.ps1 -Plan <plan.json>`: starts the game unattended on a private desktop with an isolated profile, runs the plan, writes `summary.json` / `summary.md`, exits non-zero on FAIL/ERROR. One instance at a time (it holds a lock; callers just wait).
 - Test scripts live in `qa/runtime/<mod>/issue_<N>_<slug>.lua` (one case per file, returns a table). Plans live in `qa/runtime/plans/<name>.json`.
-- Arenas: `boot` (log only), `keep`, `mission:<level_key>`, `deus` (Chaos Wastes), `coop` (two machines, later).
+- Arenas: `boot` (log only), `keep`, `mission:<level_key>`, `deus` (the Chaos Wastes hub), `deus:<level_key>` (one level of a Chaos Wastes run), `coop` (two machines, later).
 - Every boot also runs every loaded mod's `/<mod>_regression_test` suite and records each check as an assertion (`T.expect_rt`).
 - Verdicts per case: PASS, FAIL (product wrong), ERROR (script bug), TIMEOUT, SKIP, INCONCLUSIVE (precondition not reached). Only FAIL means the product is wrong.
 

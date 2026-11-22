@@ -1,0 +1,5 @@
+{
+  "name": "fresh",
+  "description": "No save file: the game logs a load error, never calls populate_save_data and runs on its SaveData and DefaultPlayerData defaults, as on a new install. Holds no account identifier.",
+  "files": []
+}
