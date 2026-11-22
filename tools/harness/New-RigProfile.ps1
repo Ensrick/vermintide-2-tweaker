@@ -11,8 +11,8 @@
     <ProfileRoot>\AppData\Local\
   In the copied user_settings.config it forces a windowed 1280x720 silent 30 fps game, removes the plan, results
   and progress blocks of any earlier run, enables only the plan's mods plus the driver bootstrap (adding the
-  driver's mods entry when missing), and prepends the plan block (nonce, driver text, case texts and the shared
-  helpers of -SharedDir as hex).
+  driver's mods entry when missing), and prepends the plan block (nonce, driver text, case texts, the shared
+  helpers of -SharedDir and the driver helper groups of -LibDir as hex).
 
   run.ps1 calls this; tools/harness/tests/Profile.Tests.ps1 calls it against a fixture.
 
@@ -28,6 +28,7 @@ param(
     [string] $DriverFile = '',
     [string] $DriverId = '3839345856',
     [string] $SharedDir = '',                         # qa/runtime/_shared: every *.lua in it travels with the plan
+    [string] $LibDir = '',                            # WP-H-06 tools/harness/driver/lib: every *.lua in it travels too
     [hashtable] $SlotSwaps = @{},                     # WP-H-07: real Workshop id -> rig slot id holding its local build
     [hashtable] $ExpectVersions = @{},                # WP-H-07: VMF mod id -> staged MOD_VERSION the smoke case checks
     [switch] $KeepOwnerMods                           # no-plan experiments: leave the copied mod list as it is
@@ -163,18 +164,21 @@ if ($planObj) {
         [void]$sb.Append("`t`t{`n`t`t`tid = $(ConvertTo-SjsonString $c.id)`n`t`t`tarena = $(ConvertTo-SjsonString ($c.arena ?? 'keep'))`n`t`t`thex = `"$(ConvertTo-Hex $src)`"`n`t`t}`n")
     }
     [void]$sb.Append("`t]`n")
-    # shared helpers (WP-H-14): the driver compiles each into a table; cases get them with T.shared(<file name>)
-    $sharedFiles = @()
-    if ($SharedDir -and (Test-Path -LiteralPath $SharedDir -PathType Container)) {
-        $sharedFiles = @(Get-ChildItem -LiteralPath $SharedDir -File -Filter '*.lua' | Sort-Object Name)
-    }
-    if ($sharedFiles.Count) {
-        [void]$sb.Append("`tshared = [`n")
-        foreach ($f in $sharedFiles) {
-            $src = [System.IO.File]::ReadAllText($f.FullName)
-            [void]$sb.Append("`t`t{`n`t`t`tid = $(ConvertTo-SjsonString $f.BaseName)`n`t`t`thex = `"$(ConvertTo-Hex $src)`"`n`t`t}`n")
+    # shared helpers (WP-H-14): the driver compiles each into a table; cases get them with T.shared(<file name>).
+    # driver helper groups (WP-H-06): each returns install(T, ctx); the driver installs them into every case's T.
+    foreach ($list in @(@{ Key = 'shared'; Dir = $SharedDir }, @{ Key = 'libs'; Dir = $LibDir })) {
+        $files = @()
+        if ($list.Dir -and (Test-Path -LiteralPath $list.Dir -PathType Container)) {
+            $files = @(Get-ChildItem -LiteralPath $list.Dir -File -Filter '*.lua' | Sort-Object Name)
         }
-        [void]$sb.Append("`t]`n")
+        if ($files.Count) {
+            [void]$sb.Append("`t$($list.Key) = [`n")
+            foreach ($f in $files) {
+                $src = [System.IO.File]::ReadAllText($f.FullName)
+                [void]$sb.Append("`t`t{`n`t`t`tid = $(ConvertTo-SjsonString $f.BaseName)`n`t`t`thex = `"$(ConvertTo-Hex $src)`"`n`t`t}`n")
+            }
+            [void]$sb.Append("`t]`n")
+        }
     }
     [void]$sb.Append("}`n")
     $cfg = $sb.ToString() + $cfg

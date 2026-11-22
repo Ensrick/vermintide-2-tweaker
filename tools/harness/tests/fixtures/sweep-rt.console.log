@@ -1,0 +1,4 @@
+12:00:00.000 [Lua] [gt:rt] gt_x PASS
+12:00:00.001 [Lua] [gt:rt] gt_y FAIL value was 3
+12:00:00.002 [Lua] [gt:rt] gt_z SKIP skip: no mission
+12:00:00.003 [Lua] [gt:rt] done pass=1 fail=1 skip=1 xfail=0 total=3 v=0.2.301-dev

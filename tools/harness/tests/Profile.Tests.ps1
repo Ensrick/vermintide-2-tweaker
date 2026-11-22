@@ -37,10 +37,13 @@ function Read-PlanBlocks([string] $cfg) {
         foreach ($c in [regex]::Matches($body, '(?ms)^\t\t\{\n\t\t\tid = "([^"]*)"\n\t\t\tarena = "([^"]*)"\n\t\t\thex = "([0-9a-f]*)"\n\t\t\}')) {
             $plan.cases += [ordered]@{ id = $c.Groups[1].Value; arena = $c.Groups[2].Value; source = ConvertFrom-Hex $c.Groups[3].Value }
         }
-        $sharedBlock = [regex]::Match($body, '(?ms)^\tshared = \[\n(.*?)^\t\]\n')
-        if ($sharedBlock.Success) {
-            foreach ($s in [regex]::Matches($sharedBlock.Groups[1].Value, '(?ms)^\t\t\{\n\t\t\tid = "([^"]*)"\n\t\t\thex = "([0-9a-f]*)"\n\t\t\}')) {
-                $plan.shared += [ordered]@{ id = $s.Groups[1].Value; source = ConvertFrom-Hex $s.Groups[2].Value }
+        $plan.libs = @()
+        foreach ($key in 'shared', 'libs') {
+            $block = [regex]::Match($body, '(?ms)^\t' + $key + ' = \[\n(.*?)^\t\]\n')
+            if ($block.Success) {
+                foreach ($s in [regex]::Matches($block.Groups[1].Value, '(?ms)^\t\t\{\n\t\t\tid = "([^"]*)"\n\t\t\thex = "([0-9a-f]*)"\n\t\t\}')) {
+                    $plan[$key] += [ordered]@{ id = $s.Groups[1].Value; source = ConvertFrom-Hex $s.Groups[2].Value }
+                }
             }
         }
         $found += $plan
@@ -87,10 +90,17 @@ try {
     [System.IO.File]::WriteAllText((Join-Path $sharedDir 'official_mirror.lua'), $sharedA, $utf8)
     [System.IO.File]::WriteAllText((Join-Path $sharedDir 'another_helper.lua'), $sharedB, $utf8)
     [System.IO.File]::WriteAllText((Join-Path $sharedDir 'notes.txt'), "not a helper`n", $utf8)
+    $libDir = Join-Path $root 'lib'
+    New-Item -ItemType Directory -Force -Path $libDir | Out-Null
+    $libA = "return function(T, ctx) function T.set() end end`n"
+    $libB = "return function(T, ctx) function T.shot() return false end end`n"
+    [System.IO.File]::WriteAllText((Join-Path $libDir 'shot.lua'), $libB, $utf8)
+    [System.IO.File]::WriteAllText((Join-Path $libDir 'settings.lua'), $libA, $utf8)
+    [System.IO.File]::WriteAllText((Join-Path $libDir 'README.md'), "not a helper group`n", $utf8)
 
     # ---- first build: the copied settings have no driver entry and carry an earlier run's blocks ----
     $profileRoot = Join-Path $root 'rig\profile'
-    $out = & $builder -RealProfile $real -ProfileRoot $profileRoot -PlanPath $planPath -Nonce '1234abcd' -DriverFile $driverFile -DriverId $driverId -SharedDir $sharedDir
+    $out = & $builder -RealProfile $real -ProfileRoot $profileRoot -PlanPath $planPath -Nonce '1234abcd' -DriverFile $driverFile -DriverId $driverId -SharedDir $sharedDir -LibDir $libDir
     Assert-True (Test-Path -LiteralPath $out.UserSettings -PathType Leaf) 'profile user_settings.config written'
     Assert-True ($out.Vt2Dir -eq (Join-Path $profileRoot 'AppData\Roaming\Fatshark\Vermintide 2')) 'profile folder layout under the rig profile root'
     $cfg = [System.IO.File]::ReadAllText($out.UserSettings)
@@ -109,6 +119,8 @@ try {
     Assert-True ($p.shared.Count -eq 2) "two shared helpers in the plan block, the .txt file ignored (got $($p.shared.Count))"
     Assert-True ($p.shared[0].id -eq 'another_helper' -and $p.shared[0].source -ceq $sharedB) 'shared helper another_helper parses back with its text'
     Assert-True ($p.shared[1].id -eq 'official_mirror' -and $p.shared[1].source -ceq $sharedA) 'shared helper official_mirror parses back with its text'
+    Assert-True ($p.libs.Count -eq 2) "two driver helper groups in the plan block, the .md file ignored (got $($p.libs.Count))"
+    Assert-True ($p.libs[0].id -eq 'settings' -and $p.libs[0].source -ceq $libA -and $p.libs[1].id -eq 'shot' -and $p.libs[1].source -ceq $libB) 'helper groups parse back with their text, in file-name order'
     Assert-True ($cfg -notmatch 'earlier-run') "earlier run's plan block removed"
     Assert-True ($cfg -notmatch '(?m)^vt2_rig_results = ') "earlier run's vt2_rig_results removed"
     Assert-True ($cfg -notmatch '(?m)^vt2_rig_progress = ') "earlier run's vt2_rig_progress removed"
@@ -143,6 +155,7 @@ try {
     Assert-True ([regex]::Matches($cfg2, '(?m)^\t\tid = "' + $driverId + '"$').Count -eq 1) 'second build: driver entry still exists once'
     Assert-True ($cfg2 -notmatch '(?m)^vt2_rig_results = ' -and $cfg2 -notmatch '(?m)^vt2_rig_progress = ') 'second build: results and progress from the earlier run removed'
     Assert-True ($plans2[0].shared.Count -eq 0) 'second build without -SharedDir: no shared block'
+    Assert-True ($plans2[0].libs.Count -eq 0) 'second build without -LibDir: no libs block'
 
     # ---- third build: a plan that switches the shield off says so in the plan block ----
     $offPath = Join-Path $planDir 'plan-off.json'
