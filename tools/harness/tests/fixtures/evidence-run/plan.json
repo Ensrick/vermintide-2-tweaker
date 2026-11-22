@@ -1,0 +1,15 @@
+{
+  "name": "cim-cases",
+  "purpose": "Recorded plan for tools/harness/tests/Evidence.Tests.ps1 (shape of the 2026-11-22 cim-cases run).",
+  "mods": ["1369573612", "3733366851"],
+  "expect_mods": ["VMF", "cim_dev"],
+  "timeout": 900,
+  "cases": [
+    { "id": "smoke_keep", "arena": "keep", "file": "../_rig/smoke_keep.lua" },
+    { "id": "issue_402_career_commit_scrub", "arena": "keep", "file": "../cim/issue_402_career_commit_scrub.lua" },
+    { "id": "issue_80_cim_commit_callback", "arena": "keep", "file": "../cim/issue_80_cim_commit_callback.lua" },
+    { "id": "issue_80_cim_standard_bench_opens", "arena": "keep", "file": "../cim/issue_80_cim_standard_bench_opens.lua" },
+    { "id": "issue_1654_store_backup", "arena": "keep", "file": "../cim/issue_1654_store_backup.lua" },
+    { "id": "issue_430_join_lock", "arena": "keep", "file": "../event_tweaker/issue_430_join_lock.lua" }
+  ]
+}

@@ -1,0 +1,113 @@
+{
+  "generated_by": "tools/harness/New-RuntimeIndex.ps1 (from each script's issue and class fields; do not edit by hand)",
+  "issues": {
+    "80": [
+      {
+        "script": "qa/runtime/cim/issue_80_cim_commit_callback.lua",
+        "class": "R"
+      },
+      {
+        "script": "qa/runtime/cim/issue_80_cim_standard_bench_opens.lua",
+        "class": "R"
+      }
+    ],
+    "354": [
+      {
+        "script": "qa/runtime/gut/issue_354_exit_snapshot_keeps_unresolved_id.lua",
+        "class": "R"
+      }
+    ],
+    "402": [
+      {
+        "script": "qa/runtime/cim/issue_402_career_commit_scrub.lua",
+        "class": "R"
+      },
+      {
+        "script": "qa/runtime/cwv/issue_402_career_commit_scrub.lua",
+        "class": "R"
+      },
+      {
+        "script": "qa/runtime/gut/issue_402_isolation_contract.lua",
+        "class": "R"
+      },
+      {
+        "script": "qa/runtime/woc/issue_402_career_commit_scrub.lua",
+        "class": "R"
+      }
+    ],
+    "426": [
+      {
+        "script": "qa/runtime/ct_dev/issue_426_purchase_gate.lua",
+        "class": "R"
+      },
+      {
+        "script": "qa/runtime/ct_dev/issue_426_roll_gate.lua",
+        "class": "R"
+      }
+    ],
+    "430": [
+      {
+        "script": "qa/runtime/event_tweaker/issue_430_join_lock_open.lua",
+        "class": "R"
+      },
+      {
+        "script": "qa/runtime/event_tweaker/issue_430_join_lock.lua",
+        "class": "R"
+      }
+    ],
+    "490": [
+      {
+        "script": "qa/runtime/gt/issue_490_world_swap.lua",
+        "class": "R"
+      }
+    ],
+    "605": [
+      {
+        "script": "qa/runtime/character_dialogue/issue_605_line_override_selection.lua",
+        "class": "R"
+      }
+    ],
+    "948": [
+      {
+        "script": "qa/runtime/wt/issue_948_anim_targets_bardin.lua",
+        "class": "R"
+      },
+      {
+        "script": "qa/runtime/wt/issue_948_anim_targets_kerillian.lua",
+        "class": "R"
+      },
+      {
+        "script": "qa/runtime/wt/issue_948_anim_targets_kruber.lua",
+        "class": "R"
+      },
+      {
+        "script": "qa/runtime/wt/issue_948_anim_targets_saltzpyre.lua",
+        "class": "R"
+      },
+      {
+        "script": "qa/runtime/wt/issue_948_anim_targets_sienna.lua",
+        "class": "R"
+      }
+    ],
+    "1034": [
+      {
+        "script": "qa/runtime/gt/issue_1034_lag_comp_default_off.lua",
+        "class": "R"
+      }
+    ],
+    "1654": [
+      {
+        "script": "qa/runtime/cim/issue_1654_both_restored.lua",
+        "class": "R"
+      },
+      {
+        "script": "qa/runtime/cim/issue_1654_craft_two_copies.lua",
+        "class": "R"
+      },
+      {
+        "script": "qa/runtime/cim/issue_1654_store_backup.lua",
+        "class": "R"
+      }
+    ]
+  }
+}

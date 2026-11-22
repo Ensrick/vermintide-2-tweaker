@@ -1,0 +1,21 @@
+{
+  "run": "20261122-054737-cim-cases-fc202dd9",
+  "name": "cim-cases",
+  "nonce": "fc202dd9",
+  "verdict": "EXITED code=4201840641",
+  "exit": 2,
+  "isolation": "OK",
+  "run_end_seen": true,
+  "game_build": "25901688",
+  "repo_commit": "1a2b3c4d5e6f",
+  "loaded_versions": { "cim": "0.8.157-dev", "event_tweaker": "0.4.9" },
+  "local_builds": [],
+  "cases": [
+    { "id": "smoke_keep", "verdict": "PASS", "asserts": 10, "failed": 0, "seconds": 0.0, "detail": null },
+    { "id": "issue_402_career_commit_scrub", "verdict": "INCONCLUSIVE", "asserts": 2, "failed": 0, "seconds": 0.1, "detail": "regression suite of cim_dev ran earlier in this boot" },
+    { "id": "issue_80_cim_commit_callback", "verdict": "PASS", "asserts": 2, "failed": 0, "seconds": 0.3, "detail": null },
+    { "id": "issue_80_cim_standard_bench_opens", "verdict": "PASS", "asserts": 1, "failed": 0, "seconds": 4.4, "detail": null },
+    { "id": "issue_1654_store_backup", "verdict": "PASS", "asserts": 4, "failed": 0, "seconds": 1.2, "detail": null },
+    { "id": "issue_430_join_lock", "verdict": "PASS", "asserts": 3, "failed": 0, "seconds": 0.5, "detail": null }
+  ]
+}
