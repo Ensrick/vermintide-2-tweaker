@@ -73,7 +73,26 @@ function M.bind(graph, resolve_mod)
     return { capture_runtime = make, intact_runtime = valid, plain = plain, dense = dense,
         resolve = function(id)
             if (id ~= "wt" and id ~= "wt_dev") or type(resolve_mod) ~= "function" then return false, nil end
-            return pcall(resolve_mod, id)
+            local ok, mod = pcall(resolve_mod, id)
+            if ok and M.rejected(mod) then return true, nil end
+            return ok, mod
         end }
+end
+-- WP-CWV-13: a WT history runtime that rejected its catalog or profile
+-- registration is inert. WT writes fatal_error only at install
+-- (_wt_history_runtime.lua:116, :136) and every write path refuses while it is
+-- set (:345 _apply_all; :465 skips the boot apply; reapply/restore :386-392).
+-- WT still publishes it (_wt_history_owner.lua:57), e.g. wt_dev loaded after
+-- public wt ("private history tuple partial or foreign"). It produces nothing,
+-- so resolve reports that mod as absent and every family takes its no-history
+-- path instead of failing on an unbindable runtime. Fails closed: a runtime
+-- with any recorded ledger or active row stays present.
+function M.rejected(mod)
+    if type(mod) ~= "table" then return false end
+    local runtime = rawget(mod, "_wt_history_runtime")
+    if not plain(runtime) or not rawequal(rawget(runtime, "mod"), mod)
+            or rawget(runtime, "fatal_error") == nil then return false end
+    local ledgers, active = rawget(runtime, "ledgers"), rawget(runtime, "active")
+    return plain(ledgers) and next(ledgers) == nil and plain(active) and next(active) == nil
 end
 return M

@@ -166,9 +166,11 @@ return function(H, repo_root)
 		if not ok then error(err) end
 	end)
 
-	-- Vanilla stores the projectile config by reference on the fire action
-	-- (weapon_templates/dr_deus_01.lua:56); the Outrider clone deep-copies the
-	-- whole template (foundation table.lua:31-49), exactly as this fixture does.
+	-- Vanilla stores the projectile config by reference only on the template
+	-- file's local (weapon_templates/dr_deus_01.lua:56). The registered donor
+	-- is `dr_deus_01_template_1 = table.clone(weapon_template)` (:326) and the
+	-- Outrider clone deep-copies that donor; both copies are deep
+	-- (foundation table.lua:31-49), exactly as this fixture does.
 	local function deep_clone(value)
 		if type(value) ~= "table" then return value end
 		local copy = {}
@@ -177,42 +179,49 @@ return function(H, repo_root)
 	end
 	local DONOR_INFO = { projectile_units_template = "dr_deus_01_head",
 		gravity_settings = "drakegun", trajectory_template_name = "throw_trajectory" }
-	local function make_donor()
+	local function make_base()
 		return { actions = { action_one = {
 			default = { kind = "grenade_thrower", projectile_info = DONOR_INFO },
 			push = { kind = "push_stagger" },
 		} } }
 	end
+	-- Weapons.dr_deus_01_template_1 as vanilla registers it: a deep copy.
+	local function make_donor() return deep_clone(make_base()) end
 
-	H.test("CWV #1320 deep copy defeats identity; planner matches the donor row and swaps the clone only", function()
+	H.test("CWV #1320 deep-copied donor and clone defeat identity; planner matches the units template and swaps the clone only", function()
 		local donor = make_donor()
+		local donor_info_copy = donor.actions.action_one.default.projectile_info
+		H.truthy(donor_info_copy ~= DONOR_INFO,
+			"the registered donor is a deep copy, so a donor-identity match never held (rows=0 in game)")
 		local clone = deep_clone(donor)
 		local shoot = clone.actions.action_one.default
 		H.truthy(shoot.projectile_info ~= DONOR_INFO,
-			"the deep copy is why the old identity guard never matched (FAIL premise)")
+			"the deep copy is why the old clone identity guard never matched")
 		H.equal(shoot.projectile_info.projectile_units_template, "dr_deus_01_head")
 		local grenade = deep_clone(DONOR_INFO)
 		grenade.projectile_units_template = "grenade"
-		local rows = M.plan_projectile_swap(clone, donor, DONOR_INFO)
+		local rows = M.plan_projectile_swap(clone, DONOR_INFO)
 		H.equal(#rows, 1)
 		H.equal(rows[1].sub_action_name, "default")
 		H.equal(M.apply_projectile_swap(rows, grenade), 1)
 		H.equal(shoot.projectile_info, grenade,
 			"the fire action points at the authored grenade config (the #1320 check's assertion)")
-		H.equal(donor.actions.action_one.default.projectile_info, DONOR_INFO,
+		H.equal(donor.actions.action_one.default.projectile_info, donor_info_copy,
 			"the NATIVE Trollhammer keeps the torpedo config (#475 Invariant 1)")
+		H.equal(donor_info_copy.projectile_units_template, "dr_deus_01_head")
 		H.equal(clone.actions.action_one.push.projectile_info, nil)
 		H.equal(M.apply_projectile_swap(rows, grenade), 0, "second pass is a no-op")
+		H.equal(#M.plan_projectile_swap(clone, DONOR_INFO), 0,
+			"after the swap no clone row still carries the torpedo units template")
 	end)
 
-	H.test("CWV #1320 planner falls back to the stable units template without a donor row and skips foreign projectiles", function()
-		local donor = make_donor()
-		local clone = deep_clone(donor)
+	H.test("CWV #1320 planner matches every row on the donor units template and skips foreign projectiles", function()
+		local clone = deep_clone(make_donor())
 		clone.actions.action_one.shoot_charged = { kind = "grenade_thrower",
 			projectile_info = deep_clone(DONOR_INFO) }
 		clone.actions.action_one.arrow = { kind = "grenade_thrower",
 			projectile_info = { projectile_units_template = "we_deus_01_arrow" } }
-		local rows = M.plan_projectile_swap(clone, donor, DONOR_INFO)
+		local rows = M.plan_projectile_swap(clone, DONOR_INFO)
 		H.equal(#rows, 2)
 		H.equal(rows[1].sub_action_name, "default")
 		H.equal(rows[2].sub_action_name, "shoot_charged")
@@ -221,18 +230,30 @@ return function(H, repo_root)
 		H.equal(clone.actions.action_one.arrow.projectile_info.projectile_units_template,
 			"we_deus_01_arrow", "a sub-action on another projectile is never swapped")
 		-- Fail-closed shapes: no config, no clone, no grenade config.
-		H.equal(#M.plan_projectile_swap(clone, donor, nil), 0)
-		H.equal(#M.plan_projectile_swap(nil, donor, DONOR_INFO), 0)
+		H.equal(#M.plan_projectile_swap(clone, nil), 0)
+		H.equal(#M.plan_projectile_swap(nil, DONOR_INFO), 0)
 		H.equal(M.apply_projectile_swap(rows, nil), 0)
 	end)
 
-	H.test("CWV #1320 install swaps the fire action through the donor rows and leaves the donor alone", function()
+	H.test("CWV #1320 planner refuses to match when the donor config has no units template", function()
+		local clone = { actions = { action_one = {
+			default = { kind = "grenade_thrower", projectile_info = { gravity_settings = "drakegun" } },
+			other = { kind = "grenade_thrower", projectile_info = { gravity_settings = "arrows" } },
+		} } }
+		H.equal(#M.plan_projectile_swap(clone, { gravity_settings = "drakegun" }), 0,
+			"nil == nil must not select every projectile row")
+		H.equal(#M.plan_projectile_swap(clone, { projectile_units_template = "" }), 0)
+		H.equal(#M.plan_projectile_swap(clone, { projectile_units_template = 7 }), 0)
+	end)
+
+	H.test("CWV #1320 install swaps the fire action of a deep-copied donor's clone and leaves the donor alone", function()
 		local old_w, old_nl, old_at, old_p = _G.Weapons, _G.NetworkLookup, _G.ActionTemplates, _G.Projectiles
 		local ok, err = pcall(function()
 			local donor = make_donor()
 			donor.actions.action_one.default.lookup_data = {
 				item_template_name = M.DONOR_TEMPLATE_KEY,
 				action_name = "action_one", sub_action_name = "default" }
+			local donor_info_copy = donor.actions.action_one.default.projectile_info
 			local clone = deep_clone(donor)
 			local grenade = deep_clone(DONOR_INFO)
 			grenade.projectile_units_template = "grenade"
@@ -252,14 +273,16 @@ return function(H, repo_root)
 			H.equal(state.projectile_units_template, "grenade")
 			H.equal(clone.actions.action_one.default.projectile_info, grenade,
 				"the fire action points at the authored grenade config (the #1320 check's assertion)")
-			H.equal(donor.actions.action_one.default.projectile_info, DONOR_INFO,
+			H.equal(donor.actions.action_one.default.projectile_info, donor_info_copy,
 				"the NATIVE Trollhammer keeps the torpedo config")
+			H.equal(donor_info_copy.projectile_units_template, "dr_deus_01_head")
 			H.truthy(logs[1]:find(
 				"[cwv:1320] outrider projectile swap: rows=1 swapped=1 units_template=grenade", 1, true))
-			-- Re-install: the swap is idempotent.
+			-- Re-install: the swap is idempotent (nothing left to plan).
 			local second = M.install(nil, { om = {}, network_lookup = network_lookup })
-			H.equal(second.projectile_rows, 1)
+			H.equal(second.projectile_rows, 0)
 			H.equal(second.projectile_swapped, 0)
+			H.equal(clone.actions.action_one.default.projectile_info, grenade)
 		end)
 		_G.Weapons, _G.NetworkLookup, _G.ActionTemplates, _G.Projectiles = old_w, old_nl, old_at, old_p
 		if not ok then error(err) end
@@ -272,7 +295,9 @@ return function(H, repo_root)
 		H.equal(constructor:find("mod:dofile(", 1, true), nil,
 			"the core-template owner takes no dofile (decomposition contract)")
 		local wire = read(module_root .. "_cwv_outrider_projectile_wire.lua")
-		H.truthy(wire:find("M.plan_projectile_swap(template, donor, donor_info)", 1, true))
+		H.truthy(wire:find("M.plan_projectile_swap(template, donor_info)", 1, true))
+		H.equal(wire:find("donor_sub.projectile_info == donor_info", 1, true), nil,
+			"the registered donor is a deep copy too (dr_deus_01.lua:326): no identity branch")
 		H.truthy(wire:find("M.apply_projectile_swap(swap_rows, grenade_info)", 1, true))
 	end)
 
