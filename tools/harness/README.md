@@ -16,12 +16,12 @@ Rig root: `%LOCALAPPDATA%\vt2-harness` (`-RigRoot` overrides it; the author mach
 ## Running
 
 ```powershell
-pwsh -NoProfile -File tools/harness/run.ps1 -Plan qa/runtime/plans/smoke-keep.json [-RigRoot <dir>] [-Visible]
+pwsh -NoProfile -File tools/harness/run.ps1 -Plan qa/runtime/plans/smoke-keep.json [-RigRoot <dir>] [-Visible] [-Wait <minutes>]
 ```
 
-Exit code: 0 every case PASS; 1 at least one FAIL; 2 ERROR, TIMEOUT or INCONCLUSIVE, or the run did not complete; 3 the rig refused to start or isolation broke. It refuses when a Vermintide process exists, Steam is not running, free RAM is under 6 GiB, the bootstrap item is not installed, or another rig run holds the lock.
+Exit code: 0 every case PASS; 1 at least one FAIL (also when the run broke off after it); 2 ERROR, TIMEOUT, INCONCLUSIVE or CRASH, or the run did not complete; 3 the rig refused to start or isolation broke. It refuses when a Vermintide process or a process listed in `busy-processes.txt` runs, Steam is not running, free RAM is under 6 GiB, the bootstrap item is not installed, or another rig run holds the lock (with `-Wait <minutes>` it queues for the lock first; see "Reliability").
 
-Offline tests (no game): `pwsh -File tools/harness/tests/<name>.Tests.ps1` for `GameProcess`, `Profile`, `HostLog`, `FindRunLog`, `SmokePlan` and `Slots`, and `qa/lua/tests/test_rig_driver.lua` and `test_rig_api_*.lua` (simulated game: `qa/lua/tests/_rig_driver_env.lua`) inside `pwsh -File qa/check_lua_unit_tests.ps1`. `pwsh -File qa/check_runtime_scripts.ps1` checks the shape of every case and plan in seconds (fields, file-name issue number, no engine access at the top level, every `T.<name>` in the stub `qa/runtime/_stub/T.lua` and in `API.md`); it proves shape only, never that a case passes. `qa/runtime/plans/api-selftest.json` calls each available keep helper once in the game.
+Offline tests (no game): `pwsh -File tools/harness/tests/<name>.Tests.ps1` for `GameProcess`, `Profile`, `HostLog`, `FindRunLog`, `SmokePlan`, `Slots`, `Boots`, `ModSets`, `Sweep`, `UgcTool` and `Reliability`, and `qa/lua/tests/test_rig_driver.lua` and `test_rig_api_*.lua` (simulated game: `qa/lua/tests/_rig_driver_env.lua`) inside `pwsh -File qa/check_lua_unit_tests.ps1`. `pwsh -File qa/check_runtime_scripts.ps1` checks the shape of every case and plan in seconds (fields, file-name issue number, no engine access at the top level, every `T.<name>` in the stub `qa/runtime/_stub/T.lua` and in `API.md`); it proves shape only, never that a case passes. `qa/runtime/plans/api-selftest.json` calls each available keep helper once in the game.
 
 ## Plan format
 
@@ -109,8 +109,20 @@ Every run start enqueues the cloud script `deusRunStarted` (`DeusMechanism._setu
 | PASS | every assertion held |
 | FAIL | an assertion did not hold: the product is wrong (the only verdict that says so) |
 | ERROR | the script threw or did not compile: fix the script |
-| TIMEOUT | the case ran longer than its `timeout` |
-| INCONCLUSIVE | a `T.require` precondition was false, or the case was never reached |
+| TIMEOUT | the case ran longer than its `timeout`, or the host time limit ended the run while it ran |
+| INCONCLUSIVE | a `T.require` precondition was false, or the case was never reached, or the rig stopped the run while it ran (stalled, low RAM) |
+| CRASH | the game crashed while the case ran (a new crash dump, or the process exited by itself without `RUN END`); every later case is INCONCLUSIVE |
+
+## Reliability (WP-H-09)
+
+- **Liveness.** Driver 0.4.11 saves its `vt2_rig_progress` checkpoint at every phase change, when a case begins and ends, and at least every 15 s; it carries `seq`, the running case (`current`) and the verdicts so far (`verdicts = "<id>=<VERDICT>;..."`). `run.ps1` reads it every 5 s and ends the run (`STALLED-KILLED`, `host_stop: stalled`) when `seq`/`t` has not moved for 60 s in play or 240 s while booting or loading (`-StallPlaySeconds`, `-StallLoadSeconds`; before the first checkpoint the long limit applies).
+- **Crash.** A new file in the rig profile's `crash_dumps` (copied into `<run>\crash\`, up to 64 MiB each) or an exit without `RUN END` makes the running case CRASH and every later case INCONCLUSIVE (`Get-RunVerdicts.ps1`). Because a dying process loses the log's tail, finished verdicts missing from the log are taken from the last checkpoint (`source: progress`).
+- **Resources.** `run.ps1` refuses to start under 6 GiB free RAM (`-MinFreeGiB`) or while a process in `tools/harness/busy-processes.txt` runs, and stops a run as INCONCLUSIVE when free RAM falls under 3 GiB (`-StopFreeGiB`, `LOW-RAM-KILLED`). It never kills a process it did not start.
+- **Queue.** `-Wait <minutes>` waits for the rig lock (one run at a time) before the checks that need the machine to themselves; without it a held lock refuses at once. `Invoke-RigBoots.ps1` takes the same `-Wait`.
+- **Retention.** After a top-level run only the newest 30 run folders under `<RigRoot>\runs` stay (`-KeepRuns`), plus every folder a file in `qa/runtime/reports/` names (`Remove-OldRuns.ps1`; it prints what it removes, skips any folder holding a junction or link, and touches nothing that is not a run folder). `summary.json` lists `retention_removed`.
+- **Repeatability.** `pwsh -File tools/harness/Repeat-Plan.ps1 -Plan qa/runtime/plans/mission-smoke.json -Count 10` runs the plan ten times (each with `-NoOrderCheck`, into `<RigRoot>\repeats\<stamp>-<name>\run-<i>\`) and compares the verdict tables (`repeat.json`, `repeat.md`); exit 0 only when all tables match and isolation held every time. A case whose verdict differs is appended to `qa/runtime/quarantine.txt` and must not close issues until fixed.
+- **Order check.** When a plan with more than one case has a FAIL, `run.ps1` re-runs each failed case once alone in a fresh boot (`Invoke-OrderCheck.ps1`, `<run>\alone-<id>\`) before reporting. A case that passes alone is reported as order-dependent (`alone_verdict`, `order_dependent` on its row; a note). The FAIL stands; `-NoOrderCheck` skips this, and boots never do it (it would rebuild the profile the next boot keeps).
+- Offline: `tools/harness/tests/Reliability.Tests.ps1` (canned logs for every verdict kind, retention, repeat, order check, queue and busy refusals; never starts the game).
 
 ## Six traps
 
@@ -153,4 +165,4 @@ The game loads only Workshop items Steam lists as subscribed, and a mod's bundle
 
 ## Reading a run
 
-`runs\<run>\summary.md` has one line with the host verdict (`EXITED code=...`, `HOST-TIMEOUT-KILLED`, `VISIBLE-WINDOW`), the exit code, `isolation OK|BROKEN` and whether `RUN END` was seen, then one table row per case (verdict, assertion count, failed count, seconds, first failure). `summary.json` adds `keep_ready_seconds` (log timestamp of `KEEP READY` minus the first log line; the polled `marks_seconds.keep_ready` is later because the log is buffered), the driver's own `keep_ready_driver_t`, the host log findings, `loaded_versions` from the `[<tag>:LOAD] v<version>` banners, the seconds from start to each boot mark, the first script errors and notes. `evidence.txt` is every `[vt2t:<nonce>]` line in order; `console.log` is the game log (the game is started with `--default-console-log-path <run>\console.log`; `log_source` says whether that switch worked or the profile's `console_logs` folder was used after 20 s; in the rig runs of 2026-11-15 the retail exe ignored the switch and the fallback found the log); `plan.json` and `user_settings.after.config` are kept for replay.
+`runs\<run>\summary.md` has one line with the host verdict (`EXITED code=...`, `HOST-TIMEOUT-KILLED`, `STALLED-KILLED`, `LOW-RAM-KILLED`, `VISIBLE-WINDOW`), the exit code, `isolation OK|BROKEN` and whether `RUN END` was seen, then one table row per case (verdict, assertion count, failed count, seconds, first failure). `summary.json` adds `keep_ready_seconds` (log timestamp of `KEEP READY` minus the first log line; the polled `marks_seconds.keep_ready` is later because the log is buffered), the driver's own `keep_ready_driver_t`, the host log findings, `loaded_versions` from the `[<tag>:LOAD] v<version>` banners, the seconds from start to each boot mark, the first script errors and notes. `evidence.txt` is every `[vt2t:<nonce>]` line in order; `console.log` is the game log (the game is started with `--default-console-log-path <run>\console.log`; `log_source` says whether that switch worked or the profile's `console_logs` folder was used after 20 s; in the rig runs of 2026-11-15 the retail exe ignored the switch and the fallback found the log); `plan.json` and `user_settings.after.config` are kept for replay.

@@ -40,9 +40,17 @@
   "cases" runs the boots in order on one rig profile; every boot after the first starts from the profile the one
   before it left. Each boot's evidence is in <run>\boot-<i>\; the run's summary lists every boot (Split-BootPlan.ps1).
 
-  Exit code: 0 = run completed and every case PASS; 1 = at least one FAIL, a forbidden log line or a missing
-  expected line; 2 = ERROR/TIMEOUT/INCONCLUSIVE or the run did not complete; 3 = rig refused to start or isolation
-  was broken.
+  Exit code: 0 = run completed and every case PASS; 1 = at least one FAIL (also when the run broke off later), a
+  forbidden log line or a missing expected line; 2 = ERROR/TIMEOUT/INCONCLUSIVE/CRASH or the run did not complete;
+  3 = rig refused to start or isolation was broken.
+
+  Reliability (WP-H-09; tools/harness/README.md "Reliability"): -Wait <minutes> queues for the rig lock; a busy
+  process (busy-processes.txt) or free RAM under -MinFreeGiB refuses the start; the run is stopped as INCONCLUSIVE
+  when the driver's progress checkpoint stops moving (-StallPlaySeconds in play, -StallLoadSeconds while booting or
+  loading) or free RAM falls under -StopFreeGiB; a new crash dump, or an exit without RUN END, makes the running case
+  CRASH (Get-RunVerdicts.ps1); a FAIL is re-run once alone in a fresh boot (Invoke-OrderCheck.ps1, not with
+  -NoOrderCheck); afterwards only the newest -KeepRuns run folders and those qa/runtime/reports names are kept
+  (Remove-OldRuns.ps1).
 
 .NOTES
   Never starts if any Vermintide process exists. Never kills a process it did not start (job object).
@@ -68,7 +76,17 @@ param(
     [int] $StopDelaySeconds = 5,
     [switch] $KeepOwnerMods,                # no-plan experiments: leave the copied mod list as it is
     [string] $RunDir = '',                  # WP-H-08: evidence folder of one boot of a plan with boots (Invoke-RigBoots.ps1)
-    [switch] $KeepProfile                   # WP-H-08: a later boot starts from the profile the boot before it left
+    [switch] $KeepProfile,                  # WP-H-08: a later boot starts from the profile the boot before it left
+    [double] $Wait = 0,                     # WP-H-09: minutes to wait for the rig lock (0 = refuse when it is held)
+    [switch] $NoOrderCheck,                 # WP-H-09: do not re-run a FAIL alone (Repeat-Plan.ps1, boots, the re-run itself)
+    [int] $KeepRuns = 30,                   # WP-H-09: run folders kept by Remove-OldRuns.ps1; 0 or less keeps all
+    [string] $ReportsDir = (Join-Path $PSScriptRoot '..\..\qa\runtime\reports'),
+    [string] $BusyProcessesFile = (Join-Path $PSScriptRoot 'busy-processes.txt'),
+    [double] $MinFreeGiB = 6,               # WP-H-09: refuse to start below this much free RAM
+    [double] $StopFreeGiB = 3,              # WP-H-09: stop the run as INCONCLUSIVE below this much free RAM
+    [int] $StallPlaySeconds = 60,           # WP-H-09: progress checkpoint age that ends a run in play ...
+    [int] $StallLoadSeconds = 240,          # ... and while booting or loading
+    [string] $LockName = 'Global\Vt2RigSingleInstance'
 )
 $ErrorActionPreference = 'Stop'
 $here = $PSScriptRoot
@@ -97,7 +115,7 @@ if ($planObj -and $planObj.PSObject.Properties['boots'] -and $planObj.boots) {
     $childArgs = @{ Renderer = $Renderer; ExtraArgs = $ExtraArgs; DriverFile = $DriverFile; DriverId = $DriverId; SharedDir = $SharedDir; SlotsFile = $SlotsFile; SteamApps = $SteamApps }
     if ($Visible) { $childArgs.Visible = $true }
     if ($TimeoutSeconds -gt 0) { $childArgs.TimeoutSeconds = $TimeoutSeconds }
-    & (Join-Path $here 'Invoke-RigBoots.ps1') -PlanPath $planPath -Name $Name -RigRoot $RigRoot -ChildArgs $childArgs -RunScript $PSCommandPath
+    & (Join-Path $here 'Invoke-RigBoots.ps1') -PlanPath $planPath -Name $Name -RigRoot $RigRoot -ChildArgs $childArgs -RunScript $PSCommandPath -Wait $Wait -LockName $LockName -KeepRuns $KeepRuns -ReportsDir $ReportsDir
     exit $LASTEXITCODE
 }
 
@@ -126,18 +144,36 @@ try {
     }
     $acf = Get-Content -LiteralPath (Join-Path $steamApps 'appmanifest_552500.acf') -Raw
     if ($acf -notmatch '"StateFlags"\s+"4"') { throw 'VT2 is not fully installed (StateFlags is not 4).' }
-    $running = Get-Process -ErrorAction SilentlyContinue | Where-Object { $_.ProcessName -match '^(vermintide2|vermintide2_dx12|vermintide2_launcher)$' }
-    if ($running) { throw "A Vermintide process is already running (pid $($running.Id -join ', ')). Refusing to start." }
-    if (-not (Get-Process -Name steam -ErrorAction SilentlyContinue)) { throw 'Steam is not running.' }
     $exe = if ($Renderer -eq 'dx12') { Join-Path $install.BinariesDx12 'vermintide2_dx12.exe' } else { Join-Path $install.Binaries 'vermintide2.exe' }
     if (-not (Test-Path -LiteralPath $exe)) { throw "Game exe not found: $exe" }
-    $mem = Get-CimInstance Win32_OperatingSystem
-    if ($mem.FreePhysicalMemory / 1MB -lt 6) { throw "Free RAM below 6 GiB ($([math]::Round($mem.FreePhysicalMemory / 1MB, 1)) GiB)." }
 }
 catch { Write-Host "RIG REFUSED: $($_.Exception.Message)"; exit 3 }
 
-$mutex = [System.Threading.Mutex]::new($false, 'Global\Vt2RigSingleInstance')
-if (-not $mutex.WaitOne(0)) { Write-Host 'RIG REFUSED: another rig run holds the lock.'; exit 3 }
+# ---------- rig lock (WP-H-09 queue: -Wait <minutes>) ----------
+# One run at a time. A plan with boots holds the lock in Invoke-RigBoots.ps1 on this same thread, so a boot's own
+# WaitOne returns at once (a mutex is re-entrant for its owning thread). An abandoned lock (its holder died) is ours.
+$mutex = [System.Threading.Mutex]::new($false, $LockName)
+$waitMs = [int]([math]::Max(0.0, [double]$Wait) * 60000)
+if ($waitMs -gt 0) { Write-Host "waiting up to $Wait min for the rig lock" }
+$gotLock = $false
+try { $gotLock = $mutex.WaitOne($waitMs) } catch [System.Threading.AbandonedMutexException] { $gotLock = $true }
+if (-not $gotLock) { Write-Host "RIG REFUSED: another rig run holds the lock$(if ($waitMs -gt 0) { " (waited $Wait min)" })."; $mutex.Dispose(); exit 3 }
+
+# ---------- preflight under the lock: nothing else may be running (WP-H-09 step 3) ----------
+try {
+    $running = Get-Process -ErrorAction SilentlyContinue | Where-Object { $_.ProcessName -match '^(vermintide2|vermintide2_dx12|vermintide2_launcher)$' }
+    if ($running) { throw "A Vermintide process is already running (pid $($running.Id -join ', ')). Refusing to start." }
+    $busyNames = @()
+    if (Test-Path -LiteralPath $BusyProcessesFile) {
+        $busyNames = @([System.IO.File]::ReadAllLines($BusyProcessesFile) | ForEach-Object { ($_ -replace '#.*$', '').Trim() } | Where-Object { $_ } | ForEach-Object { $_ -replace '\.exe$', '' })
+    }
+    $busy = @(Get-Process -ErrorAction SilentlyContinue | Where-Object { $busyNames -contains $_.ProcessName })
+    if ($busy.Count) { throw "A busy process is running ($((@($busy | ForEach-Object { "$($_.ProcessName) pid $($_.Id)" })) -join ', '); busy-processes.txt). Refusing to start." }
+    if (-not (Get-Process -Name steam -ErrorAction SilentlyContinue)) { throw 'Steam is not running.' }
+    $mem = Get-CimInstance Win32_OperatingSystem
+    if ($mem.FreePhysicalMemory / 1MB -lt $MinFreeGiB) { throw "Free RAM below $MinFreeGiB GiB ($([math]::Round($mem.FreePhysicalMemory / 1MB, 1)) GiB)." }
+}
+catch { Write-Host "RIG REFUSED: $($_.Exception.Message)"; $mutex.ReleaseMutex(); $mutex.Dispose(); exit 3 }
 
 $nonce = -join ((1..8) | ForEach-Object { '{0:x}' -f (Get-Random -Maximum 16) })
 $stamp = (Get-Date).ToUniversalTime().ToString('yyyyMMdd-HHmmss')
@@ -193,6 +229,8 @@ if ($TimeoutSeconds -le 0) { $TimeoutSeconds = [int](($planObj.timeout ?? 180)) 
 $started = Get-Date
 $proc = $null; $verdict = 'UNKNOWN'; $notes = [System.Collections.Generic.List[string]]::new()
 $marks = [ordered]@{}; $logPath = $null; $logSource = $null; $stopAt = $null; $text = ''; $lastHb = $started; $lastNote = ''
+# WP-H-09 liveness and resource floor: the driver's checkpoint (seq, t) must keep moving; free RAM must stay above the floor
+$hostStop = ''; $hostStopDetail = ''; $lastProgressAt = $started; $lastProgressKey = ''; $progressPhase = ''
 $patterns = [ordered]@{
     realm = 'realm = (modded|official)'; mods_scan = 'Starting mod scan'; splash = 'StateSplashScreen'; title = 'StateTitleScreen'
     loading = 'StateLoading'; ingame = 'StateIngame'; run_begin = '\[vt2t:' + $nonce + '\] RUN BEGIN'; keep_ready = '\[vt2t:' + $nonce + '\] KEEP READY'
@@ -228,15 +266,32 @@ try {
                 if ($pm.Success -and $pm.Value -match 'nonce = "' + $nonce + '"') {
                     $note = [regex]::Match($pm.Value, 'note = "([^"]*)"').Groups[1].Value
                     if ($note -and $note -ne $lastNote) { $lastNote = $note; Write-Host ("  [{0,5:N0}s] {1}" -f ($now - $started).TotalSeconds, $note) }
+                    $key = [regex]::Match($pm.Value, '(?m)^\tseq = (\S+)').Groups[1].Value + '/' + [regex]::Match($pm.Value, '(?m)^\tt = (\S+)').Groups[1].Value
+                    if ($key -ne $lastProgressKey) { $lastProgressKey = $key; $lastProgressAt = $now }
+                    $progressPhase = [regex]::Match($pm.Value, '(?m)^\tphase = "([^"]*)"').Groups[1].Value
+                }
+            } catch { }
+            # before the driver's first checkpoint, and while it boots or loads, the long limit applies
+            $limit = if (-not $lastProgressKey -or $progressPhase -in 'BOOT', 'LOADING') { $StallLoadSeconds } else { $StallPlaySeconds }
+            $age = ($now - $lastProgressAt).TotalSeconds
+            if ($age -gt $limit) {
+                $hostStop = 'stalled'; $hostStopDetail = "no progress checkpoint for $([math]::Round($age)) s in phase $(if ($progressPhase) { $progressPhase } else { 'none yet' }), limit $limit s"
+                $notes.Add("stalled: $hostStopDetail"); $verdict = 'STALLED-KILLED'; $proc.Kill(); break
+            }
+            try {
+                $freeGiB = (Get-CimInstance Win32_OperatingSystem).FreePhysicalMemory / 1MB
+                if ($freeGiB -lt $StopFreeGiB) {
+                    $hostStop = 'low-ram'; $hostStopDetail = "$([math]::Round($freeGiB, 2)) GiB free, floor $StopFreeGiB GiB"
+                    $notes.Add("low RAM: $hostStopDetail"); $verdict = 'LOW-RAM-KILLED'; $proc.Kill(); break
                 }
             } catch { }
         }
         if (-not $Visible) {
             $w = $proc.WindowsOnUserDesktop()
-            if ($w.Count -gt 0) { $notes.Add("WINDOW ON USER DESKTOP: $($w -join '; ')"); $verdict = 'VISIBLE-WINDOW'; $proc.Kill(); break }
+            if ($w.Count -gt 0) { $notes.Add("WINDOW ON USER DESKTOP: $($w -join '; ')"); $verdict = 'VISIBLE-WINDOW'; $hostStop = 'visible-window'; $proc.Kill(); break }
         }
-        if ($stopAt -and $now -ge $stopAt) { $verdict = 'STOPPED-ON-PATTERN'; $proc.Kill(); break }
-        if ($now -ge $deadline) { $verdict = 'HOST-TIMEOUT-KILLED'; $proc.Kill(); break }
+        if ($stopAt -and $now -ge $stopAt) { $verdict = 'STOPPED-ON-PATTERN'; $hostStop = 'stopped-on-pattern'; $proc.Kill(); break }
+        if ($now -ge $deadline) { $verdict = 'HOST-TIMEOUT-KILLED'; $hostStop = 'host-timeout'; $hostStopDetail = "$TimeoutSeconds s"; $proc.Kill(); break }
     }
     if ($verdict -eq 'UNKNOWN') { $verdict = "EXITED code=$($proc.ExitCode)" }
     $marks['ended'] = [math]::Round(((Get-Date) - $started).TotalSeconds, 1)
@@ -257,8 +312,16 @@ if ($logPath) {
     $text = Get-Content -LiteralPath $logPath -Raw
 }
 Copy-Item -LiteralPath (Join-Path $rigVt2 'user_settings.config') -Destination (Join-Path $run 'user_settings.after.config') -Force
-Get-ChildItem -LiteralPath (Join-Path $rigVt2 'crash_dumps') -ErrorAction SilentlyContinue | Where-Object { $_.LastWriteTime -ge $started } |
-    ForEach-Object { $notes.Add("crash dump: $($_.Name) $($_.Length) bytes") }
+# WP-H-09 step 2: a new crash dump is copied into <run>\crash\ (up to 64 MiB each; the log is already in the run folder)
+$dumps = @(Get-ChildItem -LiteralPath (Join-Path $rigVt2 'crash_dumps') -File -ErrorAction SilentlyContinue | Where-Object { $_.LastWriteTime -ge $started })
+foreach ($d in $dumps) {
+    if ($d.Length -le 64MB) {
+        New-Item -ItemType Directory -Force -Path (Join-Path $run 'crash') | Out-Null
+        Copy-Item -LiteralPath $d.FullName -Destination (Join-Path $run "crash\$($d.Name)") -Force
+        $notes.Add("crash dump: $($d.Name) $($d.Length) bytes (copied to crash\)")
+    }
+    else { $notes.Add("crash dump: $($d.Name) $($d.Length) bytes (over 64 MiB, not copied)") }
+}
 $after = @{}; foreach ($f in $watched) { $after[$f] = Get-FileSha (Join-Path $realProfile $f) }
 $isolation = 'OK'
 foreach ($f in $watched) { if ($before[$f] -ne $after[$f]) { $isolation = 'BROKEN'; $notes.Add("owner file changed: $f") } }
@@ -274,12 +337,6 @@ foreach ($lb in $localBuilds) {
 # evidence lines
 $lines = @(); if ($text) { $lines = @([regex]::Matches($text, '(?m)^.*\[vt2t:' + $nonce + '\] (.*)$') | ForEach-Object { $_.Groups[1].Value.TrimEnd() }) }
 $lines | Set-Content -LiteralPath (Join-Path $run 'evidence.txt')
-$cases = @()
-foreach ($l in $lines) {
-    if ($l -match '^CASE END id=(\S+) verdict=(\S+) asserts=(\d+) failed=(\d+) t=([\d\.]+)(?: detail="(.*)")?') {
-        $cases += [ordered]@{ id = $Matches[1]; verdict = $Matches[2]; asserts = [int]$Matches[3]; failed = [int]$Matches[4]; seconds = [double]$Matches[5]; detail = $Matches[6] }
-    }
-}
 $runEnd = [bool]($lines | Where-Object { $_ -match '^RUN END' })
 # WP-H-08 step 4: the driver makes the lobby private at KEEP READY and says whether the game reports it private
 $lobbyPrivate = $null
@@ -304,14 +361,27 @@ foreach ($h in $forbidHits) { Write-Host "FORBIDDEN LOG LINE ($($h.rule)): $($h.
 foreach ($p in $expectMisses) { Write-Host "EXPECTED LOG LINE MISSING: $p" }
 foreach ($e in @($hostLog.AllowErrors)) { $notes.Add("host_allow_log: $e") }
 
+# WP-H-09: the case table, with CRASH, host stops and verdicts recovered from the last progress checkpoint
+$progressCurrent = ''; $progressVerdicts = ''
+$afterCfg = Join-Path $run 'user_settings.after.config'
+if (Test-Path -LiteralPath $afterCfg) {
+    $pm = [regex]::Match([System.IO.File]::ReadAllText($afterCfg), '(?ms)^vt2_rig_progress = \{.*?^\}')
+    if ($pm.Success -and $pm.Value -match 'nonce = "' + $nonce + '"') {
+        $progressCurrent = [regex]::Match($pm.Value, '(?m)^\tcurrent = "([^"]*)"').Groups[1].Value
+        $progressVerdicts = [regex]::Match($pm.Value, '(?m)^\tverdicts = "([^"]*)"').Groups[1].Value
+    }
+}
+$crashed = [bool]($planObj -and -not $runEnd -and ($dumps.Count -gt 0 -or (-not $hostStop -and $verdict -like 'EXITED*')))
+$crashDetail = if ($dumps.Count) { "crash dump $($dumps[0].Name)" } elseif ($crashed) { "process $verdict without RUN END" } else { '' }
+$planCaseIds = @(); if ($planObj -and $planObj.PSObject.Properties['cases']) { $planCaseIds = @($planObj.cases | ForEach-Object { [string]$_.id }) }
+$verdictArgs = @{ Lines = [string[]]$lines; PlanCaseIds = [string[]]$planCaseIds; RunEnd = $runEnd; Crashed = $crashed; CrashDetail = $crashDetail; HostStop = $hostStop; HostStopDetail = $hostStopDetail; ProgressCurrent = $progressCurrent; ProgressVerdicts = $progressVerdicts }
+$runVerdicts = & (Join-Path $here 'Get-RunVerdicts.ps1') @verdictArgs
+$cases = @($runVerdicts.Cases)
+
 $exit = 2
 if ($isolation -ne 'OK') { $exit = 3 }
-elseif ($planObj -and $runEnd -and $cases.Count -gt 0) {
-    if ($cases | Where-Object { $_.verdict -eq 'FAIL' }) { $exit = 1 }
-    elseif ($cases | Where-Object { $_.verdict -ne 'PASS' }) { $exit = 2 }
-    else { $exit = 0 }
-}
-elseif (-not $planObj) { $exit = 0 }
+elseif ($planObj) { $exit = $runVerdicts.Exit }
+else { $exit = 0 }
 if (($forbidHits.Count -or $expectMisses.Count) -and $exit -ne 3) { $exit = 1 }
 # WP-H-03: a plan with "sweep": true turns the regression suites' output into sweep.json / sweep.md; a FAIL row
 # fails the run (exit 1). A suite that never returned, or a plan mod no suite printed for (missing_suites), leaves an
@@ -324,8 +394,33 @@ if ($planObj -and $planObj.PSObject.Properties['sweep'] -and $planObj.sweep -eq 
     if ($sweep.fail -gt 0 -and $exit -ne 3) { $exit = 1 }
     elseif (($sweep.inconclusive_suites + $sweep.missing_suites) -gt 0 -and $exit -eq 0) { $exit = 2 }
 }
+# WP-H-09 step 7: a FAIL is re-run once alone in a fresh boot before it is reported; PASS alone = order-dependent
+$orderCheck = @()
+$failed = @($cases | Where-Object { $_.verdict -eq 'FAIL' } | ForEach-Object { $_.id })
+if ($planObj -and -not $NoOrderCheck -and $isolation -eq 'OK' -and $failed.Count -and $planCaseIds.Count -gt 1) {
+    $orderArgs = @{ Renderer = $Renderer; ExtraArgs = $ExtraArgs; DriverFile = $DriverFile; DriverId = $DriverId; SharedDir = $SharedDir; LibDir = $LibDir; SlotsFile = $SlotsFile; SteamApps = $SteamApps; Wait = $Wait; LockName = $LockName; BusyProcessesFile = $BusyProcessesFile; KeepRuns = 0 }
+    if ($Visible) { $orderArgs.Visible = $true }
+    $orderCheck = @(& (Join-Path $here 'Invoke-OrderCheck.ps1') -PlanPath $planPath -RunDir $run -CaseIds $failed -RigRoot $RigRoot -RunScript $PSCommandPath -ChildArgs $orderArgs)
+    foreach ($o in $orderCheck) {
+        $c = @($cases | Where-Object { $_.id -eq $o.id })[0]
+        if ($c) { $c.alone_verdict = $o.alone_verdict; $c.order_dependent = $o.order_dependent }
+        $notes.Add("order check: $($o.id) FAIL in the plan, $(if ($o.alone_verdict) { $o.alone_verdict } else { 'no verdict' }) alone ($($o.folder))$(if ($o.order_dependent) { ': order-dependent' })")
+    }
+}
+elseif ($planObj -and $failed.Count -and $planCaseIds.Count -gt 1) { $notes.Add('order check skipped' + $(if ($NoOrderCheck) { ' (-NoOrderCheck)' } else { " (isolation $isolation)" })) }
+
+# WP-H-09 step 5: retention, top-level runs only (a boot or a re-run lives inside its parent's folder)
+$retention = $null
+if (-not $RunDir -and $KeepRuns -gt 0) {
+    try { $retention = & (Join-Path $here 'Remove-OldRuns.ps1') -RunsDir (Join-Path $RigRoot 'runs') -Keep $KeepRuns -ReportsDir $ReportsDir -Protect $run }
+    catch { $notes.Add("retention failed: $($_.Exception.Message)") }
+}
+
 $summary = [ordered]@{
     run = "$stamp-$Name-$nonce"; name = $Name; nonce = $nonce; verdict = $verdict; exit = $exit; isolation = $isolation
+    run_state = $runVerdicts.State; running_case = $runVerdicts.Running; host_stop = $hostStop; host_stop_detail = $hostStopDetail
+    crashed = $crashed; crash_dumps = @($dumps | ForEach-Object { $_.Name }); order_check = $orderCheck
+    retention_removed = @($retention.Removed | Where-Object { $_ })
     private_desktop = (-not $Visible); renderer = $Renderer; arguments = $arguments; run_end_seen = $runEnd
     keep_ready_seconds = $hostLog.KeepReadySeconds; keep_ready_driver_t = $hostLog.KeepReadyDriverT
     backend_shield = [bool]$shieldOn; shield_installed_before_first_commit = $shieldFirst

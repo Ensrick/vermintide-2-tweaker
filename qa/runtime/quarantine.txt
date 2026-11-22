@@ -1,0 +1,3 @@
+# Rig cases whose verdict differed between repeated runs of one plan (WP-H-09 step 6). tools/harness/Repeat-Plan.ps1
+# appends one line per case: <plan name><TAB><case id><TAB><verdict of each run, comma separated><TAB><date, UTC>.
+# A quarantined case must not close an issue until it is fixed and its line is removed.
