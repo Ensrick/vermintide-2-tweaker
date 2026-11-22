@@ -1,6 +1,6 @@
 # Character Weapon Variants — Changelog
 
-## 0.1.575-dev (2026-11-22) -- A rejected WT history runtime counts as absent (WP-CWV-13, #1908)
+## 0.1.575-dev (2026-11-22) -- A rejected WT history runtime counts as absent (WP-CWV-13, #1908); Outrider grenade swap matches the units template (#1320)
 
 - With both Weapon Tweaker streams loaded, the second stream's history profile
   transaction refuses the private names the first already published ("private
@@ -12,6 +12,14 @@
   row, a cleared `fatal_error`, a metatable or a foreign owner stays present.
 - New offline suite `test_cwv_rejected_history_runtime` loads the actual WT
   runtimes from both trees in both load orders. Not confirmed in game.
+- #1320: the Outrider Grenade Launcher's fire action still spawned the
+  Trollhammer torpedo unit. The registered donor `dr_deus_01_template_1` is
+  itself a deep copy of the template (`dr_deus_01.lua:326`), so the swap's
+  identity match against `Projectiles.dr_deus_01` never held (boot log
+  `rows=0`). The swap now matches every clone fire row whose
+  `projectile_units_template` equals the donor config's (`dr_deus_01_head`)
+  and matches nothing when the donor config has no such field. Offline
+  tests use a deep-copied donor. Not confirmed in game.
 
 ## 0.1.574-dev (2026-11-15) -- Keep CWV item ids out of the career-data commit (#402, #1688)
 
