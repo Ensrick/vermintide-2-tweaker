@@ -14,7 +14,7 @@ function M.new(H, root, options)
         if options.resolve then return options.resolve(id, mods) end
         return rawget(mods, id)
     end
-    local function install(c, id, state, parity)
+    local function install(c, id, state, parity, expect)
         assert(id == "wt" or id == "wt_dev")
         local dir = id == "wt" and "weapon_tweaker" or "weapon_tweaker_dev"
         local module_root, loads, selected_calls = "scripts/mods/" .. dir .. "/", {}, 0
@@ -58,8 +58,17 @@ function M.new(H, root, options)
             .. "\nreturn _wt_history_owner, _wt_history_verify, _wt_history_runtime end", c.env, "actual-WT-Javelin-owner-expression")
         local owner, verify, runtime = invoke(mod)
         H.truthy(owner); H.equal(owner.runtime, runtime); H.equal(rawget(mod, "_wt_history_runtime"), runtime)
-        H.equal(runtime.fatal_error, nil); H.equal(runtime.last_error, nil); H.equal(verify(), nil)
-        H.equal(runtime.registration.count, 4); H.equal(selected_calls, 1)
+        if expect == "rejected" then
+            -- WP-CWV-13: the second stream's actual profile transaction refuses the
+            -- private names the first stream already published, as in game.
+            H.truthy(tostring(runtime.fatal_error):find("private history tuple partial or foreign", 1, true))
+            H.equal(runtime.registration.count, 0); H.equal(next(runtime.ledgers), nil)
+            H.equal(next(runtime.active), nil); H.truthy(verify())
+        else
+            H.equal(runtime.fatal_error, nil); H.equal(runtime.last_error, nil); H.equal(verify(), nil)
+            H.equal(runtime.registration.count, 4)
+        end
+        H.equal(selected_calls, 1)
         H.equal(loads[module_root .. "_wt_history_owner"], 1)
         H.equal(loads[module_root .. "_wt_history_catalog"], 1)
         local row = { mod = mod, owner = owner, runtime = runtime, verify = verify, loads = loads,
@@ -70,10 +79,10 @@ function M.new(H, root, options)
     local c = F.new(H, root, { get_mod = resolver, options = options.construction_options, prior = options.prior,
         owner = options.construction_owner,
         before = function(context)
-            if options.before then options.before(context, function(id, state, parity) return install(context, id, state, parity) end, mods) end
+            if options.before then options.before(context, function(id, state, parity, expect) return install(context, id, state, parity, expect) end, mods) end
         end })
     c.history_mods, c.histories = mods, records
-    c.install_history = function(id, state, parity) return install(c, id, state, parity) end
+    c.install_history = function(id, state, parity, expect) return install(c, id, state, parity, expect) end
     return c
 end
 local function entries(H, c, expected)

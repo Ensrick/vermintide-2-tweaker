@@ -267,6 +267,7 @@ local suites = {
     "test_cwv_shortsword_history_envelope",
     "test_cwv_shortsword_history_fallback",
     "test_cwv_javelin_history_envelope",
+    "test_cwv_rejected_history_runtime",
     "test_cwv_javelin_history_root_identity",
     "test_cwv_shortsword_root_identity",
     "test_cwv_raw_reference_identity",
