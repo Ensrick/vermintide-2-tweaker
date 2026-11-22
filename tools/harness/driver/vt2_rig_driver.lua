@@ -23,10 +23,15 @@
 -- tools/harness/API.md lists every helper.
 --
 -- 0.4.7 (WP-H-06 actor group): T.teleport takes { x, y, z } or a Vector3Box and builds the Vector3 in the main update.
+--
+-- 0.4.8: T.teleport refreshes the unit's POSITION_LOOKUP entry before teleport_to. The mod update runs first in the
+-- frame (Boot.game_update, scripts/boot.lua:750-751), before StateIngame.pre_update refreshes the lookup
+-- (scripts/game_state/state_ingame.lua:805-808), so the entry still held the previous frame's Vector3 and
+-- teleport_to's set_falling_height raised "Vector3 expected, got userdata" (lead run 20261122-024431-api-selftest).
 
 local plan, nonce = ...
 
-local DRIVER_VERSION = "0.4.7"
+local DRIVER_VERSION = "0.4.8"
 local driver = {}
 
 local function find_mod(name)
@@ -537,8 +542,13 @@ local function new_T(case)
 	end
 
 	-- Moves a unit that has a teleport_to locomotion (PlayerUnitLocomotionExtension.teleport_to,
-	-- default_player_unit/player_unit_locomotion_extension.lua:1005). position: { x, y, z } or a Vector3Box (built into a
-	-- Vector3 inside the main update, like T.spawn's offset), or a Vector3 (it reaches the engine one update later).
+	-- default_player_unit/player_unit_locomotion_extension.lua:1005). position: { x, y, z } or a Vector3Box, made into a
+	-- Vector3 inside the same main update that calls teleport_to; a Vector3 is passed as it is, so it must be alive in
+	-- that update (one returned by an earlier T.main is a dead temporary).
+	-- teleport_to ends in status_extension:set_falling_height, which reads POSITION_LOOKUP[unit].z
+	-- (generic/generic_status_extension.lua:2586-2593). The main update runs before the frame refreshes that lookup
+	-- (boot.lua:750-751 before state_ingame.lua:808), so the entry is the previous frame's Vector3: refresh it first,
+	-- as the game's own debug teleport does (scripts/managers/debug/debug_manager.lua:1089-1093).
 	function T.teleport(unit, position)
 		local moved = T.main(function ()
 			local locomotion = unit and ScriptUnit.has_extension(unit, "locomotion_system")
@@ -560,6 +570,12 @@ local function new_T(case)
 				if unboxed and value ~= nil then
 					target = value
 				end
+			end
+
+			local lookup = rawget(_G, "POSITION_LOOKUP")
+
+			if lookup and lookup[unit] ~= nil then
+				lookup[unit] = Unit.world_position(unit, 0)
 			end
 
 			locomotion:teleport_to(target)
