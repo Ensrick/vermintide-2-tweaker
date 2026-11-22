@@ -6,6 +6,12 @@
 -- loaded; with gut_dev the expected result is zero scrubs and no request
 -- containing the id.
 --
+-- Modded Progression must not be loaded: its Fresh profile routes the items
+-- interface by design, so set_loadout_item writes the Fresh profile and never
+-- the native mirror (modded_progression/_mp_fresh_profile_runtime.lua header,
+-- H.set_loadout_item). Run it with qa/runtime/plans/cim-guard-cases.json
+-- (no Tweaker: GUI) and cim-guard-cases-gut.json (gui_tweaker_dev loaded).
+--
 -- This case calls Managers.backend:commit(true, ...) because the card's rig
 -- acceptance copies the CIM-01 case, which needs a real commit to capture the
 -- request. A request that carries the id is recorded and NOT forwarded. Run it
@@ -73,6 +79,7 @@ return {
         T.require(rawget(_G, "MODDED_REALM") == true, "modded realm")
         local woc = get_mod(MOD_ID)
         T.require(woc ~= nil and woc._woc402_guard_installed == true, "woc guard installed")
+        T.require(get_mod("mp") == nil, "Modded Progression not loaded (its Fresh profile routes the items interface)")
         local is_woc = woc._woc402_is_owned_id
         T.require(type(is_woc) == "function", "woc id predicate exported")
         local gut_loaded = get_mod("gut_dev") ~= nil or get_mod("gut") ~= nil

@@ -1,0 +1,13 @@
+{
+  "name": "cim-guard-cases-gut",
+  "purpose": "WP-CIM-07 RIG, run with gui_tweaker_dev loaded: the same issue_402 career-commit cases as cim-guard-cases.json. Expected: no request carries a mod-created id and the cwv and woc guards scrub nothing (Tweaker: GUI's store holds the write). Modded Progression is left out on purpose (its Fresh profile replaces the item views by design). The cwv and woc case files arrive with PR #1899.",
+  "mods": ["1369573612", "3751024698", "3715714222", "3716869446", "3733366851", "3753880932"],
+  "expect_mods": ["VMF", "gut_dev", "cosmetics_tweaker", "character_weapon_variants", "cim_dev", "WOC"],
+  "timeout": 700,
+  "cases": [
+    { "id": "smoke_keep", "arena": "keep", "file": "../_rig/smoke_keep.lua" },
+    { "id": "cim_402_career_commit_scrub", "arena": "keep", "file": "../cim/issue_402_career_commit_scrub.lua" },
+    { "id": "cwv_402_career_commit_scrub", "arena": "keep", "file": "../cwv/issue_402_career_commit_scrub.lua" },
+    { "id": "woc_402_career_commit_scrub", "arena": "keep", "file": "../woc/issue_402_career_commit_scrub.lua" }
+  ]
+}
