@@ -1,0 +1,13 @@
+{
+  "name": "deus-smoke",
+  "purpose": "WP-H-05 acceptance: keep, the Chaos Wastes hub, one run level (pat_mountain_wastes_path1), back to the keep, quit. The write shield drops the run start's deusRunStarted request. Run three times; every run must exit 0.",
+  "mods": ["1369573612"],
+  "expect_mods": ["VMF"],
+  "arenas": ["keep", "deus", "deus:pat_mountain_wastes_path1", "keep"],
+  "timeout": 900,
+  "cases": [
+    { "id": "smoke-keep", "arena": "keep", "file": "../_rig/smoke_keep.lua" },
+    { "id": "deus-hub", "arena": "deus", "file": "../_rig/deus_hub.lua" },
+    { "id": "deus-level", "arena": "deus:pat_mountain_wastes_path1", "file": "../_rig/deus_level.lua" }
+  ]
+}

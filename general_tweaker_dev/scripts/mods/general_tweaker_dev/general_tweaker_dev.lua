@@ -1,6 +1,6 @@
 local mod = get_mod("gt_dev")
 
-local MOD_VERSION = "0.2.283-dev"
+local MOD_VERSION = "0.2.285-dev"
 -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic).
 -- On the mod table, not a bare _G global (issue 510 class) and not a new
 -- top-level local (this chunk lives near the 200-local ceiling).
@@ -549,31 +549,7 @@ mod.on_game_state_changed = function(status, state_name)
     end
 end
 
--- ============================================================
--- AI Commander crash guard (host) — AI Takeover swap fallout
--- ============================================================
--- CRITICAL host crash (2026-06-19, danjo session a81cfea2): a CLIENT using AI
--- Takeover hard-crashed the host with
---   ai_commander_extension.lua: bad argument #1 to '__add' (userdata expected, got nil)
--- Root cause: AICommanderExtension._update_units does
---   local commander_unit_pos = POSITION_LOOKUP[self._unit]   -- can be nil
---   ...
---   local detection_source_pos = commander_unit_pos + avg_velocity   -- nil + Vector3 -> fatal
--- Vanilla guards the CONTROLLED unit's position a few lines later but NOT the
--- commander's OWN position. AI Takeover despawns/recreates a player unit
--- mid-frame (human->bot swap), so a commander unit can be left without a
--- POSITION_LOOKUP entry for a tick and the unguarded `+` fatals on the host.
--- Symmetric nil-guard: skip the tick until the commander has a position again
--- (exactly what vanilla already does when the controlled unit's pos is nil).
--- Always-on safety (no toggle); host-side (only the server ticks AI extensions).
-if rawget(_G, "AICommanderExtension") then
-    mod:hook("AICommanderExtension", "_update_units", function(func, self, dt, t)
-        if not POSITION_LOOKUP[self._unit] then
-            return
-        end
-        return func(self, dt, t)
-    end)
-end
+mod:dofile("scripts/mods/general_tweaker_dev/_gt_engine_guards")
 
 mod.on_setting_changed = function(setting_id)
     -- v0.2.85-dev: log every toggle/value change (debug-gated) so the log shows

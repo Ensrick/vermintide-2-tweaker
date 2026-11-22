@@ -14,14 +14,19 @@ return {
 
 		T.step("T.open_view the hero view on its overview")
 		local view = T.open_view("hero_view", { menu_state_name = "overview" })
-		-- HeroView.current_state (hero_view.lua:679-685); the overview's NAME (hero_view_state_overview.lua:49)
+		-- HeroView.current_state (hero_view.lua:679-685); the overview's NAME (hero_view_state_overview.lua:49).
+		-- Wait for the layout too: on_enter only asks for layout 1 (set_layout stores an index,
+		-- hero_view_state_overview.lua:246-258, 362-364); the state's first update applies it (_update_set_layout, called
+		-- first in update, :609-616) and only then sets _close_on_exit and _selected_game_mode_index (:366-411).
+		-- Read before that, close_on_exit() is nil (lead run 20261122-024431-api-selftest: INCONCLUSIVE below).
 		local state = T.wait_until(function()
 			local current = view:current_state()
 
-			return current and current.NAME == "HeroViewStateOverview" and current._widgets_by_name and current
-		end, 15, "overview state ready")
+			return current and current.NAME == "HeroViewStateOverview" and current._widgets_by_name
+				and current:get_selected_game_mode_index() ~= nil and current
+		end, 15, "overview state ready with its layout applied")
 
-		T.require(state ~= nil, "overview state ready")
+		T.require(state ~= nil, "overview state ready with its layout applied")
 		T.expect(T.widget(state, "exit_button") ~= nil, "T.widget finds exit_button")
 		T.require(state:close_on_exit(), "this overview layout closes the view on exit")
 

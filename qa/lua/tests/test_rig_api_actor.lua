@@ -1,23 +1,62 @@
 -- test_rig_api_actor.lua: offline tests of the rig's helper group lib/actor.lua (T.first_bot_unit, T.as_bot,
--- T.pickup) and of T.teleport's position forms (driver 0.4.7), WP-H-06 group "actor input".
+-- T.pickup) and of T.teleport's position forms (driver 0.4.7) and lookup refresh (driver 0.4.8), WP-H-06 group
+-- "actor input".
 --
 -- Boots the real bootstrap and driver with the real group in plan.libs inside the simulated game of
 -- _rig_driver_env.lua, plus a stub world: one bot whose PlayerBotInput stand-in turns a wield request into a wielded
 -- slot on its next update (as _update_actions does, player_bot_input.lua:202-220), a pickup system whose
 -- buff_spawn_pickup returns a unit, and a hero locomotion that records teleport_to. This proves the helpers' control
 -- flow, cleanup and evidence lines only, never that the game reacts the same way.
+--
+-- Engine Vector3 values are frame temporaries: every stub Vector3 carries the frame it was made in, and the stub
+-- teleport_to rejects one from another frame with the engine's message. POSITION_LOOKUP is refreshed by the game
+-- after the mod update (Boot.game_update calls Managers.mod:update first, scripts/boot.lua:750-751;
+-- StateIngame.pre_update calls UPDATE_POSITION_LOOKUP, scripts/game_state/state_ingame.lua:808), so at the driver's
+-- update the hero's entry is the previous frame's value; the stub teleport_to reads it as set_falling_height does
+-- (generic/generic_status_extension.lua:2586-2593). Lead run 20261122-024431-api-selftest-09002eef failed exactly so.
 return function(H, repo_root)
     local E = assert(loadfile(repo_root .. "/qa/lua/tests/_rig_driver_env.lua"))()(H, repo_root)
     local tag, first, count = E.tag, E.first, E.count
 
-    local function vec(x, y, z)
-        return setmetatable({ x = x, y = y, z = z }, {
-            __add = function(a, b) return vec(a.x + b.x, a.y + b.y, a.z + b.z) end,
-        })
+    -- Stub Vector3: a userdata (as in the engine, so T.teleport's table test does not take it) whose fields can be read
+    -- only in the frame it was made in; raw(v) reads it anyway, for the test's own checks after the run.
+    local clock = { frame = 0 }
+    local DEAD_TEMP = "bad argument #1 to '__index' (Vector3 expected, got userdata)"
+    local DATA = setmetatable({}, { __mode = "k" })
+    local proto = newproxy(true)
+    local vec
+
+    local function raw(value)
+        return DATA[value]
+    end
+
+    -- the engine refuses a Vector3 temporary made in another frame
+    local function live(value, what)
+        local d = DATA[value]
+        if d and d.born ~= clock.frame then
+            error("stub engine (" .. what .. "): " .. DEAD_TEMP, 0)
+        end
+        return d
+    end
+
+    getmetatable(proto).__index = function(self, key)
+        local d = live(self, "__index")
+        return (key == "x" or key == "y" or key == "z") and d[key] or nil
+    end
+    getmetatable(proto).__add = function(a, b)
+        local da, db = live(a, "__add"), live(b, "__add")
+        return vec(da.x + db.x, da.y + db.y, da.z + db.z)
+    end
+
+    vec = function(x, y, z, born)
+        local v = newproxy(proto)
+        DATA[v] = { x = x, y = y, z = z, born = born or clock.frame }
+        return v
     end
 
     local function actor_world(env)
-        local w = { in_coroutine = {}, calls = {}, spawned = {}, deleted = {}, teleports = {}, hero_pos = vec(10, 20, 30) }
+        clock.frame = 0
+        local w = { in_coroutine = {}, calls = {}, spawned = {}, deleted = {}, teleports = {}, hero_pos = { x = 10, y = 20, z = 30 } }
         local function note_call(name)
             w.calls[#w.calls + 1] = name
             if coroutine.running() then
@@ -30,11 +69,23 @@ return function(H, repo_root)
         env.Unit.alive = function(unit)
             return unit == hero or unit == bot_unit or (w.spawned[unit] and not w.deleted[unit]) or false
         end
+        local function position_of(unit)
+            local p = unit == hero and w.hero_pos or { x = 0, y = 0, z = 0 }
+            return vec(p.x, p.y, p.z)
+        end
         env.Unit.local_position = function(unit)
             note_call("Unit.local_position")
-            return unit == hero and w.hero_pos or vec(0, 0, 0)
+            return position_of(unit)
         end
-        env.Vector3 = vec
+        env.Unit.world_position = function(unit)
+            note_call("Unit.world_position")
+            return position_of(unit)
+        end
+        env.Vector3 = function(x, y, z)
+            return vec(x, y, z)
+        end
+        -- written by the previous frame's UPDATE_POSITION_LOOKUP (see w.frame)
+        env.POSITION_LOOKUP = { [hero] = vec(10, 20, 30, -1) }
         env.Managers.player.bots = function()
             return { { player_unit = bot_unit } }
         end
@@ -51,11 +102,15 @@ return function(H, repo_root)
         end
         local bot_inventory = { get_wielded_slot_name = function() return bot_input.wielded end }
         local locomotion = {
+            -- PlayerUnitLocomotionExtension.teleport_to (player_unit_locomotion_extension.lua:1005-1022): Mover.set_position
+            -- takes the position, then set_falling_height reads POSITION_LOOKUP[unit].z
             teleport_to = function(_, position)
                 note_call("teleport_to")
+                local p = live(position, "Mover.set_position")
+                local _ = live(env.POSITION_LOOKUP[hero], "POSITION_LOOKUP[unit].z").z
                 w.teleports[#w.teleports + 1] = position
-                if type(position) == "table" and position.x then
-                    w.hero_pos = vec(position.x, position.y, position.z)
+                if p then
+                    w.hero_pos = { x = p.x, y = p.y, z = p.z }
                 end
             end,
         }
@@ -91,8 +146,12 @@ return function(H, repo_root)
             end,
         }
         env.Managers.state.entity = { system = function(_, name) return name == "pickup_system" and pickup_system or nil end }
-        -- the bot's next update: a wield request becomes the wielded slot
+        -- a new frame: last frame's temporaries die; POSITION_LOOKUP still holds what last frame's pre_update wrote
+        -- (the driver's update comes before this frame's refresh). Then the bot's next update: a wield request becomes
+        -- the wielded slot.
         w.frame = function()
+            clock.frame = clock.frame + 1
+            env.POSITION_LOOKUP[hero] = vec(w.hero_pos.x, w.hero_pos.y, w.hero_pos.z, clock.frame - 1)
             if bot_input.wanted then
                 bot_input.wielded, bot_input.wanted = bot_input.wanted, nil
             end
@@ -154,7 +213,8 @@ end }
         })
         H.truthy(first(lines, tag .. "CASE END id=drop verdict=PASS"), "drop passes")
         local unit = w.last_pickup
-        H.equal(unit.at.x .. "," .. unit.at.y .. "," .. unit.at.z, "12,20,31", "hero position + offset + 1 m up")
+        local at = raw(unit.at)
+        H.equal(at.x .. "," .. at.y .. "," .. at.z, "12,20,31", "hero position + offset + 1 m up")
         H.equal(unit.raycast_down, true, "rays down to the floor")
         H.equal(w.deleted[unit], true, "removed at cleanup")
         H.truthy(first(lines, tag .. "CASE END id=unknown verdict=INCONCLUSIVE .*pickup no_such_pickup exists"), "unknown pickup")
@@ -174,12 +234,50 @@ end }
 ]] } })
         H.truthy(first(lines, tag .. "CASE END id=tp verdict=PASS"), "tp passes: " .. tostring(first(lines, tag .. "CASE END id=tp")))
         H.equal(#w.teleports, 4, "four teleports")
-        H.equal(w.teleports[1].x .. "," .. w.teleports[1].y .. "," .. w.teleports[1].z, "1,2,3", "list form")
-        H.equal(w.teleports[2].x .. "," .. w.teleports[2].y .. "," .. w.teleports[2].z, "4,5,6", "named form")
+        local t1, t2 = raw(w.teleports[1]), raw(w.teleports[2])
+        H.equal(t1.x .. "," .. t1.y .. "," .. t1.z, "1,2,3", "list form")
+        H.equal(t2.x .. "," .. t2.y .. "," .. t2.z, "4,5,6", "named form")
         H.equal(w.teleports[3], "unboxed value", "a box is unboxed")
         H.equal(w.teleports[4], "a vector value", "a plain value passes through")
         H.equal(table.concat(w.in_coroutine, ","), "", "teleport_to ran in the main update")
         H.equal(count(lines, tag .. "CASE END"), 1, "one case")
+    end)
+
+    H.test("rig T.teleport: refreshes the unit's POSITION_LOOKUP entry first; a bare teleport_to in T.main fails as on the rig", function()
+        local lines, w = run({
+            { id = "helper", src = "return { run = function(T) T.teleport(T.local_hero(), { 1, 2, 3 }) end }" },
+            { id = "bare", src = [[
+return { run = function(T)
+    local locomotion = T.ext(T.local_hero(), "locomotion_system")
+    T.main(function() locomotion:teleport_to(Vector3(4, 5, 6)) end)
+end }
+]] },
+        })
+        H.truthy(first(lines, tag .. "CASE END id=helper verdict=PASS"), "the helper passes: " .. tostring(first(lines, tag .. "CASE END id=helper")))
+        -- the instrument: without the refresh the stub raises the rig's error, so the PASS above is the refresh
+        H.truthy(first(lines, tag .. "CASE END id=bare verdict=ERROR .*POSITION_LOOKUP%[unit%]%.z.*Vector3 expected, got userdata"),
+            "a bare teleport_to reads last frame's lookup entry: " .. tostring(first(lines, tag .. "CASE END id=bare")))
+        H.equal(#w.teleports, 1, "only the helper's teleport reached the locomotion")
+        local refreshed_before_teleport
+        for i, name in ipairs(w.calls) do
+            if name == "teleport_to" then
+                refreshed_before_teleport = w.calls[i - 1] == "Unit.world_position"
+                break
+            end
+        end
+        H.truthy(refreshed_before_teleport, "Unit.world_position refreshed the entry right before teleport_to")
+    end)
+
+    H.test("rig T.teleport: a Vector3 returned by an earlier T.main is a dead temporary (ERROR, documented contract)", function()
+        local lines, w = run({ { id = "kept", src = [[
+return { run = function(T)
+    local kept = T.main(function() return Vector3(1, 2, 3) end)
+    T.teleport(T.local_hero(), kept)
+end }
+]] } })
+        H.truthy(first(lines, tag .. "CASE END id=kept verdict=ERROR .*Mover%.set_position.*Vector3 expected, got userdata"),
+            "kept Vector3: " .. tostring(first(lines, tag .. "CASE END id=kept")))
+        H.equal(#w.teleports, 0, "nothing moved")
     end)
 
     -- The selftest's mission case against the stub world: catches a script defect before the plan costs a rig run.

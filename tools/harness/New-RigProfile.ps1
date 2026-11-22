@@ -14,10 +14,15 @@
   driver's mods entry when missing), and prepends the plan block (nonce, driver text, case texts, the shared
   helpers of -SharedDir and the driver helper groups of -LibDir as hex).
 
+  WP-H-08 part 3: the plan's "save" picks the save the profile starts from ("owner-copy", the default, or a fixture
+  folder under -SaveFixtureDir; qa/runtime/fixtures/saves/README.md), and every profile gets mod developer mode on
+  and VMF logging every level to the log file (Set-RigForcedModSettings).
+
   run.ps1 calls this; tools/harness/tests/Profile.Tests.ps1 calls it against a fixture.
 
 .OUTPUTS
-  [pscustomobject] with ProfileRoot, AppData, LocalAppData, Vt2Dir, UserSettings.
+  [pscustomobject] with ProfileRoot, AppData, LocalAppData, Vt2Dir, UserSettings, Save (the save name used, or
+  "kept" for -KeepProfile).
 #>
 [CmdletBinding()]
 param(
@@ -32,7 +37,8 @@ param(
     [hashtable] $SlotSwaps = @{},                     # WP-H-07: real Workshop id -> rig slot id holding its local build
     [hashtable] $ExpectVersions = @{},                # WP-H-07: VMF mod id -> staged MOD_VERSION the smoke case checks
     [switch] $KeepOwnerMods,                          # no-plan experiments: leave the copied mod list as it is
-    [switch] $KeepProfile                             # WP-H-08 boots: start from the profile the previous boot left
+    [switch] $KeepProfile,                            # WP-H-08 boots: start from the profile the previous boot left
+    [string] $SaveFixtureDir = (Join-Path $PSScriptRoot '..\..\qa\runtime\fixtures\saves')   # WP-H-08 plan "save" fixtures
 )
 $ErrorActionPreference = 'Stop'
 
@@ -72,6 +78,40 @@ function Set-ModOption([string] $text, [string] $mod, [string] $setting, [string
     return $text.Substring(0, $table.Groups[1].Index) + $body + $text.Substring($table.Groups[1].Index + $table.Groups[1].Length)
 }
 
+# Sets <key> = <value> inside a top-level table (one tab of indentation, as the game writes the file); a missing table
+# is created with $Defaults (lines of "key = value") and the key.
+function Set-TopLevelTableKey([string] $text, [string] $table, [string] $key, [string] $value, [string[]] $Defaults = @()) {
+    $rx = [regex]('(?ms)^' + [regex]::Escape($table) + ' = \{\n(.*?)^\}\n')
+    if (-not $rx.IsMatch($text)) {
+        $lines = @($Defaults | Where-Object { $_ -notmatch ('^' + [regex]::Escape($key) + ' = ') }) + "$key = $value"
+        return "$table = {`n" + (($lines | ForEach-Object { "`t$_`n" }) -join '') + "}`n" + $text
+    }
+    $m = $rx.Match($text)
+    $inner = [regex]::Replace($m.Groups[1].Value, '(?m)^\t' + [regex]::Escape($key) + ' = .*\n', '')
+    $inner += "`t$key = $value`n"
+    return $text.Substring(0, $m.Groups[1].Index) + $inner + $text.Substring($m.Groups[1].Index + $m.Groups[1].Length)
+}
+# WP-H-08 step 4: what every rig profile forces.
+# - The game's mod manager reads the top-level mod_settings table once at start; its developer_mode switch defaults to
+#   false (Vermintide-2-Source-Code/scripts/managers/mod/mod_manager.lua:11-15, read at :50-52 and :120).
+# - VMF keeps its own developer_mode and copies it into that table when it changes
+#   (Vermintide-Mod-Framework/vmf/scripts/mods/vmf/modules/vmf_options.lua:27-56, 175-181, 216-219).
+# - VMF's logging: with logging_mode "custom" each output_mode_<level> is 0 off, 1 log, 2 chat, 3 both
+#   (vmf_options.lua:57-123; modules/core/logging.lua:136-152, odd values reach the log). The defaults keep
+#   echo/error/warning at 3 and info at 1 and turn debug off; the rig keeps them and sends debug to the log too.
+$RigForcedModManager = [ordered]@{ developer_mode = 'true' }
+$RigForcedVmf = [ordered]@{
+    developer_mode = 'true'; logging_mode = '"custom"'
+    output_mode_echo = '3'; output_mode_error = '3'; output_mode_warning = '3'; output_mode_info = '1'; output_mode_debug = '1'
+}
+function Set-RigForcedModSettings([string] $text) {
+    foreach ($k in $RigForcedModManager.Keys) {
+        $text = Set-TopLevelTableKey $text 'mod_settings' $k $RigForcedModManager[$k] -Defaults @('developer_mode = false', 'log_level = 1', 'toposort = false')
+    }
+    foreach ($k in $RigForcedVmf.Keys) { $text = Set-ModOption $text 'VMF' $k $RigForcedVmf[$k] }
+    return $text
+}
+
 $planObj = $null
 if ($PlanPath) {
     $PlanPath = (Resolve-Path -LiteralPath $PlanPath).Path
@@ -88,13 +128,46 @@ $rigVt2 = Join-Path $rigAppData 'Fatshark\Vermintide 2'
 New-Item -ItemType Directory -Force -Path $rigVt2, $rigLocal, (Join-Path $rigVt2 'console_logs') | Out-Null
 # -KeepProfile (a later boot of a plan with boots): the save and settings the previous boot left in the rig profile
 # are the starting point; nothing is copied from the owner's profile again.
+# WP-H-08 plan "save": "owner-copy" (default) copies the owner's save files; any other name is a fixture folder
+# <SaveFixtureDir>\<name>\ whose fixture.json lists every save file it holds with its SHA-256 (README.md there says what
+# a save contains). The rig profile's own save files are removed first, so "fresh" (no files) starts with no save.
+$saveFiles = 'save_data.sav', 'save_data.old'
+$saveName = 'owner-copy'
+if ($planObj -and $planObj.PSObject.Properties['save'] -and -not [string]::IsNullOrWhiteSpace([string]$planObj.save)) { $saveName = [string]$planObj.save }
+$fixture = $null
+if ($saveName -ne 'owner-copy' -and -not $KeepProfile) {
+    if ($saveName -notmatch '^[a-z0-9][a-z0-9_-]{0,47}$') { throw "plan save '$saveName' is not a fixture name (lower case letters, digits, '-' and '_')" }
+    $fixtureDir = Join-Path $SaveFixtureDir $saveName
+    $manifestPath = Join-Path $fixtureDir 'fixture.json'
+    if (-not (Test-Path -LiteralPath $manifestPath -PathType Leaf)) { throw "plan save '$saveName': no fixture at $fixtureDir (fixture.json missing)" }
+    $manifest = [System.IO.File]::ReadAllText($manifestPath) | ConvertFrom-Json
+    $listed = @{}
+    foreach ($entry in @($manifest.files | Where-Object { $_ })) {
+        $fileName = [string]$entry.name
+        if ($saveFiles -notcontains $fileName) { throw "plan save '$saveName': fixture.json lists '$fileName'; a fixture holds only $($saveFiles -join ', ')" }
+        $path = Join-Path $fixtureDir $fileName
+        if (-not (Test-Path -LiteralPath $path -PathType Leaf)) { throw "plan save '$saveName': listed file $fileName is missing" }
+        $hash = (Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash
+        if ($hash -ne ([string]$entry.sha256).ToUpperInvariant()) { throw "plan save '$saveName': $fileName has SHA-256 $hash, fixture.json says $($entry.sha256)" }
+        $listed[$fileName] = $path
+    }
+    foreach ($f in @(Get-ChildItem -LiteralPath $fixtureDir -File)) {
+        if ($f.Name -notin 'fixture.json', 'README.md' -and -not $listed.ContainsKey($f.Name)) { throw "plan save '$saveName': $($f.Name) is in the fixture folder but not listed in fixture.json" }
+    }
+    $fixture = $listed
+}
 if ($KeepProfile) {
     if (-not (Test-Path -LiteralPath (Join-Path $rigVt2 'user_settings.config') -PathType Leaf)) { throw "KeepProfile: no rig profile to keep under $rigVt2" }
+    $saveName = 'kept'
 }
 else {
-    foreach ($f in 'save_data.sav', 'save_data.old', 'launcher.config') {
-        $src = Join-Path $RealProfile $f
-        if (Test-Path -LiteralPath $src) { Copy-Item -LiteralPath $src -Destination (Join-Path $rigVt2 $f) -Force }
+    $src = Join-Path $RealProfile 'launcher.config'
+    if (Test-Path -LiteralPath $src) { Copy-Item -LiteralPath $src -Destination (Join-Path $rigVt2 'launcher.config') -Force }
+    foreach ($f in $saveFiles) {
+        $dst = Join-Path $rigVt2 $f
+        if (Test-Path -LiteralPath $dst) { Remove-Item -LiteralPath $dst -Force }
+        $from = if ($fixture) { $fixture[$f] } else { Join-Path $RealProfile $f }
+        if ($from -and (Test-Path -LiteralPath $from -PathType Leaf)) { Copy-Item -LiteralPath $from -Destination $dst -Force }
     }
 }
 $shader = Join-Path $rigVt2 'shader_cache.pipe_lib'
@@ -120,6 +193,8 @@ if ($planObj -and $planObj.PSObject.Properties['options'] -and $planObj.options)
         foreach ($setProp in $modProp.Value.PSObject.Properties) { $cfg = Set-ModOption $cfg $modProp.Name $setProp.Name (ConvertTo-SjsonScalar $setProp.Value) }
     }
 }
+# WP-H-08 step 4, after the plan's options so they always hold: mod developer mode on, every VMF log level to the log file.
+$cfg = Set-RigForcedModSettings $cfg
 
 if ($planObj -or -not $KeepOwnerMods) {
     $wanted = @(); if ($planObj -and $planObj.mods) { $wanted = @($planObj.mods | ForEach-Object { [string]$_ }) }
@@ -240,4 +315,5 @@ $userSettings = Join-Path $rigVt2 'user_settings.config'
     LocalAppData = $rigLocal
     Vt2Dir       = $rigVt2
     UserSettings = $userSettings
+    Save         = $saveName
 }

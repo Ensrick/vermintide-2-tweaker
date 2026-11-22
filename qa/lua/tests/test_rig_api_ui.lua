@@ -4,8 +4,8 @@
 -- Boots the real bootstrap and driver with the real group in plan.libs inside the simulated game of
 -- _rig_driver_env.lua, plus a stub IngameUI: handle_transition runs a transition table like
 -- ingame_ui_settings.lua's (hero_view_force, exit_menu), the hero view's overview state appears two frames after it
--- opens, and every frame the overview reads and clears its exit_button's on_release and then closes the view, as
--- HeroViewStateOverview does. This proves the helpers' control flow and evidence lines only, never that the game's
+-- opens, applies its layout on its first update after that, and from then on every frame reads and clears its
+-- exit_button's on_release and then closes the view, as HeroViewStateOverview does. This proves the helpers' control flow and evidence lines only, never that the game's
 -- UI reacts the same way: that is what qa/runtime/plans/api-selftest.json is for.
 return function(H, repo_root)
     local E = assert(loadfile(repo_root .. "/qa/lua/tests/_rig_driver_env.lua"))()(H, repo_root)
@@ -15,11 +15,19 @@ return function(H, repo_root)
         opts = opts or {}
         local w = { transitions = {}, in_coroutine = {} }
         local exit_button = { name = "exit_button", content = { button_hotspot = {} } }
+        -- Like HeroViewStateOverview: on_enter only asks for layout 1 (set_layout stores the index,
+        -- hero_view_state_overview.lua:246-258, 362-364); the state's update applies it first (_update_set_layout,
+        -- :609-616, :366-411), so close_on_exit() is nil until the state's first update after it appeared.
         local overview = {
             NAME = "HeroViewStateOverview",
             _widgets_by_name = { exit_button = exit_button, plain = { content = { hotspot = {} } } },
-            close_on_exit = function() return true end,
+            close_on_exit = function(self) return self._close_on_exit end,
+            get_selected_game_mode_index = function(self) return self._selected_game_mode_index end,
         }
+        local function enter_overview()
+            overview._close_on_exit, overview._selected_game_mode_index, overview._wanted_layout_index = nil, nil, 1
+            w.state = overview
+        end
         w.exit_button, w.overview = exit_button, overview
         local hero_view = { current_state = function() return w.state end }
         local ui = { views = { hero_view = hero_view } }
@@ -45,18 +53,25 @@ return function(H, repo_root)
         w.ui = ui
         env.Managers.ui = { ingame_ui = function(self) return ui end }
         env.Managers.backend = { get_backend_mirror = function() return { _career_data = {}, _career_data_mirror = {} } end }
-        -- one frame of the hero view's update
+        -- one frame of the hero view's update: the overview's own update (layout first, then the exit press, read only
+        -- when the layout closes on exit, :783-786), then a state due this frame appears (its update comes next frame)
         w.frame = function()
+            if w.state == overview then
+                if overview._wanted_layout_index then
+                    overview._close_on_exit, overview._selected_game_mode_index = true, overview._wanted_layout_index
+                    overview._wanted_layout_index = nil
+                end
+                if overview._close_on_exit and not opts.ignore_press and exit_button.content.button_hotspot.on_release then
+                    exit_button.content.button_hotspot.on_release = false
+                    ui:handle_transition("exit_menu")
+                end
+            end
             if w.state_in then
                 w.state_in = w.state_in - 1
                 if w.state_in <= 0 then
                     w.state_in = nil
-                    w.state = overview
+                    enter_overview()
                 end
-            end
-            if w.state == overview and not opts.ignore_press and exit_button.content.button_hotspot.on_release then
-                exit_button.content.button_hotspot.on_release = false
-                ui:handle_transition("exit_menu")
             end
         end
         return w
@@ -79,6 +94,23 @@ return function(H, repo_root)
         H.truthy(first(lines, tag .. "PRESS id=api%-ui widget=exit_button hotspot=button_hotspot field=on_release cleared=true"), "PRESS line")
         H.truthy(first(lines, tag .. "VIEW CLOSE id=api%-ui view=hero_view by=T.close_view"), "VIEW CLOSE line")
         H.equal(table.concat(w.in_coroutine, ","), "", "every transition ran in the main update")
+    end)
+
+    -- The rig's INCONCLUSIVE (lead run 20261122-024431-api-selftest-09002eef) came from reading close_on_exit in the
+    -- frame the state appeared; the stub must reproduce that, or the PASS above proves nothing about the wait.
+    H.test("rig api_ui precondition: close_on_exit read before the overview's first update is nil (the rig's INCONCLUSIVE)", function()
+        local lines = run({ { id = "early", src = [[
+return { run = function(T)
+    local view = T.open_view("hero_view", { menu_state_name = "overview" })
+    local state = T.wait_until(function()
+        local current = view:current_state()
+        return current and current._widgets_by_name and current
+    end, 5, "state")
+    T.require(state:close_on_exit(), "this overview layout closes the view on exit")
+end }
+]] } }, { ignore_press = true })
+        H.truthy(first(lines, tag .. "CASE END id=early verdict=INCONCLUSIVE .*this overview layout closes the view on exit"),
+            "early read: " .. tostring(first(lines, tag .. "CASE END id=early")))
     end)
 
     H.test("rig T.open_view: a view the case left open is closed at cleanup, also after an ERROR", function()

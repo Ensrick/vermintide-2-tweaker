@@ -1,0 +1,13 @@
+{
+  "name": "cim-guard-cases",
+  "purpose": "WP-CIM-07 RIG, run without Tweaker: GUI: the issue_402 career-commit cases for cim_dev, character_weapon_variants and Weapons of Chaos. Modded Progression is left out on purpose (its Fresh profile replaces the item views by design). The cwv and woc case files arrive with PR #1899. Sibling plan cim-guard-cases-gut.json is the same run with gui_tweaker_dev loaded.",
+  "mods": ["1369573612", "3715714222", "3716869446", "3733366851", "3753880932"],
+  "expect_mods": ["VMF", "cosmetics_tweaker", "character_weapon_variants", "cim_dev", "WOC"],
+  "timeout": 700,
+  "cases": [
+    { "id": "smoke_keep", "arena": "keep", "file": "../_rig/smoke_keep.lua" },
+    { "id": "cim_402_career_commit_scrub", "arena": "keep", "file": "../cim/issue_402_career_commit_scrub.lua" },
+    { "id": "cwv_402_career_commit_scrub", "arena": "keep", "file": "../cwv/issue_402_career_commit_scrub.lua" },
+    { "id": "woc_402_career_commit_scrub", "arena": "keep", "file": "../woc/issue_402_career_commit_scrub.lua" }
+  ]
+}
