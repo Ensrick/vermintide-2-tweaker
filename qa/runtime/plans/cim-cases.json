@@ -1,0 +1,17 @@
+{
+  "name": "cim-cases",
+  "purpose": "Crafting in Modded (Dev) rig cases on the PC hero-view layout the owner plays with (use_pc_menu_layout true; the rig's private desktop otherwise lands on the console layout). Modded Progression is left out on purpose: its Fresh profile replaces the item views by design. cosmetics_tweaker provides the embedded MoreItemsLibrary that character_weapon_variants and Weapons of Chaos register through.",
+  "mods": ["1369573612", "3715714222", "3716869446", "3733366851", "3753880932"],
+  "expect_mods": ["VMF", "cosmetics_tweaker", "character_weapon_variants", "cim_dev", "WOC"],
+  "settings": { "use_pc_menu_layout": "true" },
+  "timeout": 900,
+  "cases": [
+    { "id": "smoke_keep", "arena": "keep", "file": "../_rig/smoke_keep.lua" },
+    { "id": "issue_402_career_commit_scrub", "arena": "keep", "file": "../cim/issue_402_career_commit_scrub.lua" },
+    { "id": "issue_80_cim_commit_callback", "arena": "keep", "file": "../cim/issue_80_cim_commit_callback.lua" },
+    { "id": "issue_80_cim_standard_bench_opens", "arena": "keep", "file": "../cim/issue_80_cim_standard_bench_opens.lua" },
+    { "id": "wp_cim_11_auto_equip", "arena": "keep", "file": "../cim/wp_cim_11_auto_equip.lua" },
+    { "id": "issue_1654_store_backup", "arena": "keep", "file": "../cim/issue_1654_store_backup.lua" },
+    { "id": "suite_tables_present", "arena": "keep", "file": "../cim/suite_tables_present.lua" }
+  ]
+}

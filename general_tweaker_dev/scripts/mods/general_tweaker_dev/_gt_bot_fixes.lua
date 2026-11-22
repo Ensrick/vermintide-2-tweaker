@@ -55,12 +55,9 @@ local _gt_player_follow_considerations = UtilityConsiderations
 
 if Utility then
     mod:hook(Utility, "get_action_utility", function(func, breed_action, action_name, blackboard, ...)
+        if mod._gt_guards_on and not mod._gt_guards_on() then return func(breed_action, action_name, blackboard, ...) end
         local ready, detail = mod._gt_bot_utility_policy.prepare_utility_inputs(
-            breed_action,
-            action_name,
-            blackboard,
-            _gt_player_follow_considerations
-        )
+            breed_action, action_name, blackboard, _gt_player_follow_considerations)
 
         if not ready then
             local key = tostring(action_name) .. "|" .. tostring(detail)
@@ -69,6 +66,7 @@ if Utility then
                 printf("[gt:utility-guard] action=%s failed closed: %s",
                     tostring(action_name), tostring(detail))
             end
+            if mod._gt_guard_fired then mod._gt_guard_fired("utility_inputs", detail) end
             return 0
         end
 

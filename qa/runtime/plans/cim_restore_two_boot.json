@@ -1,6 +1,6 @@
 {
   "name": "cim-restore-two-boot",
-  "note": "WP-CIM-04 (#1654). Needs two boots on ONE rig profile; run.ps1 does not support that yet (it rebuilds the profile from the owner copy each run). Until it does, boot 2 reports INCONCLUSIVE.",
+  "note": "WP-CIM-04 (#1654). Two boots on ONE rig profile: run.ps1 hands a plan with boots to tools/harness/Invoke-RigBoots.ps1 (WP-H-08), and boot 2 starts from the profile (save, settings, mod data) boot 1 left, so boot 2 reads the crafts boot 1 made.",
   "mods": ["1369573612", "3733366851"],
   "timeout": 300,
   "boots": [

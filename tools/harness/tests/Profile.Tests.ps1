@@ -8,7 +8,8 @@
   parses back (nonce, name, driver text and case texts decode from hex), only the plan's mod ids and the driver
   are enabled, the driver's mods entry exists exactly once (also on a second build from a copy that already has
   it), the plan, results and progress blocks of an earlier run are gone, the forced window and sound settings are
-  applied, the save is copied, and the fake owner files are unchanged. The temporary folder is removed at the end.
+  applied, the save is copied, and the fake owner files are unchanged. WP-H-08 part 3: save fixtures (fresh, a
+  listed file, refusals) and the forced mod developer mode and VMF logging. The temporary folder is removed at the end.
   Exit codes: 0 pass, 2 failure.
 #>
 [CmdletBinding()]
@@ -143,6 +144,13 @@ try {
     Assert-True ($cfg -match '(?m)^master_bus_volume = 0$') 'sound muted'
     Assert-True ($cfg -match "(?m)^screen_resolution = \[\n\t1280\n\t720\n\]") 'resolution forced to 1280x720'
     Assert-True ((Get-Sha (Join-Path $out.Vt2Dir 'save_data.sav')) -eq $ownerBefore['save_data.sav']) 'save copied into the rig profile'
+    Assert-True ($out.Save -eq 'owner-copy') "no plan save: the owner's save is the default (Save = $($out.Save))"
+    # WP-H-08 step 4: a profile without a mod_settings table or a VMF block gets both
+    $modSettings = [regex]::Match($cfg, '(?ms)^mod_settings = \{\n(.*?)^\}\n')
+    Assert-True ($modSettings.Success -and $modSettings.Groups[1].Value -match '(?m)^\tdeveloper_mode = true$' -and $modSettings.Groups[1].Value -match '(?m)^\tlog_level = 1$' -and $modSettings.Groups[1].Value -match '(?m)^\ttoposort = false$') 'forced: a missing mod_settings table is created with the game defaults and developer_mode = true'
+    $vmf1 = [regex]::Match($cfg, '(?ms)^\tVMF = \{\n(.*?)^\t\}\n').Groups[1].Value
+    $forcedVmf = [ordered]@{ developer_mode = 'true'; logging_mode = '"custom"'; output_mode_echo = '3'; output_mode_error = '3'; output_mode_warning = '3'; output_mode_info = '1'; output_mode_debug = '1' }
+    Assert-True ((@($forcedVmf.Keys | Where-Object { $vmf1 -notmatch ('(?m)^\t\t' + $_ + ' = ' + [regex]::Escape($forcedVmf[$_]) + '$') })).Count -eq 0) 'forced: VMF developer_mode on, logging_mode custom, every output mode reaches the log'
 
     # ---- second build: the copied settings already hold the driver entry, a plan and fresh results ----
     $stale = $cfg + "vt2_rig_results = {`n`tnonce = `"1234abcd`"`n}`nvt2_rig_progress = {`n`tnonce = `"1234abcd`"`n}`n"
@@ -167,7 +175,7 @@ try {
     # ---- WP-H-08: modset, options and settings values ----
     $real2 = Join-Path $root 'owner2'
     New-Item -ItemType Directory -Force -Path $real2 | Out-Null
-    $cfgWithSettings = ([System.IO.File]::ReadAllText($fixture) -replace "`r`n", "`n") + "mods_settings = {`n`t`"Spaced Mod`" = {`n`t`tkeep_me = 1`n`t}`n`tVMF = {`n`t`tdeveloper_mode = false`n`t`tlist_value = [`n`t`t`t`"a`"`n`t`t]`n`t`tlogging_mode = `"default`"`n`t}`n}`nuse_pc_menu_layout = false`n"
+    $cfgWithSettings = ([System.IO.File]::ReadAllText($fixture) -replace "`r`n", "`n") + "mod_settings = {`n`tauto_disable_unsanctioned = true`n`tdeveloper_mode = false`n`tlog_level = 2`n}`n" + "mods_settings = {`n`t`"Spaced Mod`" = {`n`t`tkeep_me = 1`n`t}`n`tVMF = {`n`t`tdeveloper_mode = false`n`t`tlist_value = [`n`t`t`t`"a`"`n`t`t]`n`t`tlogging_mode = `"default`"`n`t}`n}`nuse_pc_menu_layout = false`n"
     [System.IO.File]::WriteAllText((Join-Path $real2 'user_settings.config'), $cfgWithSettings, $utf8)
     $sets = (Import-PowerShellDataFile -LiteralPath (Join-Path $harness 'modsets.psd1')).Sets
     $setName = 'character_weapon_variants'
@@ -193,7 +201,16 @@ try {
     $vmfBlock = [regex]::Match($cfg4, '(?ms)^\tVMF = \{\n(.*?)^\t\}\n').Groups[1].Value
     Assert-True ($vmfBlock -match '(?m)^\t\tdeveloper_mode = true$' -and $vmfBlock -notmatch 'developer_mode = false') 'options: an existing value is replaced'
     Assert-True ($vmfBlock -match '(?m)^\t\tlist_value = "now a string"$' -and $vmfBlock -notmatch '"a"') 'options: an existing multi-line array is replaced whole'
-    Assert-True ($vmfBlock -match '(?m)^\t\tvt2_rig_marker = 2\.5$' -and $vmfBlock -match '(?m)^\t\tlogging_mode = "default"$') 'options: a new value is added and other values stay'
+    Assert-True ($vmfBlock -match '(?m)^\t\tvt2_rig_marker = 2\.5$' -and $vmfBlock -match '(?m)^\t\tlist_value = ') 'options: a new value is added and other values stay'
+    Assert-True ($vmfBlock -match '(?m)^\t\tlogging_mode = "custom"$' -and $vmfBlock -notmatch '"default"' -and $vmfBlock -match '(?m)^\t\toutput_mode_debug = 1$') 'forced: an existing VMF logging_mode is replaced by custom, debug output to the log'
+    $modSettings4 = [regex]::Match($cfg4, '(?ms)^mod_settings = \{\n(.*?)^\}\n').Groups[1].Value
+    Assert-True ($modSettings4 -match '(?m)^\tdeveloper_mode = true$' -and $modSettings4 -notmatch 'developer_mode = false' -and $modSettings4 -match '(?m)^\tlog_level = 2$' -and $modSettings4 -match '(?m)^\tauto_disable_unsanctioned = true$') 'forced: an existing mod_settings developer_mode false becomes true, other keys stay'
+    Assert-True ([regex]::Matches($cfg4, '(?m)^mod_settings = \{$').Count -eq 1) 'forced: still one mod_settings table'
+    $offPlan = Join-Path $planDir 'plan-dev-off.json'
+    [System.IO.File]::WriteAllText($offPlan, '{ "name": "dev-off", "mods": ["1369573612"], "options": { "VMF": { "developer_mode": false, "output_mode_debug": 0 } }, "cases": [ { "id": "a", "arena": "keep", "file": "case_a.lua" } ] }', $utf8)
+    $outOff = & $builder -RealProfile $real2 -ProfileRoot (Join-Path $root 'rig\profile-off') -PlanPath $offPlan -Nonce '4444cccc' -DriverFile $driverFile -DriverId $driverId
+    $vmfOff = [regex]::Match([System.IO.File]::ReadAllText($outOff.UserSettings), '(?ms)^\tVMF = \{\n(.*?)^\t\}\n').Groups[1].Value
+    Assert-True ($vmfOff -match '(?m)^\t\tdeveloper_mode = true$' -and $vmfOff -match '(?m)^\t\toutput_mode_debug = 1$') 'forced: a plan option cannot switch developer mode or log output off'
     Assert-True ($cfg4 -match '(?ms)^\t"Spaced Mod" = \{\n\t\tkeep_me = 1\n\t\tadded = "x \\"q\\""\n\t\}') 'options: a quoted mod name and an escaped string'
     Assert-True ($cfg4 -match '(?ms)^\tgt_dev = \{\n\t\tfresh_mod_block = false\n\t\}') 'options: a mod without a block gets one'
     Assert-True ([regex]::Matches($cfg4, '(?m)^mods_settings = \{$').Count -eq 1) 'options: still one mods_settings table'
@@ -218,6 +235,53 @@ try {
     try { & $builder -RealProfile $real -ProfileRoot (Join-Path $root 'rig\empty') -PlanPath $planPath -Nonce '7777cccc' -DriverFile $driverFile -DriverId $driverId -KeepProfile | Out-Null } catch { $keepErr = $_.Exception.Message }
     Assert-True ($keepErr -match 'KeepProfile: no rig profile to keep') 'KeepProfile without a profile to keep throws'
 
+    # ---- WP-H-08 part 3: plan "save" picks the save the profile starts from ----
+    $fx = Join-Path $root 'saves'
+    function New-Fixture([string] $name, [string] $manifest, [hashtable] $files = @{}) {
+        $dir = Join-Path $fx $name
+        New-Item -ItemType Directory -Force -Path $dir | Out-Null
+        [System.IO.File]::WriteAllText((Join-Path $dir 'fixture.json'), $manifest, $utf8)
+        foreach ($k in $files.Keys) { [System.IO.File]::WriteAllBytes((Join-Path $dir $k), [byte[]]$files[$k]) }
+        $dir
+    }
+    function New-SavePlan([string] $save) {
+        $path = Join-Path $planDir ("plan-save-" + ($save -replace '[^a-z0-9]', '_') + ".json")
+        [System.IO.File]::WriteAllText($path, ('{ "name": "save-test", "mods": ["1369573612"], "save": "' + $save + '", "cases": [ { "id": "a", "arena": "keep", "file": "case_a.lua" } ] }'), $utf8)
+        $path
+    }
+    New-Fixture 'fresh' '{ "name": "fresh", "files": [] }' | Out-Null
+    $oneBytes = [byte[]](7..71)
+    $oneDir = New-Fixture 'one' '{ "name": "one", "files": [] }' @{ 'save_data.sav' = $oneBytes }
+    $oneHash = Get-Sha (Join-Path $oneDir 'save_data.sav')
+    [System.IO.File]::WriteAllText((Join-Path $oneDir 'fixture.json'), ('{ "name": "one", "files": [ { "name": "save_data.sav", "sha256": "' + $oneHash.ToLowerInvariant() + '" } ] }'), $utf8)
+    New-Fixture 'badhash' '{ "name": "badhash", "files": [ { "name": "save_data.sav", "sha256": "00" } ] }' @{ 'save_data.sav' = [byte[]](1..4) } | Out-Null
+    New-Fixture 'extra' '{ "name": "extra", "files": [] }' @{ 'save_data.sav' = [byte[]](1..4) } | Out-Null
+    New-Fixture 'other' '{ "name": "other", "files": [ { "name": "user_settings.config", "sha256": "00" } ] }' | Out-Null
+    $saveRoot = Join-Path $root 'rig\profile-save'
+    $outOwner = & $builder -RealProfile $real -ProfileRoot $saveRoot -PlanPath $planPath -Nonce '8888aaaa' -DriverFile $driverFile -DriverId $driverId -SaveFixtureDir $fx
+    [System.IO.File]::WriteAllBytes((Join-Path $outOwner.Vt2Dir 'save_data.old'), [byte[]](9..19))
+    $outFresh = & $builder -RealProfile $real -ProfileRoot $saveRoot -PlanPath (New-SavePlan 'fresh') -Nonce '8888bbbb' -DriverFile $driverFile -DriverId $driverId -SaveFixtureDir $fx
+    Assert-True ($outFresh.Save -eq 'fresh') "save fresh: Save = fresh (got $($outFresh.Save))"
+    Assert-True (-not (Test-Path -LiteralPath (Join-Path $outFresh.Vt2Dir 'save_data.sav')) -and -not (Test-Path -LiteralPath (Join-Path $outFresh.Vt2Dir 'save_data.old'))) 'save fresh: the save files a previous run left in the rig profile are gone, none copied'
+    Assert-True (Test-Path -LiteralPath (Join-Path $outFresh.Vt2Dir 'launcher.config')) 'save fresh: launcher.config is still copied'
+    $outOne = & $builder -RealProfile $real -ProfileRoot $saveRoot -PlanPath (New-SavePlan 'one') -Nonce '8888cccc' -DriverFile $driverFile -DriverId $driverId -SaveFixtureDir $fx
+    Assert-True ((Get-Sha (Join-Path $outOne.Vt2Dir 'save_data.sav')) -eq $oneHash -and -not (Test-Path -LiteralPath (Join-Path $outOne.Vt2Dir 'save_data.old'))) 'save fixture: the listed file is copied (hash checked, lower-case hash accepted), nothing else'
+    $outKeep = & $builder -RealProfile $real -ProfileRoot $saveRoot -PlanPath (New-SavePlan 'fresh') -Nonce '8888dddd' -DriverFile $driverFile -DriverId $driverId -SaveFixtureDir $fx -KeepProfile
+    Assert-True ($outKeep.Save -eq 'kept' -and (Get-Sha (Join-Path $outKeep.Vt2Dir 'save_data.sav')) -eq $oneHash) 'save with KeepProfile: a later boot keeps the save the boot before left (Save = kept)'
+    foreach ($bad in @(
+            @{ Save = 'badhash'; Want = 'save_data.sav has SHA-256 .* fixture.json says 00' },
+            @{ Save = 'extra'; Want = 'save_data.sav is in the fixture folder but not listed' },
+            @{ Save = 'other'; Want = "lists 'user_settings.config'; a fixture holds only save_data.sav, save_data.old" },
+            @{ Save = 'nope'; Want = "plan save 'nope': no fixture at" },
+            @{ Save = '../one'; Want = "plan save '../one' is not a fixture name" })) {
+        $err = $null
+        try { & $builder -RealProfile $real -ProfileRoot $saveRoot -PlanPath (New-SavePlan $bad.Save) -Nonce '8888eeee' -DriverFile $driverFile -DriverId $driverId -SaveFixtureDir $fx | Out-Null } catch { $err = $_.Exception.Message }
+        Assert-True ($err -match $bad.Want) "save '$($bad.Save)' is refused: $err"
+    }
+    # the committed fixture: qa/runtime/fixtures/saves/fresh (the default -SaveFixtureDir)
+    $outRepo = & $builder -RealProfile $real -ProfileRoot (Join-Path $root 'rig\profile-repo') -PlanPath (New-SavePlan 'fresh') -Nonce '8888ffff' -DriverFile $driverFile -DriverId $driverId
+    Assert-True ($outRepo.Save -eq 'fresh' -and -not (Test-Path -LiteralPath (Join-Path $outRepo.Vt2Dir 'save_data.sav'))) 'the committed fresh fixture loads and holds no save file'
+
     foreach ($f in $ownerBefore.Keys) { Assert-True ((Get-Sha (Join-Path $real $f)) -eq $ownerBefore[$f]) "owner file unchanged: $f" }
 }
 finally {
@@ -225,5 +289,5 @@ finally {
 }
 
 if ($failures.Count) { Write-Host "[Profile.Tests] FAILED -- $($failures.Count) assertion(s)." -ForegroundColor Red; exit 2 }
-Write-Host '[Profile.Tests] OK -- plan block, mod list, driver entry, stale blocks and isolation checks passed.'
+Write-Host '[Profile.Tests] OK -- plan block, mod list, driver entry, stale blocks, save fixtures, forced mod settings and isolation checks passed.'
 exit 0

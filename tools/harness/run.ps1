@@ -281,6 +281,10 @@ foreach ($l in $lines) {
     }
 }
 $runEnd = [bool]($lines | Where-Object { $_ -match '^RUN END' })
+# WP-H-08 step 4: the driver makes the lobby private at KEEP READY and says whether the game reports it private
+$lobbyPrivate = $null
+foreach ($l in $lines) { if ($l -match '^LOBBY private=(true|false)(\s|$)') { $lobbyPrivate = $Matches[1] -eq 'true' } }
+if ($planObj -and ($lines | Where-Object { $_ -match '^KEEP READY' }) -and $lobbyPrivate -ne $true) { $notes.Add('the lobby was not reported private after KEEP READY (LOBBY line)') }
 $scriptErrors = @([regex]::Matches($text, '(?m)^.*(\[Script Error\]|<<Script Error>>|Lua Stack).*$') | Select-Object -First 5 | ForEach-Object { $_.Value.Trim() })
 
 # host_expect_log / host_forbid_log with their defaults (WP-H-02), the backend write shield defaults and timing
@@ -325,6 +329,7 @@ $summary = [ordered]@{
     private_desktop = (-not $Visible); renderer = $Renderer; arguments = $arguments; run_end_seen = $runEnd
     keep_ready_seconds = $hostLog.KeepReadySeconds; keep_ready_driver_t = $hostLog.KeepReadyDriverT
     backend_shield = [bool]$shieldOn; shield_installed_before_first_commit = $shieldFirst
+    save = $rigProfile.Save; lobby_private = $lobbyPrivate
     host_forbid_hits = $forbidHits; host_expect_misses = $expectMisses; host_allowed = @($hostLog.Allowed)
     loaded_versions = $hostLog.LoadedVersions; local_builds = @($localBuilds); level_loads = @($hostLog.LevelLoads); sweep = $sweep
     marks_seconds = $marks; cases = $cases; script_errors = $scriptErrors; evidence_lines = $lines.Count
