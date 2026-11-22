@@ -218,6 +218,7 @@ local suites = {
     "test_wt_anim_funnel_golden",
     "test_wt_sibling_guard",
     "test_wt_safe_hook_single_call",
+    "test_wt_mutation_registry",
     "test_wt_anim_resolver",
     "test_wt_loadout_cache",
     "test_wt_ranger_dual_preview",

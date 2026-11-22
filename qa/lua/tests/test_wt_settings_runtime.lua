@@ -2,6 +2,8 @@ return function(H, repo_root)
     local path = repo_root
         .. "/weapon_tweaker/scripts/mods/weapon_tweaker/_wt_settings_runtime.lua"
     local Runtime = assert(loadfile(path))()
+    local build_registry = dofile(repo_root .. "/qa/lua/fixtures/wt_registry_harness.lua")
+    local module_dir = repo_root .. "/weapon_tweaker/scripts/mods/weapon_tweaker/"
 
     H.test("WT #1002 owner batch performs each full apply exactly once", function()
         local calls = {}
@@ -12,8 +14,18 @@ return function(H, repo_root)
             wt_apply_priest_punch_buff = function() hit("priest") end,
             wt_apply_brett_buff = function() hit("brett") end,
         }
+        -- WP-WT-07: the batch applies through the real ordered registry.
+        local reg = build_registry(module_dir, mod, {
+            apply_weapon_unlocks = function() hit("availability") end,
+            patch_career_actions = function() hit("actions") end,
+            bolt_runtime = { apply = function() hit("bolt") end, revert = function() end },
+        })
         Runtime.install({
             mod = mod,
+            reconcile = function(reason)
+                hit("reconcile:" .. tostring(reason))
+                return reg.reconcile(reason)
+            end,
             rework_runtime = {
                 is_batching = function() return false end,
                 on_master_changed = function() return false end,
@@ -41,7 +53,7 @@ return function(H, repo_root)
         for _, name in ipairs({
             "masters", "rework", "availability", "actions", "energy",
             "backend", "traits", "priest", "brett", "bolt",
-            "balance_all", "extra",
+            "balance_all", "extra", "reconcile:settings_batch",
         }) do
             H.equal(calls[name], 1, name .. " must remain independent of setting count")
         end

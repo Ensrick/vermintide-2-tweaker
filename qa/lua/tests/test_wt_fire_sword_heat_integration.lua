@@ -453,6 +453,7 @@ return function(H, root)
         end)
         local noop=function() end
         load("_wt_settings_runtime").install({mod=a.mod,rework_runtime=Rework,
+            reconcile=function(reason) return a.mod._wt.registry.reconcile(reason) end,
             master_toggles={reconcile_batch=noop},backend={refresh_on_setting_change=noop},
             apply_weapon_unlocks=noop,patch_career_actions=noop,apply_trait_filters=noop,
             bolt_runtime={apply=noop},bolt_policy={SETTING_ID="unrelated"},balance_policy={},

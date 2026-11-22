@@ -74,16 +74,10 @@ function M.install(c)
         if not c.rework_runtime:prepare_batch(setting_ids) then
             error("WT rework master batch reconciliation failed")
         end
-        c.apply_weapon_unlocks()
-        c.patch_career_actions()
-        if mod._wt374_seed_energy_data then mod._wt374_seed_energy_data() end
+        -- WP-WT-07: one ordered apply of every weapon-table owner.
+        c.reconcile("settings_batch")
         c.backend.refresh_on_setting_change(mod)
         c.apply_trait_filters()
-        if mod.wt_apply_priest_punch_buff then mod.wt_apply_priest_punch_buff() end
-        if mod.wt_apply_brett_buff then mod.wt_apply_brett_buff() end
-        c.bolt_runtime.apply()
-        if mod._wt_apply_axe_balance then mod._wt_apply_axe_balance(nil, false) end
-        if mod._wt_apply_fire_sword then mod._wt_apply_fire_sword(nil, false) end
         if c.extra_batch then c.extra_batch(setting_ids) end
         pcall(printf, "[wt:1002] settings=%d availability_applies=1 action_applies=1",
             type(setting_ids) == "table" and #setting_ids or 0)
