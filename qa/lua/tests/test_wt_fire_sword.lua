@@ -207,8 +207,12 @@ return function(H, repo_root)
             end,
             _wt_apply_axe_balance = function() end,
         }
+        -- WP-WT-07: the owner batch applies through the real ordered registry.
+        local reg = dofile(repo_root .. "/qa/lua/fixtures/wt_registry_harness.lua")(
+            repo_root .. "/weapon_tweaker/scripts/mods/weapon_tweaker/", mod, {})
         runtime.install({
             mod = mod,
+            reconcile = function(reason) return reg.reconcile(reason) end,
             rework_runtime = {
                 is_batching = function() return false end,
                 on_master_changed = function() return false end,

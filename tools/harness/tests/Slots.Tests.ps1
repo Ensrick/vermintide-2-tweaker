@@ -111,6 +111,39 @@ try {
     Assert-True ($ids.IndexOf($slotId) -eq $ids.IndexOf('3733367409') - 1) 'the slot entry sits right before the real entry'
     Assert-True (($entries | Where-Object Id -eq $slotId).On -eq 'true' -and ($entries | Where-Object Id -eq '3733367409').On -eq 'false') 'the slot is enabled and the real id disabled'
     Assert-True ($cfg -match "(?m)^\texpect_versions = \{\n\t\tgt_dev = `"9\.9\.9-marker`"\n\t\}$") 'expect_versions reach the plan block'
+
+    # ---- real entries: multi-line BBCode descriptions (lead runs 20261115-165452/-165827: the slot went to the end) ----
+    # fixtures\user_settings.real-entries.config holds four entries copied from a real user_settings.config
+    # (descriptions shortened, author_id and url replaced); their descriptions span lines that do not start with tabs.
+    $driverId = '3839345856'   # New-RigProfile.ps1 default -DriverId: the rig bootstrap
+    $realFixture = Join-Path $PSScriptRoot 'fixtures\user_settings.real-entries.config'
+    Copy-Item -LiteralPath $realFixture -Destination (Join-Path $owner 'user_settings.config') -Force
+    $before = [System.IO.File]::ReadAllText($realFixture) -replace "`r`n", "`n"
+    $orderBefore = @([regex]::Matches($before, '(?m)^\t\tid = "(\d+)"$') | ForEach-Object { $_.Groups[1].Value })
+    $plan3 = Join-Path $planDir 'swap-real.json'
+    Set-Content -LiteralPath $plan3 -Value '{ "name": "swap-real", "mods": ["1369573612", "3716869446", "3712896117"], "cases": [ { "id": "c", "file": "case.lua" } ] }'
+    $prof3 = & (Join-Path $harness 'New-RigProfile.ps1') -RealProfile $owner -ProfileRoot (Join-Path $root 'profile3') -PlanPath $plan3 -Nonce 'abcd1235' -DriverFile $driver `
+        -SlotSwaps @{ '3716869446' = $slotId }
+    $cfg3 = [System.IO.File]::ReadAllText($prof3.UserSettings)
+    $order3 = @([regex]::Matches($cfg3, '(?m)^\t\tid = "(\d+)"$') | ForEach-Object { $_.Groups[1].Value })
+    $on3 = @{}; foreach ($m in [regex]::Matches($cfg3, '(?m)^\t\tenabled = (true|false)\n\t\tid = "(\d+)"$')) { $on3[$m.Groups[2].Value] = $m.Groups[1].Value }
+    Assert-True (@($order3 | Where-Object { $_ -eq $slotId }).Count -eq 1) "real entries: the slot has exactly one entry ($($order3 -join ','))"
+    Assert-True ($order3.IndexOf($slotId) -eq $order3.IndexOf('3716869446') - 1) 'real entries: the slot sits right before the real entry, not at the end'
+    $withoutSlotAndDriver = @($order3 | Where-Object { $_ -ne $slotId -and $_ -ne $driverId })
+    Assert-True (($withoutSlotAndDriver -join ',') -eq ($orderBefore -join ',')) "real entries: every other entry keeps its place ($($withoutSlotAndDriver -join ','))"
+    Assert-True ($order3[-1] -eq $driverId) 'real entries: only the driver is appended, last'
+    Assert-True ($on3[$slotId] -eq 'true' -and $on3['3716869446'] -eq 'false') 'real entries: the slot is enabled and the real id ends disabled'
+    Assert-True ($on3['1369573612'] -eq 'true' -and $on3['3712896117'] -eq 'true' -and $on3['3733366851'] -eq 'false') 'real entries: plan mods on, others off'
+    Assert-True ($cfg3 -notmatch "Rig plan mod $slotId") 'real entries: no appended placeholder entry for the slot'
+    $slotEntry = [regex]::Match($cfg3, '(?s)\n\t\{\n(?:(?!\n\t\}).)*?\n\t\tid = "' + $slotId + '"\n.*?\n\t\}\n')
+    Assert-True ($slotEntry.Success -and $slotEntry.Value -match '\[b\]Features\[/b\]' -and $slotEntry.Value -match "(?m)^\t\tname = `"VT2 Rig Slot \(local build of 3716869446\)`"$") 'real entries: the slot entry is a full copy of the real one (description kept, name marked)'
+    $threw = $null
+    try {
+        & (Join-Path $harness 'New-RigProfile.ps1') -RealProfile $owner -ProfileRoot (Join-Path $root 'profile4') -PlanPath $plan3 -Nonce 'abcd1236' -DriverFile $driver `
+            -SlotSwaps @{ '3999999999' = $slotId } | Out-Null
+    }
+    catch { $threw = $_.Exception.Message }
+    Assert-True ($threw -match 'real mod 3999999999 has no entry') "a slot for a real id with no entry throws instead of appending ($threw)"
 }
 finally {
     if (Test-Path -LiteralPath $root) { Remove-Item -LiteralPath $root -Recurse -Force }

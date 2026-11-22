@@ -68,6 +68,11 @@ function M.network(load, codec)
             on_disabled=function(...) return nil,"disabled",nil,... end,
             on_enabled=function(...) return nil,"enabled",nil,... end }
         n.mod=mod
+        -- WP-WT-07: the entry's is_active and ordered registry (real modules),
+        -- which the parity flip and the profile gate now read.
+        mod._wt.is_active=function() return n.enabled==true end
+        mod._wt.registry=load("_wt_mutation_registry").new(function() end)
+        load("_wt_mutation_owners").register(mod._wt.registry,mod,{})
         local hook_count=0
         local function hook(class,method,callback)
             assert(type(class)=="table" and type(class[method])=="function")

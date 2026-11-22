@@ -1,5 +1,12 @@
 # Issue #1328: GitHub provenance reconciliation, never Workshop readiness.
 
+# WP-P-05: source pins are informational. They record the tree an override was
+# reviewed against and are no longer rewritten after a ship. The rewrite path
+# stays dormant for its own gates, which set VT2_SOURCE_PIN_REWRITE_SELFTEST=1.
+# The environment form survives repeated dot-sourcing and child processes; it
+# is unset in every real ship.
+$script:VtSourcePinRewriteEnabled = ($env:VT2_SOURCE_PIN_REWRITE_SELFTEST -ceq '1')
+
 # #1777: narrow opt-in route retention; provenance is not publication authority.
 function ConvertFrom-VtExceptionPinText {
     param([Parameter(Mandatory)][string]$Text)
@@ -495,6 +502,9 @@ function Invoke-VtPublishedPinFinalization {
         [Parameter(Mandatory)][string]$PublicationJson,
         [Parameter(Mandatory)][object]$TransactionLease
     )
+    if (-not $script:VtSourcePinRewriteEnabled) {
+        return [pscustomobject]@{ Completed = $true; Changed = $false; PinCount = 0; Summary = 'disabled: source pins are informational' }
+    }
     $record = ConvertFrom-VtPublishedPinContext -Json $PublicationJson
     # Reconciliation must remain inside the authenticated original ship lease,
     # never a joined borrower or a standalone recovery/publication entry point.

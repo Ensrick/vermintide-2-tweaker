@@ -1,5 +1,11 @@
 # Tweaker: GUI dev — Changelog
 
+## 0.2.372-dev (2026-11-15) -- Release-train re-version, no code change
+
+- Release-train re-version, no code change. Same source as 0.2.371-dev
+  below. Its version claim was released before it shipped, so the claim
+  broker allocated this fresh version (tools/ship/CLAIMS.md).
+
 ## 0.2.371-dev (2026-11-15) -- Publish the loadout isolation contract for item-minting mods (WP-GUT-04)
 
 - New `mod.loadout_isolation` (contract 1) tells another mod whether a

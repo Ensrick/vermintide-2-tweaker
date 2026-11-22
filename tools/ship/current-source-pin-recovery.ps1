@@ -80,6 +80,10 @@ function Invoke-VtCurrentSourcePinReconciliation {
         [Parameter(Mandatory)][string]$SourceCommit,
         [Parameter(Mandatory)]$TransactionLease
     )
+    # WP-P-05: source pins are informational; see exception-pin-finalization.ps1.
+    if (-not $script:VtSourcePinRewriteEnabled) {
+        return [pscustomobject]@{ Status = 'disabled'; Changed = $false; RequiresMetadataPR = $false; Summary = 'disabled: source pins are informational' }
+    }
     Assert-VtSourcePinRecoveryOwner -RepoRoot $RepoRoot -TransactionLease $TransactionLease
     if ($SourceCommit -cnotmatch '^[0-9a-f]{40}$' -or
         (Get-VtGitScalar -RepoRoot $RepoRoot -Arguments @('rev-parse','HEAD') -Description 'Recovery source HEAD') -cne $SourceCommit -or

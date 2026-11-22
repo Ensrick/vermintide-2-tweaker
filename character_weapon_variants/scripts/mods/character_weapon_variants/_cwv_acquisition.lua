@@ -573,4 +573,16 @@ function M.plan_removals(definitions, extra_legacy_ids, is_cim_owned, protected_
 	return removals
 end
 
+-- WP-CIM-07 (#402, #1688): "did CWV create this backend id". CWV mints
+-- `<cwv item key>_NNN` (blacksmith_seed_id above, `_000` its collision
+-- fallback; legacy_auto_grant_ids), and cim crafts of CWV keys use the same
+-- `cwv_<key>_NNN` shape (_cwv_menu_preview_owner.lua matches it the same way).
+-- None of these exists on the official account, so CWV's official loadout
+-- guard scrubs every id this returns true for. Vanilla PlayFab instance ids
+-- and other mods' ids never start with `cwv_`.
+function M.is_cwv_backend_id(backend_id)
+	return type(backend_id) == "string"
+		and backend_id:match("^cwv_[%w_]+_%d%d%d$") ~= nil
+end
+
 return M

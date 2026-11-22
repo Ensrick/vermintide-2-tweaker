@@ -1,10 +1,9 @@
 {
   "name": "sweep-dev",
-  "generated_by": "tools/harness/New-SmokePlan.ps1 from tools/mod-inventory.psd1 (rows with Stream 'dev' or 'single'); do not edit by hand",
+  "generated_by": "tools/harness/New-SmokePlan.ps1 from tools/mod-inventory.psd1 (rows with Stream 'dev' or 'single', without weapon_tweaker_dev (its single twin weapon_tweaker loads)); do not edit by hand",
   "mods": [
     "1369573612",
     "3712896117",
-    "3748824853",
     "3733366926",
     "3733367409",
     "3751024698",
@@ -23,7 +22,6 @@
   "expect_mods": [
     "VMF",
     "wt",
-    "wt_dev",
     "ct_dev",
     "gt_dev",
     "gut_dev",

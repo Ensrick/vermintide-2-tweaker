@@ -1,0 +1,12 @@
+{
+  "name": "cwv-cases",
+  "purpose": "CWV rig cases that equip CWV Blacksmith seeds. modded_progression is deliberately absent: its fresh-profile route answers get_item_from_id from its own view only, which hides MoreItemsLibrary seeds. cosmetics_tweaker supplies the embedded MoreItemsLibrary. Sibling of exec-cim's cim-guard-cases plan (same mod set).",
+  "mods": ["1369573612", "3715714222", "3716869446"],
+  "expect_mods": ["VMF", "cosmetics_tweaker", "character_weapon_variants"],
+  "local_builds": [ { "mod": "character_weapon_variants", "slot": 1 } ],
+  "timeout": 300,
+  "cases": [
+    { "id": "smoke-keep", "arena": "keep", "file": "../_rig/smoke_keep.lua" },
+    { "id": "a2f01_outrider_wire_name", "arena": "keep", "file": "../cwv/a2f01_outrider_wire_name.lua" }
+  ]
+}

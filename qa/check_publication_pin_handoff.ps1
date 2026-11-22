@@ -2,6 +2,11 @@
 [CmdletBinding()]
 param([switch]$SelfTest)
 $ErrorActionPreference = 'Stop'
+# WP-P-05: source pins are informational and the rewrite path is dormant in real
+# ships. This gate keeps testing it: enable it for this process, restore after.
+$previousPinRewriteSelfTest = $env:VT2_SOURCE_PIN_REWRITE_SELFTEST
+$env:VT2_SOURCE_PIN_REWRITE_SELFTEST = '1'
+try {
 $repo = Split-Path $PSScriptRoot -Parent
 . (Join-Path $repo 'tools\ship\exception-pin-finalization.ps1')
 . (Join-Path $repo 'qa\_test_fixtures\publication_handoff_fixture.ps1')
@@ -118,3 +123,7 @@ finally {
 # run_selftests invokes checks in-process. Successful assertions must report
 # their own outcome, not inherit the preceding check's native exit status.
 exit 0
+}
+finally {
+    $env:VT2_SOURCE_PIN_REWRITE_SELFTEST = $previousPinRewriteSelfTest
+}

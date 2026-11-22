@@ -24,12 +24,17 @@
 --
 -- 0.4.7 (WP-H-06 actor group): T.teleport takes { x, y, z } or a Vector3Box and builds the Vector3 in the main update.
 --
--- 0.4.8 (WP-H-05): arenas "deus" (the Chaos Wastes hub) and "deus:<level_key>" (a run level, loaded from the hub);
+-- 0.4.8: T.teleport refreshes the unit's POSITION_LOOKUP entry before teleport_to. The mod update runs first in the
+-- frame (Boot.game_update, scripts/boot.lua:750-751), before StateIngame.pre_update refreshes the lookup
+-- (scripts/game_state/state_ingame.lua:805-808), so the entry still held the previous frame's Vector3 and
+-- teleport_to's set_falling_height raised "Vector3 expected, got userdata" (lead run 20261122-024431-api-selftest).
+--
+-- 0.4.9 (WP-H-05): arenas "deus" (the Chaos Wastes hub) and "deus:<level_key>" (a run level, loaded from the hub);
 -- the backend write shield drops the run start's deusRunStarted request (SHIELD_DROP_REQUESTS).
 
 local plan, nonce = ...
 
-local DRIVER_VERSION = "0.4.8"
+local DRIVER_VERSION = "0.4.9"
 local driver = {}
 
 local function find_mod(name)
@@ -572,8 +577,13 @@ local function new_T(case)
 	end
 
 	-- Moves a unit that has a teleport_to locomotion (PlayerUnitLocomotionExtension.teleport_to,
-	-- default_player_unit/player_unit_locomotion_extension.lua:1005). position: { x, y, z } or a Vector3Box (built into a
-	-- Vector3 inside the main update, like T.spawn's offset), or a Vector3 (it reaches the engine one update later).
+	-- default_player_unit/player_unit_locomotion_extension.lua:1005). position: { x, y, z } or a Vector3Box, made into a
+	-- Vector3 inside the same main update that calls teleport_to; a Vector3 is passed as it is, so it must be alive in
+	-- that update (one returned by an earlier T.main is a dead temporary).
+	-- teleport_to ends in status_extension:set_falling_height, which reads POSITION_LOOKUP[unit].z
+	-- (generic/generic_status_extension.lua:2586-2593). The main update runs before the frame refreshes that lookup
+	-- (boot.lua:750-751 before state_ingame.lua:808), so the entry is the previous frame's Vector3: refresh it first,
+	-- as the game's own debug teleport does (scripts/managers/debug/debug_manager.lua:1089-1093).
 	function T.teleport(unit, position)
 		local moved = T.main(function ()
 			local locomotion = unit and ScriptUnit.has_extension(unit, "locomotion_system")
@@ -595,6 +605,12 @@ local function new_T(case)
 				if unboxed and value ~= nil then
 					target = value
 				end
+			end
+
+			local lookup = rawget(_G, "POSITION_LOOKUP")
+
+			if lookup and lookup[unit] ~= nil then
+				lookup[unit] = Unit.world_position(unit, 0)
 			end
 
 			locomotion:teleport_to(target)
@@ -883,9 +899,33 @@ local function run_main_jobs()
 	end
 end
 
+-- A case file's own `cleanup` field (a function; it gets the case's T): run once when a case that started ends,
+-- whatever the verdict (PASS, FAIL, ERROR, INCONCLUSIVE, TIMEOUT), here in the main update and before the helpers'
+-- cleanups. Its error is recorded as a NOTE and never changes the verdict. It must not wait (T.wait, T.frames,
+-- T.wait_until, T.main need the case coroutine) and should be safe to call after the case already undid its work.
+-- A case that never started (load error, arena not reached) has nothing to undo, so its cleanup is not called.
+local function run_case_cleanup(case)
+	local def = case.def
+
+	if case.case_cleanup_ran or not case.co or type(def) ~= "table" or type(def.cleanup) ~= "function" then
+		return
+	end
+
+	case.case_cleanup_ran = true
+
+	local ok, err = pcall(def.cleanup, case.T)
+
+	if not ok then
+		out("NOTE id=%s key=case_cleanup_error value=%s", case.id, q(err))
+	end
+
+	out("CASE CLEANUP id=%s ok=%s", case.id, tostring(ok))
+end
+
 local function finish_case(case, verdict, detail)
 	S.main_jobs = {}
 
+	run_case_cleanup(case)
 	run_cleanups(case)
 
 	case.status = verdict

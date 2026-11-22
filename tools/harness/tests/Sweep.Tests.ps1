@@ -49,6 +49,20 @@ try {
     $null = & $pwsh -NoProfile -File $parser -EvidenceFile (Join-Path $root 'missing.txt') -Quiet 2>&1
     Assert-True ($LASTEXITCODE -eq 2) 'exit 2 when the evidence file is missing'
 
+    # missing suites: a loaded mod no suite printed for (wt_dev when wt took /wt_regression_test first)
+    $expected = @('VMF', 'gt_dev', 'character_weapon_variants', 'cosmetics_tweaker', 'mp', 'WOC', 'wt_dev')
+    $m = & $parser -EvidenceFile $evidence -ExpectMods $expected -Quiet
+    $missing = @($m.Suites | Where-Object { $_.status -eq 'missing' })
+    Assert-True ($m.Counts.missing_suites -eq 1 -and $missing[0].suite -eq '(missing) wt_dev' -and $missing[0].mods[0] -eq 'wt_dev') "a loaded mod with no suite is reported missing (got $($m.Counts.missing_suites): $($missing.suite -join ','))"
+    Assert-True ($m.Counts.fail -eq 3 -and $m.Counts.inconclusive_suites -eq 1) 'missing suites change no row and no other count'
+    $silentNames = Join-Path $root 'silent.txt'
+    Set-Content -LiteralPath $silentNames -Value @(
+        'STEP id=s n=1 - label="run /cd_regression_test"', 'OUT mod=character_dialogue via=echo text="Character Dialogue v0.1.15-dev: catalogue=1"', 'NOTE id=s key=lines:cd_regression_test value="1"',
+        'STEP id=s n=2 - label="run /vdl_regression_test"', 'NOTE id=s key=lines:vdl_regression_test value="0"')
+    $n = & $parser -EvidenceFile $silentNames -ExpectMods @('VMF', 'character_dialogue', 'vdl_dev', 'gut_dev') -Quiet
+    Assert-True (@($n.Suites | Where-Object { $_.status -eq 'missing' } | ForEach-Object { $_.mods[0] }) -join ',' -eq 'gut_dev') 'a suite that printed only a banner covers its mod; a silent one counts by command name (vdl for vdl_dev); VMF needs none'
+    Assert-True ($null -eq (& $parser -EvidenceFile $evidence -Quiet).Suites.Where({ $_.status -eq 'missing' })[0]) 'without -ExpectMods nothing is reported missing'
+
     $withLog = & $parser -EvidenceFile $clean -LogFile (Join-Path $fixtures 'sweep-rt.console.log') -Quiet
     $logRows = @($withLog.Rows | Where-Object { $_.source -eq 'log' })
     Assert-True ($logRows.Count -eq 3) "WP-T-01 log rows read (got $($logRows.Count))"

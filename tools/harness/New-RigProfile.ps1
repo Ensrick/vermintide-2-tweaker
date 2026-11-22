@@ -31,7 +31,8 @@ param(
     [string] $LibDir = '',                            # WP-H-06 tools/harness/driver/lib: every *.lua in it travels too
     [hashtable] $SlotSwaps = @{},                     # WP-H-07: real Workshop id -> rig slot id holding its local build
     [hashtable] $ExpectVersions = @{},                # WP-H-07: VMF mod id -> staged MOD_VERSION the smoke case checks
-    [switch] $KeepOwnerMods                           # no-plan experiments: leave the copied mod list as it is
+    [switch] $KeepOwnerMods,                          # no-plan experiments: leave the copied mod list as it is
+    [switch] $KeepProfile                             # WP-H-08 boots: start from the profile the previous boot left
 )
 $ErrorActionPreference = 'Stop'
 
@@ -42,11 +43,41 @@ function Set-TopLevel([string] $text, [string] $key, [string] $value) {
     if ($rx.IsMatch($text)) { return $rx.Replace($text, "$key = $value", 1) }
     return "$key = $value`n" + $text
 }
+# A JSON scalar as SJSON text: true/false, a number in invariant form, a quoted string (-RawString: the string as it is).
+function ConvertTo-SjsonScalar($value, [switch] $RawString) {
+    if ($value -is [bool]) { return $(if ($value) { 'true' } else { 'false' }) }
+    if ($value -is [int] -or $value -is [long] -or $value -is [double] -or $value -is [decimal]) { return [System.Convert]::ToString($value, [System.Globalization.CultureInfo]::InvariantCulture) }
+    if ($value -is [string]) { return $(if ($RawString) { $value } else { ConvertTo-SjsonString $value }) }
+    throw "plan value must be true, false, a number or a string (got $($value.GetType().Name)): $value"
+}
+function ConvertTo-SjsonKey([string] $name) { if ($name -match '^[A-Za-z_][A-Za-z0-9_]*$') { $name } else { ConvertTo-SjsonString $name } }
+# Sets mods_settings.<mod>.<setting> = <value> in the user settings text. The table, the mod's block and the setting are
+# matched by indentation (one tab per level, as the game writes the file); an existing value, one line or a multi-line
+# table or array, is replaced.
+function Set-ModOption([string] $text, [string] $mod, [string] $setting, [string] $value) {
+    $tableRx = [regex]'(?ms)^mods_settings = \{\n(.*?)^\}\n'
+    if (-not $tableRx.IsMatch($text)) { $text = "mods_settings = {`n}`n" + $text }
+    $table = $tableRx.Match($text)
+    $body = $table.Groups[1].Value
+    $modKey = ConvertTo-SjsonKey $mod
+    $modRx = [regex]('(?ms)^\t' + [regex]::Escape($modKey) + ' = \{\n(.*?)^\t\}\n')
+    if (-not $modRx.IsMatch($body)) { $body += "`t$modKey = {`n`t}`n" }
+    $modBlock = $modRx.Match($body)
+    $inner = $modBlock.Groups[1].Value
+    $setKey = [regex]::Escape((ConvertTo-SjsonKey $setting))
+    $inner = [regex]::Replace($inner, '(?ms)^\t\t' + $setKey + ' = [\[\{]\n.*?^\t\t[\]\}]\n', '')
+    $inner = [regex]::Replace($inner, '(?m)^\t\t' + $setKey + ' = .*\n', '')
+    $inner += "`t`t$(ConvertTo-SjsonKey $setting) = $value`n"
+    $body = $body.Substring(0, $modBlock.Groups[1].Index) + $inner + $body.Substring($modBlock.Groups[1].Index + $modBlock.Groups[1].Length)
+    return $text.Substring(0, $table.Groups[1].Index) + $body + $text.Substring($table.Groups[1].Index + $table.Groups[1].Length)
+}
 
 $planObj = $null
 if ($PlanPath) {
     $PlanPath = (Resolve-Path -LiteralPath $PlanPath).Path
     $planObj = [System.IO.File]::ReadAllText($PlanPath) | ConvertFrom-Json
+    # WP-H-08: "modset" fills mods and expect_mods from tools/harness/modsets.psd1 (run.ps1 resolves it the same way)
+    $planObj = & (Join-Path $PSScriptRoot 'Resolve-RigPlan.ps1') -Plan $planObj
     if (-not $Nonce) { throw 'A plan needs -Nonce.' }
     if (-not $DriverFile -or -not (Test-Path -LiteralPath $DriverFile -PathType Leaf)) { throw "Driver file not found: $DriverFile" }
 }
@@ -55,41 +86,76 @@ $rigAppData = Join-Path $ProfileRoot 'AppData\Roaming'
 $rigLocal = Join-Path $ProfileRoot 'AppData\Local'
 $rigVt2 = Join-Path $rigAppData 'Fatshark\Vermintide 2'
 New-Item -ItemType Directory -Force -Path $rigVt2, $rigLocal, (Join-Path $rigVt2 'console_logs') | Out-Null
-foreach ($f in 'save_data.sav', 'save_data.old', 'launcher.config') {
-    $src = Join-Path $RealProfile $f
-    if (Test-Path -LiteralPath $src) { Copy-Item -LiteralPath $src -Destination (Join-Path $rigVt2 $f) -Force }
+# -KeepProfile (a later boot of a plan with boots): the save and settings the previous boot left in the rig profile
+# are the starting point; nothing is copied from the owner's profile again.
+if ($KeepProfile) {
+    if (-not (Test-Path -LiteralPath (Join-Path $rigVt2 'user_settings.config') -PathType Leaf)) { throw "KeepProfile: no rig profile to keep under $rigVt2" }
+}
+else {
+    foreach ($f in 'save_data.sav', 'save_data.old', 'launcher.config') {
+        $src = Join-Path $RealProfile $f
+        if (Test-Path -LiteralPath $src) { Copy-Item -LiteralPath $src -Destination (Join-Path $rigVt2 $f) -Force }
+    }
 }
 $shader = Join-Path $rigVt2 'shader_cache.pipe_lib'
 if (-not (Test-Path -LiteralPath $shader) -and (Test-Path -LiteralPath (Join-Path $RealProfile 'shader_cache.pipe_lib'))) {
     Copy-Item -LiteralPath (Join-Path $RealProfile 'shader_cache.pipe_lib') -Destination $shader
 }
 
-$cfg = [System.IO.File]::ReadAllText((Join-Path $RealProfile 'user_settings.config')) -replace "`r`n", "`n"
+$cfgSource = if ($KeepProfile) { Join-Path $rigVt2 'user_settings.config' } else { Join-Path $RealProfile 'user_settings.config' }
+$cfg = [System.IO.File]::ReadAllText($cfgSource) -replace "`r`n", "`n"
 $forced = [ordered]@{ borderless_fullscreen = 'false'; fullscreen = 'false'; max_fps = '30'; master_bus_volume = '0' }
-if ($planObj -and $planObj.settings) { foreach ($p in $planObj.settings.PSObject.Properties) { $forced[$p.Name] = [string]$p.Value } }
+# plan "settings": top-level user settings; a JSON boolean or number is written as SJSON (true, 30), a string as it
+# is (raw SJSON text, e.g. "30")
+if ($planObj -and $planObj.settings) { foreach ($p in $planObj.settings.PSObject.Properties) { $forced[$p.Name] = ConvertTo-SjsonScalar $p.Value -RawString } }
 foreach ($k in $forced.Keys) { $cfg = Set-TopLevel $cfg $k $forced[$k] }
 $cfg = [regex]::Replace($cfg, '(?ms)^screen_resolution = \[.*?^\]', "screen_resolution = [`n`t1280`n`t720`n]", 1)
 $cfg = [regex]::Replace($cfg, '(?ms)^vt2_rig_plan = \{.*?^\}\n', '', 1)
 $cfg = [regex]::Replace($cfg, '(?ms)^vt2_rig_results = \{.*?^\}\n', '', 1)
 $cfg = [regex]::Replace($cfg, '(?ms)^vt2_rig_progress = \{.*?^\}\n', '', 1)
+# WP-H-08 plan "options": { "<VMF mod id>": { "<setting>": <value> } } goes into the top-level mods_settings table,
+# which VMF reads once when it loads (Vermintide-Mod-Framework/vmf/scripts/mods/vmf/modules/core/settings.lua:10).
+if ($planObj -and $planObj.PSObject.Properties['options'] -and $planObj.options) {
+    foreach ($modProp in $planObj.options.PSObject.Properties) {
+        foreach ($setProp in $modProp.Value.PSObject.Properties) { $cfg = Set-ModOption $cfg $modProp.Name $setProp.Name (ConvertTo-SjsonScalar $setProp.Value) }
+    }
+}
 
 if ($planObj -or -not $KeepOwnerMods) {
     $wanted = @(); if ($planObj -and $planObj.mods) { $wanted = @($planObj.mods | ForEach-Object { [string]$_ }) }
     if ($planObj) { $wanted += $DriverId }
     # WP-H-07 local builds: the slot takes the real mod's place in the load order (a copy of the real entry with the
-    # slot id, inserted right before it) and the real id is left disabled.
+    # slot id, inserted right before it) and the real id is left disabled. An entry is bracketed from the "\t{" line
+    # before its "\t\tid" line to the first "\t}" line after it: a real entry's description is free text over many
+    # lines that need not start with tabs (BBCode, blank lines), so no line pattern may be assumed in between. The
+    # fields after id are one-line values and tab-indented arrays, so the first "\t}" after id closes the entry.
     if ($planObj -and $SlotSwaps.Count) {
-        $entryOf = { param([string] $id) '(?m)^\t\{\n(?:\t\t[^\n]*\n)*?\t\tid = "' + $id + '"\n(?:\t\t[^\n]*\n)*?\t\}\n' }
+        $findEntry = {
+            param([string] $text, [string] $id)
+            $idLine = [regex]::Match($text, '(?m)^\t\tid = "' + $id + '"$')
+            if (-not $idLine.Success) { return $null }
+            $open = $text.LastIndexOf("`n`t{`n", $idLine.Index)
+            $close = $text.IndexOf("`n`t}`n", $idLine.Index)
+            $array = [regex]::Match($text, '(?m)^mods = \[$')
+            if ($open -lt 0 -or $close -lt 0 -or -not $array.Success -or $open -lt $array.Index) {
+                throw "mod entry $id found but not bracketed by tab-{ and tab-} lines inside the mods array"
+            }
+            $start = $open + 1
+            $end = $close + 4
+            [pscustomobject]@{ Index = $start; Length = $end - $start; Value = $text.Substring($start, $end - $start) }
+        }
         foreach ($real in @($SlotSwaps.Keys)) {
             $slotId = [string]$SlotSwaps[$real]
             if ($real -notmatch '^\d+$' -or $slotId -notmatch '^\d+$') { throw "slot swap ids must be Workshop numbers: $real -> $slotId" }
-            $cfg = [regex]::Replace($cfg, (& $entryOf $slotId), '')
-            $m = [regex]::Match($cfg, (& $entryOf $real))
-            if ($m.Success) {
-                $copy = $m.Value -replace ('(?m)^\t\tid = "' + $real + '"$'), "`t`tid = `"$slotId`""
-                $copy = $copy -replace '(?m)^\t\tname = "[^"]*"$', "`t`tname = `"VT2 Rig Slot (local build of $real)`""
-                $cfg = $cfg.Insert($m.Index, $copy)
+            # an entry the owner's list already holds for the slot item goes (it would load at its own place)
+            while ($null -ne ($old = & $findEntry $cfg $slotId)) { $cfg = $cfg.Remove($old.Index, $old.Length) }
+            $m = & $findEntry $cfg $real
+            if ($null -eq $m) {
+                throw "slot swap: the real mod $real has no entry in the copied user_settings.config, so slot $slotId has no load position to take (subscribe the real mod, or drop it from local_builds)"
             }
+            $copy = $m.Value -replace ('(?m)^\t\tid = "' + $real + '"$'), "`t`tid = `"$slotId`""
+            $copy = $copy -replace '(?m)^\t\tname = "[^"\n]*"$', "`t`tname = `"VT2 Rig Slot (local build of $real)`""
+            $cfg = $cfg.Insert($m.Index, $copy)
         }
         $wanted = @($wanted | ForEach-Object { if ($SlotSwaps.ContainsKey($_)) { [string]$SlotSwaps[$_] } else { $_ } })
     }
