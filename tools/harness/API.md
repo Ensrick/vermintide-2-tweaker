@@ -104,7 +104,7 @@ For cases in a `"deus:<level_key>"` arena (a run level, e.g. `pat_mountain_waste
 
 | Helper | Status | What it does | Wraps | Packs | Rig |
 |---|---|---|---|---|---|
-| `T.shield()` | driver | a copy of what the backend write shield counted so far | none (WP-H-14) | none | shield-equip, api-selftest |
+| `T.shield()` | driver | a copy of what the backend write shield counted so far (with `blocked_by_name`, and `replied_by_name` and `reply_errors` for the dropped requests it answered, driver 0.4.9) | none (WP-H-14) | none | shield-equip, api-selftest, deus-smoke |
 | `T.shared(name)` | driver | a shared helper table from `qa/runtime/_shared/<name>.lua`, or INCONCLUSIVE | none | none | shield-equip, api-selftest |
 | `T.shot(label)` | lib/shot.lua | records that the case asked for a still (`SHOT ... captured=false`) and returns false; the capture is WP-H-10 | none yet | CONV, all packs | api-selftest |
 

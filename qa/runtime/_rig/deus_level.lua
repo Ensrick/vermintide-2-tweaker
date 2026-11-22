@@ -1,5 +1,6 @@
 -- WP-H-05 deus-smoke, run part: the "deus:pat_mountain_wastes_path1" arena starts a run on one level from the hub,
--- the write shield dropped the run start's deusRunStarted request (it never reaches the account), a vanilla boon
+-- the write shield dropped the run start's deusRunStarted request (it never reaches the account) and answered the
+-- game's callback as a successful response would (driver 0.4.9), a vanilla boon
 -- granted with T.grant_boon is active, and T.set_deus_coins changes the run's coins (restored at cleanup).
 return {
 	issue = 0,
@@ -16,6 +17,8 @@ return {
 		local shield = T.shield()
 
 		T.expect((shield.blocked_by_name.deusRunStarted or 0) >= 1, "the shield dropped the run start's deusRunStarted request")
+		T.expect((shield.replied_by_name.deusRunStarted or 0) >= 1, "the shield answered the game's deusRunStarted callback")
+		T.expect_eq(shield.reply_errors, 0, "the shield answered deusRunStarted without an error")
 		T.expect_eq(shield.saw_update_hero_attributes, 0, "no updateHeroAttributes request since the shield went up")
 
 		T.step("grant a vanilla boon")

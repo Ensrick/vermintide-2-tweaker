@@ -30,7 +30,8 @@
 -- teleport_to's set_falling_height raised "Vector3 expected, got userdata" (lead run 20261122-024431-api-selftest).
 --
 -- 0.4.9 (WP-H-05): arenas "deus" (the Chaos Wastes hub) and "deus:<level_key>" (a run level, loaded from the hub);
--- the backend write shield drops the run start's deusRunStarted request (SHIELD_DROP_REQUESTS).
+-- the backend write shield drops the run start's deusRunStarted request (SHIELD_DROP_REQUESTS) and answers the
+-- game's callback on the next update with the result shape a successful response has (deliver_shield_replies).
 
 local plan, nonce = ...
 
@@ -117,15 +118,32 @@ local S = {
 		saw_requests = 0,
 		blocked_requests = 0,
 		blocked_by_name = {},
+		replied_requests = 0,
+		replied_by_name = {},
+		reply_errors = 0,
 	},
+	-- callbacks of dropped requests, answered on the next update (deliver_shield_replies)
+	shield_replies = {},
 }
 
 -- WP-H-05: cloud scripts the shield never sends. deusRunStarted is enqueued by every Chaos Wastes run start
 -- (DeusMechanism._setup_run, Vermintide-2-Source-Code/scripts/managers/game_mode/mechanisms/deus_mechanism.lua:1213;
 -- BackendInterfaceDeusPlayFab.deus_run_started, scripts/managers/backend_playfab/backend_interface_deus_playfab.lua:
--- 100-116) and resets the account's rolled-over run coins (the client predicts it: playfab_mirror_base.lua:2693-2695).
--- A dropped request gets a negative id and no callback; its only caller ignores both.
-local SHIELD_DROP_REQUESTS = { deusRunStarted = true }
+-- 100-116) and resets the account's rolled-over run coins (the client predicts it: playfab_mirror_base.lua:2695-2697).
+-- A dropped request gets a negative id (its only caller ignores it), and its success callback is answered on the next
+-- update the way a successful response answers it: PlayFabRequestQueue.playfab_request_success_cb calls
+-- success_callback(result) with the ExecuteCloudScript result (scripts/managers/backend_playfab/
+-- playfab_request_queue.lua:241-265), only after update sent the request (:116-176), never inside the enqueue
+-- call. deusRunStarted's callback hands it
+-- to PlayFabMirrorBase.handle_deus_result (backend_interface_deus_playfab.lua:108-111), which needs a FunctionResult
+-- table and applies only the fields present in it (playfab_mirror_base.lua:2668-2687). The driver never invents
+-- server values, so the faked result has an empty FunctionResult: the mirror keeps the client's own prediction.
+-- Each entry builds the result for one request.
+local SHIELD_DROP_REQUESTS = {
+	deusRunStarted = function ()
+		return { FunctionResult = {} }
+	end,
+}
 
 -- The console log is written through a buffer, so the orchestrator cannot rely on it for liveness.
 -- A settings save is a real file write: it is the live progress channel.
@@ -1192,6 +1210,32 @@ local function shield_keep_decorations(mirror)
 	out("SHIELD keep_decorations installed t=%.1f state=%s", S.t, tostring(S.game_state))
 end
 
+-- Answers the callbacks of requests the shield dropped, one update after the enqueue (see SHIELD_DROP_REQUESTS). An
+-- error in the game's callback is reported and counted; it never stops the run.
+local function deliver_shield_replies()
+	local replies = S.shield_replies
+
+	if #replies == 0 then
+		return
+	end
+
+	S.shield_replies = {}
+
+	for i = 1, #replies do
+		local reply = replies[i]
+		local ok, err = pcall(reply.callback, reply.result)
+
+		S.shield.replied_requests = S.shield.replied_requests + 1
+		S.shield.replied_by_name[reply.name] = (S.shield.replied_by_name[reply.name] or 0) + 1
+
+		if not ok then
+			S.shield.reply_errors = S.shield.reply_errors + 1
+		end
+
+		out("SHIELD replied=%s ok=%s err=%s case=%s", reply.name, tostring(ok), q(ok and "" or tostring(err)), S.current and S.current.id or "-")
+	end
+end
+
 local function install_shield()
 	if plan.backend_shield == false then
 		return
@@ -1226,10 +1270,17 @@ local function install_shield()
 			local drop = type(request) == "table" and SHIELD_DROP_REQUESTS[request.FunctionName]
 
 			if drop then
-				S.shield.blocked_requests = S.shield.blocked_requests + 1
-				S.shield.blocked_by_name[request.FunctionName] = (S.shield.blocked_by_name[request.FunctionName] or 0) + 1
+				local name = request.FunctionName
+				local success_callback = ...
 
-				out("SHIELD blocked=%s case=%s", tostring(request.FunctionName), S.current and S.current.id or "-")
+				S.shield.blocked_requests = S.shield.blocked_requests + 1
+				S.shield.blocked_by_name[name] = (S.shield.blocked_by_name[name] or 0) + 1
+
+				out("SHIELD blocked=%s case=%s reply=%s", tostring(name), S.current and S.current.id or "-", type(success_callback) == "function" and "next-update" or "none")
+
+				if type(success_callback) == "function" then
+					S.shield_replies[#S.shield_replies + 1] = { name = name, callback = success_callback, result = drop(request) }
+				end
 
 				return -S.shield.blocked_requests
 			end
@@ -1395,6 +1446,7 @@ driver.update = function (_, dt)
 	end
 
 	install_shield()
+	deliver_shield_replies()
 
 	if S.t - S.hb_at >= 5 then
 		S.hb_at = S.t
