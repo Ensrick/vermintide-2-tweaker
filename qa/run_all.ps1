@@ -633,6 +633,11 @@ if ($Quick) {
     exit $script:blockingExit
 }
 
+# WP-T-03: the engine-free integration tier loads the real vanilla data tables from the decompile in plain Lua 5.1
+# and checks mod data against them (half a second). Full pass only. Without a decompile (hosted CI) it prints a SKIP
+# line and exits 0. CHECKS.md row 39a.
+Run-Check "check_integration" { & (Join-Path $here "check_integration.ps1") -Quiet:$Quiet }
+
 # run_selftests exercises the -SelfTest of every self-test-capable script
 # (all fixture-based, offline, ~1s total). A self-test regression means a QA
 # check's own logic is broken - the gate must not trust a broken check, so

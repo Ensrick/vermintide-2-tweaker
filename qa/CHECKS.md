@@ -305,6 +305,7 @@ of the local checkout.
 | 37 | Adventure-injected levels crash on no_roamers mutator | `reference_vt2_adventure_pack_spawning_compat.md` | Architectural; ct strips incompatible mutators | (PATCHED) |
 | 38 | Custom ExplosionTemplates need `.name` + global registration | `reference_vt2_custom_explosion_template.md` | PRE-SHIP review | PRE-SHIP |
 | 39 | VMF custom_gui_textures must list ui_renderer_injections | `reference_vmf_renderer_creator_keys.md` | PRE-SHIP review | PRE-SHIP |
+| 39a | Mod data names a vanilla item, weapon template or career that does not exist (or no longer exists after a patch) | WP-T-03 (B2-F01, B2-F04) | `check_integration.ps1`: loads the real vanilla data tables from the decompile in plain Lua 5.1 (`qa/integration/`) and runs `qa/integration/suites/` (vanilla self-check, weapon_tweaker unlock map, CWV variant catalogs); `-SelfTest` plants a bad key per suite. SKIP without a decompile (hosted CI) | ✅ full `run_all` (not Quick), local only in effect |
 
 ### Cosmetics-specific issues (handed off to other agent group)
 
@@ -739,6 +740,7 @@ gate; strict `-SourceRepo ... -RequireSource` requires every source proof.
 | Check | Last run | Notes |
 |---|---|---|
 | `check_cfg.ps1` | ✅ OK | all 20 cfgs pass |
+| `check_integration.ps1` | ✅ OK (2026-11-22, first run) | Row 39a (WP-T-03). Decompile 93dea911: 743 vanilla files in 0.5 s; ItemMasterList=2979 Weapons=183 BuffTemplates=1547 Breeds=79 CareerSettings=30; three suites clean. weapon_tweaker's 260 (wt_dev 261) rows that name a weapon the career already wields are reported as notes, never failures. SKIP without a decompile. |
 | `check_versions.ps1` | ✅ title/release identity blocking; semver debt advisory | cfg title drift is blocking after the failed-closed WT 0.12.292-beta publication; description triplet debt and 4-segment MOD_VERSIONs retain their documented ratchets (row 10a). |
 | `check_unpack_safety.ps1` | ✅ OK | all sites in ct/mp/wt either explicit-j or annotated (post-Issue #36 audit) |
 | `check_vmf_widget_types.ps1` | ✅ OK | all 23 active `*_data.lua` clean post-gt v0.2.60-dev `text_input` fix (2026-05-25) |
