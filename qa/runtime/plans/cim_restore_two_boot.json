@@ -1,10 +1,13 @@
 {
   "name": "cim-restore-two-boot",
-  "note": "WP-CIM-04 (#1654). Two boots on ONE rig profile: run.ps1 hands a plan with boots to tools/harness/Invoke-RigBoots.ps1 (WP-H-08), and boot 2 starts from the profile (save, settings, mod data) boot 1 left, so boot 2 reads the crafts boot 1 made.",
+  "note": "WP-CIM-04 (#1654). Two boots on ONE rig profile: run.ps1 hands a plan with boots to tools/harness/Invoke-RigBoots.ps1 (WP-H-08), and boot 2 starts from the profile (save, settings, mod data) boot 1 left, so boot 2 reads the crafts boot 1 made. Boot 2 runs regression_suites first because cim-1654-both-restored ends on T.expect_rt, which reads rows echoed earlier in the same boot (tools/harness/driver/vt2_rig_driver.lua:734-740).",
   "mods": ["1369573612", "3733366851"],
-  "timeout": 300,
+  "timeout": 600,
   "boots": [
     { "cases": [ { "id": "cim-1654-craft-two-copies", "arena": "keep", "file": "../cim/issue_1654_craft_two_copies.lua" } ] },
-    { "cases": [ { "id": "cim-1654-both-restored", "arena": "keep", "file": "../cim/issue_1654_both_restored.lua" } ] }
+    { "cases": [
+      { "id": "regression_suites", "arena": "keep", "file": "../_rig/sweep_regression.lua" },
+      { "id": "cim-1654-both-restored", "arena": "keep", "file": "../cim/issue_1654_both_restored.lua" }
+    ] }
   ]
 }
