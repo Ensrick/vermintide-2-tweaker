@@ -440,6 +440,15 @@ return function(H, repo_root)
         return with_raw_bindings(bindings, function()
             assert(loadfile(warlord_path))()
             assert(loadfile(chosen_path))()
+            -- #1915: the owners only queue their jobs at load. Run the queue
+            -- the way _et_custom_breed_scheduler.lua does (declaration order,
+            -- one register call per job, then the job's result callback).
+            capture.jobs = ET.CustomBreedJobs or {}
+            for i = 1, #capture.jobs do
+                local job = capture.jobs[i]
+                local ok, reason = capture_registrar.register(job.spec)
+                job.on_result(ok, reason, "capture")
+            end
             return capture
         end)
     end

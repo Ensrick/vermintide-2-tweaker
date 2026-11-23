@@ -208,7 +208,11 @@ local chosen_services = {
 }
 
 mod._et_chosen_ready = false
-local chosen_ok, chosen_reason = Registrar.register({
+-- #1915: queued after the Warlord job (wire order); the scheduler loaded by
+-- _et_custom_breed_parity.lua runs both once the network capacities exist.
+local jobs = rawget(ET, "CustomBreedJobs") or {}
+ET.CustomBreedJobs = jobs
+jobs[#jobs + 1] = { spec = {
     owner = "enemy_tweaker.chosen_greataxe",
     name = CHOSEN_BREED,
     source_breed = CHOSEN.source_breed,
@@ -264,15 +268,16 @@ local chosen_ok, chosen_reason = Registrar.register({
     readiness = {
         { target = mod, key = "_et_chosen_ready", value = true },
     },
-})
-if chosen_ok then
-    _chosen_log("breed %s %s through atomic registrar (source=%s; inventory=%s)",
-        CHOSEN_BREED, tostring(chosen_reason), CHOSEN.source_breed,
-        tostring(CHOSEN.inventory_template))
-else
-    _chosen_log("ALERT: Chosen registration rejected (%s) — prototype unavailable this session",
-        tostring(chosen_reason))
-end
+}, on_result = function(chosen_ok, chosen_reason, trigger)
+    if chosen_ok then
+        _chosen_log("breed %s %s through atomic registrar (source=%s; inventory=%s; trigger=%s)",
+            CHOSEN_BREED, tostring(chosen_reason), CHOSEN.source_breed,
+            tostring(CHOSEN.inventory_template), tostring(trigger))
+    else
+        _chosen_log("ALERT: Chosen registration rejected (%s trigger=%s) - prototype unavailable this session",
+            tostring(chosen_reason), tostring(trigger))
+    end
+end }
 
 ET.rt_register("issue1413_atomic_custom_breed_registration", function()
     local ok, reason = Registrar.validate_all_registered()

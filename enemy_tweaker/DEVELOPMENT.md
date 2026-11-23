@@ -43,7 +43,7 @@ in manifest order (VMF `mod:dofile` is NOT a singleton - each call re-executes
 the file - so modules never dofile each other; shared helpers publish into
 `mod._et`, the #479 protective factories additionally as `mod._et479_*`).
 Named exceptions, each a single one-shot nested load owner:
-`_et_custom_breed_parity` loads `_lib_peer_parity`, and
+`_et_custom_breed_parity` loads `_lib_peer_parity` and `_et_custom_breed_scheduler` (#1915), and
 `_et_skaven_warlord_breed` loads `_et_diag_capacity_authority` (#324, registered
 as its LoadOwner in `qa/diagnostic_ownership.psd1`).
 
@@ -62,9 +62,10 @@ as its LoadOwner in `qa/diagnostic_ownership.psd1`).
 | `_et_roaming` | roaming size (SIP + recycler guard + ambient density + clone shim) |
 | `_et_custom_breed_registrar` | #1413 Enemy-local declarative transaction owner for every custom breed: off-table clone/side-surface plan, three strict wire axes planned on shadows through `_lib_network_lookup`, source-authoritative damage/statistics-path capacities, exact reload fingerprint with bounded engine-owned difficulty overlays, detached table presentations, reversible raw-table commit, `Breeds` publication last, and fail-closed terminal handling for the engine's opaque threat upvalue |
 | `_et_custom_breed_identity` | #451B engine-free exact identity over both ET breed names, registrar schema/fingerprints, and symmetric ids on `NetworkLookup.{breeds,damage_sources,statistics_path_names}`; also owns the canonical-custom/validated-vanilla-donor decision used by both spawn surfaces |
-| `_et_skaven_warlord_breed` | #324 Warlord policy/spec consumed by `_et_custom_breed_registrar` (MUST precede `_et_champion_warlord`) + bounded `[et:324]` spawn diagnostics: AI/BT/target/nav/locomotion snapshot at spawn/+5s/+15s for up to 4 Warlord spawns per session, dispatched from the `_post_spawn_unit` seam and the lifecycle update owner |
+| `_et_skaven_warlord_breed` | #324 Warlord policy/spec queued for `_et_custom_breed_registrar` (MUST precede `_et_champion_warlord`: it records the pristine Champion fields the deferred clone restores) + bounded `[et:324]` spawn diagnostics: AI/BT/target/nav/locomotion snapshot at spawn/+5s/+15s for up to 4 Warlord spawns per session, dispatched from the `_post_spawn_unit` seam and the lifecycle update owner |
 | `_et_diag_capacity_authority` | #324 bounded capacity-authority probe, loaded once by `_et_skaven_warlord_breed` (the entry manifest sits on its decomposition ceiling): `[et:324] cap-probe` rows for `phase=load` and one `phase=network` sample once `NetworkConstants.damage_source_id` exists, header also reports the metatable-aware `indexed=` type, `meta=` and `via=raw|index`, per capacity axis the `Network.type_info` outcome and max, the registrar `capacity_verdicts()` verdict, lookup row count, then the raw constant and result shapes; module-local ledger capped at 8 printf rows per module load, emitted through a literal `pcall(printf, "[et:324] cap-probe %s", ...)` route; check `issue324_capacity_authority_probe` (registered before the load sample). Retire with #324 |
-| `_et_custom_breed_parity` | #451B canonical exact peer-parity instance, installed after both breed registrations and before hot-join/spawn hooks; revalidates registrar + identity at emission; excludes the listen-server owner at both real pre-roster ingress hooks and delegates its native chain exactly once; treats boot-time absence of the optional parity owner as absence rather than failed cleanup; permits donor-safe native sync only when both live and queued counters for both ET breeds are proven zero; holds a live/queued-state remote join's pending challenge outside `GameSession` without kicking, admits delayed exact proof, and kicks once only after timeout or definitive proof revocation; forgets disconnect epochs and owns bounded donor/hot-join logs |
+| `_et_custom_breed_scheduler` | #1915 engine-free once-only runner for the queued Warlord and Chosen registrar jobs (`mod._et.CustomBreedJobs`, manifest order = wire order): runs them on the first trigger whose `capacity_verdicts()` reports a cap for all three axes, then calls the parity owner's install; bounded `[et:451]` deferred/ran rows; loaded once by `_et_custom_breed_parity` |
+| `_et_custom_breed_parity` | #451B canonical exact peer-parity instance, installed after the deferred breed registration (#1915: immediate try at load, `StateLoadingRestartNetwork._init_network` return, `GameNetworkManager.init` backstop, `mod.update` once `NetworkConstants` exists, which also covers a VMF-disabled copy; the exact channel is registered at load with a forwarder because VMF refuses late `network_register`) and before hot-join/spawn hooks; revalidates registrar + identity at emission; excludes the listen-server owner at both real pre-roster ingress hooks and delegates its native chain exactly once; treats boot-time absence of the optional parity owner as absence rather than failed cleanup; permits donor-safe native sync only when both live and queued counters for both ET breeds are proven zero; holds a live/queued-state remote join's pending challenge outside `GameSession` without kicking, admits delayed exact proof, and kicks once only after timeout or definitive proof revocation; forgets disconnect epochs and owns bounded donor/hot-join logs |
 | `_et_champion_warlord` | champion/warlord pools + SINGLE consolidated `spawn_queued_unit` hook extended with the custom-breed sender floor + sole `spawn_unit_immediate` floor + existing #324 crash guards |
 | `_et_director_hooks` | ConflictDirector init/refresh re-apply chain |
 | `_et_event_size` | terror-event horde size scaling |
@@ -374,8 +375,16 @@ become visible.
 - The `hit_zones` overlay (use `source.hit_zones` not
   `chaos_skeleton.hit_zones`) — actor names must match the actual
   unit.
-- All breed-registration must run eagerly at script load (VMF-disabled
-  mods still execute module code; hooks alone fail).
+- All breed-registration must be declared eagerly at script load (VMF-disabled
+  mods still execute module code; hooks alone fail). #1915: the registrar
+  cannot prove the three wire capacities before the network starts, so the
+  declared jobs run once from `_et_custom_breed_scheduler` (immediate try at
+  load, then the `StateLoadingRestartNetwork._init_network` return and the
+  `GameNetworkManager.init` backstop). VMF keeps those hooks inactive while
+  Enemy Tweaker is disabled (VMF `hooks.lua:125,147`) but still calls its
+  `mod.update` (VMF `events.lua:44-51`), so a fourth trigger in the parity
+  owner's update, gated on `NetworkConstants`, registers a disabled copy too:
+  the wire rows stay index-identical whether the mod is enabled or not.
 
 ---
 

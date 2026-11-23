@@ -22,17 +22,20 @@ breed_skaven_storm_vermin_champion.lua:88-97).
 
 LOAD ORDER CONTRACT: enemy_tweaker.lua dofiles THIS file BEFORE the Champion
 elite-pool retune's load-time apply (`_safe("champion_load_apply", ...)`), so
-Breeds[skaven_storm_vermin_champion] is guaranteed pristine when we deep-copy
-— even when the user's `champion_in_elite_pool` toggle is saved ON. The
-retune also only ever REASSIGNS the four tuned fields (max_health /
-ai_strength / ai_toughness / primary_armor_category) with new values and
-restores from a backup of the ORIGINAL references, so it can never mutate the
-tables our deep copy captured. A signature check below alerts if this
-ordering ever regresses.
+Breeds[skaven_storm_vermin_champion] is pristine when this file records the
+four tuned fields (max_health / ai_strength / ai_toughness /
+primary_armor_category), even when the user's `champion_in_elite_pool`
+toggle is saved ON. The deep copy itself happens later (#1915, below), so
+`configure` writes those recorded pristine values onto the clone. The retune
+only ever REASSIGNS the four fields and restores from a backup of the
+ORIGINAL references. A signature check below alerts if this regresses.
 
 EAGER-REGISTRATION DOCTRINE (DEVELOPMENT.md "Lessons"): VMF-disabled mods
-still execute module-level code, so this module submits one declarative spec to
-the #1413 registrar at load. The registrar publishes nothing until every
+still execute module-level code, so this module queues one declarative spec
+for the #1413 registrar at load. #1915: the registrar cannot prove the three
+wire capacities until the network is initialised, so the job runs once from
+_et_custom_breed_scheduler.lua (loaded by _et_custom_breed_parity.lua) on the
+first trigger that finds them. The registrar publishes nothing until every
 mandatory surface and all three strict wire/statistics axes pass. The single
 mod:hook in this file
 (_G.Localize) is display-only; if et is disabled the hook doesn't fire and
@@ -61,8 +64,8 @@ Open-world / behaviour-tree safety (verified, no guards needed):
     boss loot. Cosmetic only (dice land off-site); same behaviour as et's
     shipped Champion swap.
 
-NETWORK FLOOR (#451B): eager registration still appends all three strict axes,
-but registration order is not wire proof. Enemy's exact channel fingerprints
+NETWORK FLOOR (#451B): the deferred registration still appends all three strict
+axes, but registration order is not wire proof. Enemy's exact channel fingerprints
 both ET breed names, registrar semantics, and exact numeric ids. The custom
 Warlord reaches a ConflictDirector spawn surface only after every human peer
 pre-acks that identity; otherwise the validated vanilla Champion donor is
@@ -116,7 +119,35 @@ mod._et_warlord2_breed_name = nil
 mod._et_warlord2_ready = false
 mod._et_warlord2_threat_seeded = false
 
-local registration_ok, registration_reason = Registrar.register({
+-- #1915: the clone is taken when the deferred registration runs, which is
+-- after _et_champion_warlord's load-time apply may have retuned the shared
+-- Champion (it REASSIGNS max_health / ai_strength / ai_toughness /
+-- primary_armor_category, _et_champion_warlord.lua:83-113). Keep the pristine
+-- values seen here, before that apply, and restore them on the clone.
+local PRISTINE_FIELDS = { "max_health", "ai_strength", "ai_toughness", "primary_armor_category" }
+local champion_pristine = nil
+do
+    local champion = rawget(rawget(_G, "Breeds") or {}, SOURCE_BREED)
+    if type(champion) == "table" then
+        champion_pristine = {}
+        for i = 1, #PRISTINE_FIELDS do
+            local value = rawget(champion, PRISTINE_FIELDS[i])
+            if type(value) == "table" then
+                local copy = {}
+                for key, entry in pairs(value) do copy[key] = entry end
+                value = copy
+            end
+            champion_pristine[PRISTINE_FIELDS[i]] = value
+        end
+    end
+end
+
+-- Registration runs later (_et_custom_breed_scheduler.lua via the parity
+-- owner); the #324 diagnostics below set this reporter for the job's result.
+local _diag_report = nil
+local jobs = rawget(ET, "CustomBreedJobs") or {}
+ET.CustomBreedJobs = jobs
+jobs[#jobs + 1] = { spec = {
     owner = "enemy_tweaker.skaven_warlord",
     name = BREED_NAME,
     source_breed = SOURCE_BREED,
@@ -125,6 +156,18 @@ local registration_ok, registration_reason = Registrar.register({
         "missing Warlord registrar fingerprint"),
     configure = function(breed)
         breed.display_name = B.ET_SKAVEN_WARLORD_NAME_KEY
+        if champion_pristine then
+            for i = 1, #PRISTINE_FIELDS do
+                local key = PRISTINE_FIELDS[i]
+                local value = champion_pristine[key]
+                if type(value) == "table" then
+                    local copy = {}
+                    for index, entry in pairs(value) do copy[index] = entry end
+                    value = copy
+                end
+                rawset(breed, key, value)
+            end
+        end
     end,
     validate_breed = function(breed)
         if breed.display_name ~= B.ET_SKAVEN_WARLORD_NAME_KEY then
@@ -141,14 +184,18 @@ local registration_ok, registration_reason = Registrar.register({
         { target = mod, key = "_et_warlord2_breed_name", value = BREED_NAME },
         { target = mod, key = "_et_warlord2_ready", value = true },
     },
-})
-if registration_ok then
-    _wl_log("breed %s %s through atomic registrar (source=%s)",
-        BREED_NAME, tostring(registration_reason), SOURCE_BREED)
-else
-    _wl_log("ALERT: registration rejected (%s) — Skaven Warlord unavailable this session",
-        tostring(registration_reason))
-end
+}, on_result = function(ok, reason, trigger)
+    if ok then
+        _wl_log("breed %s %s through atomic registrar (source=%s trigger=%s)",
+            BREED_NAME, tostring(reason), SOURCE_BREED, tostring(trigger))
+    else
+        _wl_log("ALERT: registration rejected (%s trigger=%s) - Skaven Warlord unavailable this session",
+            tostring(reason), tostring(trigger))
+    end
+    if _diag_report then _diag_report() end
+end }
+_wl_log("breed %s registration queued (deferred until the network capacities exist, #1915)",
+    BREED_NAME)
 
 -- ============================================================
 -- Vanilla-visible localization (#324 Parts 1+3)
@@ -336,12 +383,17 @@ do
         end
     end)
 
-    if mod._et_warlord2_ready then
-        _diag_log("diagnostic armed: %s spawns sampled at +0/+5/+15s (cap %d per session)",
-            BREED_NAME, DIAG_MAX_UNITS)
-    else
-        _diag_log("diagnostic loaded but breed registration failed — nothing to sample this session")
+    -- #1915: readiness is known only after the deferred registration, so the
+    -- load row says "deferred" and the job's result reports armed or failed.
+    _diag_report = function()
+        if mod._et_warlord2_ready then
+            _diag_log("diagnostic armed: %s spawns sampled at +0/+5/+15s (cap %d per session)",
+                BREED_NAME, DIAG_MAX_UNITS)
+        else
+            _diag_log("diagnostic loaded but breed registration failed - nothing to sample this session")
+        end
     end
+    _diag_log("diagnostic loaded; breed registration deferred until the network capacities exist")
 
     -- #324 capacity-authority probe (0.7.65-dev): logs what the registrar's
     -- capacity readers see at load and once the network authority appears.
@@ -352,8 +404,9 @@ do
         "scripts/mods/enemy_tweaker/_et_diag_capacity_authority")
     local install_ok, install_err = false, CapacityDiag
     if cap_ok and type(CapacityDiag) == "table" then
-        install_ok, install_err = pcall(CapacityDiag.install, ET, Registrar, registration_ok
-            and tostring(registration_reason) or ("rejected:" .. tostring(registration_reason)))
+        -- At load the registration is still queued (#1915), so the note is
+        -- "deferred"; the result arrives with the job's own log row.
+        install_ok, install_err = pcall(CapacityDiag.install, ET, Registrar, "deferred")
     end
     if not install_ok then
         _diag_log("cap-probe install failed: %s", tostring(install_err))
